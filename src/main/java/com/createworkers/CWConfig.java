@@ -23,6 +23,8 @@ public class CWConfig {
 	public static final ModConfigSpec.IntValue TRANSFER_COOLDOWN;
 	/** Movement speed modifier applied to walking workers. */
 	public static final ModConfigSpec.DoubleValue WALK_SPEED;
+	/** Fraction of that speed used for the idle rounds. */
+	public static final ModConfigSpec.DoubleValue IDLE_SPEED_FACTOR;
 	/** Ticks an enderman waits between teleports. */
 	public static final ModConfigSpec.IntValue TELEPORT_COOLDOWN;
 	/** Furthest an enderman may cover in a single teleport; longer trips take several hops. */
@@ -54,6 +56,12 @@ public class CWConfig {
 		WALK_SPEED = builder
 			.comment("Movement speed modifier for walking workers (villagers).")
 			.defineInRange("walkSpeed", 0.6D, 0.1D, 2.0D);
+
+		IDLE_SPEED_FACTOR = builder
+			.comment("How fast a worker ambles on its idle rounds, as a fraction of walkSpeed.",
+				"Below 1.0 an idle worker is visibly off the clock; at 1.0 it moves between its own",
+				"blocks at working pace.")
+			.defineInRange("idleSpeedFactor", 0.85D, 0.25D, 1.0D);
 
 		TELEPORT_COOLDOWN = builder
 			.comment("Ticks an enderman waits between teleports.")

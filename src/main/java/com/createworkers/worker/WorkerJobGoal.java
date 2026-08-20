@@ -27,9 +27,9 @@ public class WorkerJobGoal extends Goal {
 
 	/** How long to idle before re-scanning when there was nothing to do. */
 	private static final int IDLE_RESCAN_TICKS = 20;
-	/** How long a worker lingers at a stop on its rounds. */
-	private static final int DWELL_MIN_TICKS = 60;
-	private static final int DWELL_MAX_TICKS = 200;
+	/** How long a worker lingers at a stop on its rounds -- long enough to read as a look, not a nap. */
+	private static final int DWELL_MIN_TICKS = 40;
+	private static final int DWELL_MAX_TICKS = 120;
 	/** How long to idle after abandoning an unreachable target. */
 	private static final int UNREACHABLE_TICKS = 60;
 

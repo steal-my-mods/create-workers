@@ -111,6 +111,15 @@ the Ponder jar.
   overwritten before anything acts on it. Anchor to a *remembered* position, never to
   `mob.blockPosition()`: an anchor that follows the worker inches along with every nudge, which is
   the drift this exists to stop.
+- **Writing `WALK_TARGET` does not change a villager's speed.** `MoveToTargetSink` hands the speed
+  to the navigation only in its `start`, and once running the only thing that calls `start` again is
+  a re-path — which it does only when the destination has moved more than *two blocks*. Stops on the
+  idle rounds are the worker's own targets, so a worker ambling to one when work appears is usually
+  already walking to the very block the job is at: the new walk target is the same position, nothing
+  re-paths, and it strolls to work at idle pace. All of `WalkLocomotion` therefore goes through
+  `walkTo`, which also sets the speed on the navigation directly.
+  `workFoundOnTheRoundsIsWalkedAtWorkingPace` asserts the speed the move control is actually driven
+  at, not the memory, and was mutation-checked by deleting the nudge.
 - **Endermen don't need a wander leash, villagers do.** The job goal holds `Goal.Flag.MOVE`, which
   stops other *goals* (an enderman's random stroll) from moving the mob — but the villager brain is
   not a goal and ignores flags entirely, so villagers drift during cooldowns. `Workers.isOffStation`

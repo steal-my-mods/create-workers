@@ -34,6 +34,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
@@ -57,6 +58,12 @@ import net.neoforged.neoforge.items.ItemHandlerHelper;
 @GameTestHolder(CreateWorkers.ID)
 @PrefixGameTestTemplate(false)
 public class WorkerGameTests {
+
+	/** Long enough for a spawned mob to be standing on the floor. */
+	private static final int SETTLE_TICKS = 5;
+
+	/** Speeds are carried as floats and read back as doubles. */
+	private static final float TOLERANCE = 1.0E-4F;
 
 	private static final BlockPos SOURCE = new BlockPos(1, 1, 1);
 	private static final BlockPos SOURCE_B = new BlockPos(1, 1, 9);
@@ -539,9 +546,54 @@ public class WorkerGameTests {
 		helper.assertTrue(stroll.getTarget()
 			.currentBlockPosition()
 			.equals(helper.absolutePos(TARGET)), "it should head for the stop it was given");
-		helper.assertTrue(stroll.getSpeedModifier() < (float) (double) CWConfig.WALK_SPEED.get(),
-			"rounds should be slower than working travel");
+		float amble = (float) (double) CWConfig.WALK_SPEED.get() * (float) (double) CWConfig.IDLE_SPEED_FACTOR.get();
+		helper.assertTrue(Math.abs(stroll.getSpeedModifier() - amble) < TOLERANCE,
+			"rounds should walk at the idle fraction of working speed, got " + stroll.getSpeedModifier());
 		helper.succeed();
+	}
+
+	/**
+	 * Work turning up mid-amble must be walked to at working pace.
+	 *
+	 * <p>The walk target alone proves nothing here. MoveToTargetSink hands a speed to the navigation
+	 * only when it paths, and once running it re-paths only if the destination has moved more than two
+	 * blocks -- while a stop on the rounds is very often the exact block the job is at. So what has to
+	 * be asserted is the speed the navigation the mob is actually following ends up with.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void workFoundOnTheRoundsIsWalkedAtWorkingPace(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = employ(helper, villager);
+
+		// Ground navigation refuses to path for a mob that is not standing on anything yet, so let
+		// the freshly spawned villager land before asking it to walk anywhere.
+		helper.runAfterDelay(SETTLE_TICKS, () -> {
+			data.resolvePoints(villager);
+
+			WalkLocomotion locomotion = new WalkLocomotion();
+			float working = (float) (double) CWConfig.WALK_SPEED.get();
+			float amble = working * (float) (double) CWConfig.IDLE_SPEED_FACTOR.get();
+			BlockPos stop = helper.absolutePos(TARGET);
+			// The sink walks to the floor beside a stop, the stop itself being a block.
+			BlockPos beside = helper.absolutePos(TARGET.west());
+
+			// Ambling to a stop, with the brain's sink already following a path at idle pace.
+			locomotion.patrolTo(villager, stop);
+			PathNavigation navigation = villager.getNavigation();
+			helper.assertTrue(navigation.moveTo(beside.getX() + 0.5D, beside.getY(), beside.getZ() + 0.5D, amble),
+				"the villager should be able to path to one of its own stops");
+			navigation.tick();
+			helper.assertTrue(Math.abs(travelSpeed(villager) - amble) < TOLERANCE,
+				"the amble should be under way at idle pace, got " + travelSpeed(villager));
+
+			// Work turns up, at that very block.
+			locomotion.approach(villager, target(helper, TARGET));
+			navigation.tick();
+			helper.assertTrue(Math.abs(travelSpeed(villager) - working) < TOLERANCE,
+				"a worker that finds work mid-amble should walk to it at working pace, got " + travelSpeed(villager));
+			helper.succeed();
+		});
 	}
 
 	// --- helpers ---
@@ -648,6 +700,12 @@ public class WorkerGameTests {
 	 * relying on a hand-written structure template to supply the floor proved fragile, so the tests
 	 * build their own.
 	 */
+	/** The speed the mob's move control is actually being driven at. */
+	private static double travelSpeed(Mob mob) {
+		return mob.getMoveControl()
+			.getSpeedModifier();
+	}
+
 	private static void layFloor(GameTestHelper helper) {
 		for (int x = 0; x < SITE_SIZE; x++)
 			for (int z = 0; z < SITE_SIZE; z++)
