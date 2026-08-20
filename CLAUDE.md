@@ -45,6 +45,8 @@ the Ponder jar.
 | `worker/WorkerEvents` | Hiring, retiring, drops, client sync, cleanup |
 | `client/HatSelectionHandler` | Client-side programming UX (mirrors `ArmInteractionPointHandler`) |
 | `client/WorkerGearLayer` | Hard hat + hi-vis vest render layer |
+| `client/model/HardHatArmorModel` | The same hat geometry as a `HumanoidModel`, for the hat worn by a player |
+| `client/HardHatClientExtensions` | Feeds that model to the armour renderer; re-baked on resource reload |
 | `client/WorkerCargoLayer` | Visible cargo |
 | `recipe/ClearProgramRecipe` | Crafting a hat by itself blanks its program, the way a Create filter clears |
 
@@ -74,6 +76,15 @@ the Ponder jar.
   program component. 1.21.1 has no `crafting_transmute` (that arrived in 1.21.2) to do it in data.
 - GameTest templates: `data/createworkers/structure/*.nbt` (singular `structure` in 1.21). The
   template is intentionally empty — tests lay their own floor with `layFloor`.
+- **Armour is not just a texture on a head box.** A helmet normally renders as the vanilla head
+  geometry with the armour sheet stretched over it, which looks like a painted scalp.
+  `HardHatArmorModel` swaps in the real hat cubes via `IClientItemExtensions.getHumanoidArmorModel`.
+  The trap is vanilla's `hat` part: a *second* head-sized box, a **sibling** of `head` rather than a
+  child, which `HumanoidArmorLayer.setPartVisibility` turns on for anything in the head slot (and
+  `ClientHooks.copyModelProperties` copies that visibility onto the replacement). Leave it populated
+  and it draws a solid cube over the whole skull regardless of what `head` contains — so
+  `createLayer` replaces it with an empty `CubeListBuilder`. Its texture sheet therefore uses the
+  gear UV layout at 128x64, *not* the 64x32 humanoid armour layout.
 - **Gear geometry has to clear what is already drawn underneath.** Villagers wear a `jacket` overlay
   (body inflated 0.5), so a vest inflated by that same 0.5 lands exactly on it and z-fights. The
   villager vest uses 1.0; the enderman, which has no overlay, uses 0.5. Declare boxes at whole-number

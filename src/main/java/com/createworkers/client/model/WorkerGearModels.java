@@ -40,8 +40,8 @@ public class WorkerGearModels {
 	public static final String HAT = "hat";
 	public static final String VEST = "vest";
 
-	private static final int TEXTURE_WIDTH = 128;
-	private static final int TEXTURE_HEIGHT = 64;
+	public static final int TEXTURE_WIDTH = 128;
+	public static final int TEXTURE_HEIGHT = 64;
 
 	/** Villager: head spans y -10..0, torso 8x12x6 under a 0.5-inflated jacket. */
 	public static LayerDefinition createVillagerGear() {
@@ -65,9 +65,13 @@ public class WorkerGearModels {
 	 * A hard hat, which is mostly a matter of getting the brim right: a shallow rim the whole way
 	 * round with a peak jutting out over the face. A wide, even brim on every side is what reads as
 	 * a straw hat instead.
+	 *
+	 * <p>Shared with the worn-armour model, so a player's hat is the same object the workers wear.
+	 *
+	 * @param headTopY the y of the top of the skull in head-local space, where y grows downwards
 	 */
-	private static void addHat(PartDefinition root, float headTopY) {
-		root.addOrReplaceChild(HAT, CubeListBuilder.create()
+	public static CubeListBuilder hatCubes(float headTopY) {
+		return CubeListBuilder.create()
 			// Crown, sunk into the skull so no seam shows at the hairline.
 			.texOffs(0, 0)
 			.addBox(-4.0F, headTopY - 3.0F, -4.0F, 8.0F, 5.0F, 8.0F, new CubeDeformation(0.5F))
@@ -82,8 +86,11 @@ public class WorkerGearModels {
 			.addBox(-5.0F, headTopY + 1.0F, -5.0F, 10.0F, 1.0F, 10.0F)
 			// Peak over the face (-Z is forward).
 			.texOffs(42, 14)
-			.addBox(-3.0F, headTopY + 1.0F, -8.0F, 6.0F, 1.0F, 3.0F),
-			PartPose.ZERO);
+			.addBox(-3.0F, headTopY + 1.0F, -8.0F, 6.0F, 1.0F, 3.0F);
+	}
+
+	private static void addHat(PartDefinition root, float headTopY) {
+		root.addOrReplaceChild(HAT, hatCubes(headTopY), PartPose.ZERO);
 	}
 
 	private static void addVest(PartDefinition root, int texU, int texV, int torsoDepth,

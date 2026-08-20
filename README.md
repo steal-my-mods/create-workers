@@ -32,7 +32,8 @@ restored rather than starting from scratch.
 **3. Hire someone.** Right-click a villager or an enderman with the programmed hat. They put it on
 and get to work. Sneak + empty-hand right-click to retire them and get the hat (and any cargo) back.
 
-**4. Wear it yourself.** It is a real helmet, worth the same protection as a leather cap.
+**4. Wear it yourself.** It is a real helmet, worth the same protection as a leather cap, and it
+renders as the same 3D hat the workers wear rather than as a texture painted on your head.
 
 ### What they can carry from and to
 
