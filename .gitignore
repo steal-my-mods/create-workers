@@ -32,3 +32,7 @@ eclipse/
 
 # Local publish target
 repo/
+
+# Python tooling
+__pycache__/
+*.pyc

@@ -166,6 +166,20 @@ embedded jars onto the compile classpath (`unpackCreateJij`). They stay `compile
 runtime FML loads them out of Create's own jar, and a second copy on the runtime classpath would
 load each mod twice.
 
+### The logo
+
+`src/main/resources/createworkers_icon.png` is generated, not hand-drawn:
+
+```bash
+python3 tools/generate_logo.py
+```
+
+It builds the badge Create and its addons all use — a white-ringed circle of blue graph paper with
+the mod's item in front — with the palette and proportions sampled from Create's own `icon.png`. The
+subject is the hard hat's item sprite scaled up by a whole number, so it stays crisp and matches what
+the player sees in their inventory. The script needs nothing but the standard library; it reads and
+writes the PNGs itself.
+
 ## Testing
 
 ### Automated
