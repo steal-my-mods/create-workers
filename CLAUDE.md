@@ -99,6 +99,18 @@ the Ponder jar.
 - Vanilla renders villager professions as *texture overlays re-rendered over the same mesh*
   (`VillagerProfessionLayer` → `renderColoredCutoutModel`), not as extra geometry — worth knowing if
   the vest ever needs to hug the robe rather than sit over it.
+- **Idle rounds must only visit programmed targets** (`Workers.patrolStops`). That is the entire
+  safety argument for `PATROL`: those positions are ones the worker already paths to while working,
+  so idling cannot strand it anywhere it could not already get back from. Never widen the stop list
+  to arbitrary nearby positions.
+- **Idle villagers are pinned by occupying `WALK_TARGET`, not by fighting the brain.** The idle
+  package's wanderers (`VillageBoundRandomStroll`, `JumpOnBed`, `InteractWith`) are *one-shots* that
+  do nothing but write that memory, while `MoveToTargetSink` — the behaviour that actually walks the
+  mob — reads it from CORE at priority 1, ahead of the idle package at priority 2. Rewriting the
+  memory every tick from the goal (which runs before the brain) means a stroll's destination is
+  overwritten before anything acts on it. Anchor to a *remembered* position, never to
+  `mob.blockPosition()`: an anchor that follows the worker inches along with every nudge, which is
+  the drift this exists to stop.
 - **Endermen don't need a wander leash, villagers do.** The job goal holds `Goal.Flag.MOVE`, which
   stops other *goals* (an enderman's random stroll) from moving the mob — but the villager brain is
   not a goal and ignores flags entirely, so villagers drift during cooldowns. `Workers.isOffStation`

@@ -99,18 +99,33 @@ from an extracting funnel on one is emptying the mailbox.
 | Blocked by | Terrain it cannot path through | Nowhere safe to land |
 | Safety | — | Refuses to land in water, rain, fire or lava |
 | Cargo shown | Held in front of the chest | Held as a carried block, plus in-hand for non-blocks |
-| Wandering | Free within `wanderRadius`, walked back beyond it | Does not wander while employed |
+| Idling | Slow rounds between its assigned blocks | Stands by; does not teleport idly |
 
 Endermen are fast but not free: each teleport is followed by a cooldown, and one hop only covers
 `teleportRange`, so moving goods across a base takes several hops and visibly longer than working a
 tight cluster.
 
-Workers stay on their patch. A villager's brain fills the gaps between jobs with strolling, trips to
-its job site and trips to the village meeting point, so an idle worker that has drifted further than
-`wanderRadius` from its post is walked back. Its programmed targets count as posts too, so a worker
-at the far end of a long run is at work rather than wandering. It is a leash, not a tether — inside
-that radius they are free to mill about, which is rather the point. A villager fleeing a mob is
-never dragged back.
+**Workers do their rounds.** With nothing to haul, a worker ambles slowly between the blocks on its
+own hat, standing at each for a while as though checking on it, then moving on. It looks like a
+worker with time on their hands, and it is safe by construction: the only places it goes are ones it
+already walks to in order to work, so idling can never strand it somewhere it cannot get back from.
+
+Left to itself a villager would do something much worse. Its idle behaviour strolls up to ten blocks
+at a time, repeatedly — a random walk with nothing bounding it — plus trips to any bed, to other
+villagers, and to its job site and the village meeting point. That is how an idle villager ends up
+off a catwalk and stuck, which is the last thing you want from something wired into your automation.
+
+A worker that has somehow strayed further than `wanderRadius` from its job site walks back to it. Its
+programmed blocks count as posts too, so one at the far end of a long run is at work rather than
+wandering. A villager fleeing a mob is never pinned or dragged back.
+
+`idleBehaviour` picks between three:
+
+| | Behaviour |
+|---|---|
+| `PATROL` | Slow rounds between its own assigned blocks. The default — lively and predictable |
+| `HOLD_STATION` | Stands where it finished its last job. The most predictable |
+| `WANDER` | Vanilla idling within `wanderRadius`. Liveliest, and the one that can lose a worker off a catwalk |
 
 Workers keep their job across save/reload, and drop the hat and their cargo if they die. Employed
 endermen stop being hostile — they are on the clock.
@@ -121,7 +136,7 @@ endermen stop being hostile — they are on the clock.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `maxTargetSpread` | 64 | How far apart the furthest two blocks on one hat may be — the width of a worker's beat |
+| `maxTargetSpread` | 48 | How far apart the furthest two blocks on one hat may be — the width of a worker's beat |
 | `transferCooldown` | 10 | Ticks paused after moving an item |
 | `walkSpeed` | 0.6 | Movement speed modifier for walking workers |
 | `teleportCooldown` | 20 | Ticks between enderman teleports |
@@ -129,6 +144,7 @@ endermen stop being hostile — they are on the clock.
 | `reachDistance` | 2.5 | How close a worker must get to use an inventory |
 | `pathTimeout` | 200 | Ticks spent failing to reach a target before skipping it |
 | `wanderRadius` | 12 | How far a worker may stray from its post or targets before being sent back |
+| `idleBehaviour` | `PATROL` | What a worker does between jobs: `PATROL`, `HOLD_STATION` or `WANDER` |
 
 ## Development
 
@@ -158,7 +174,7 @@ load each mod twice.
 ./gradlew runGameTestServer
 ```
 
-Fifteen in-world GameTests, headless, under a minute, non-zero exit on failure. They cover target
+Seventeen in-world GameTests, headless, under a minute, non-zero exit on failure. They cover target
 parity with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm on its
 own, program serialization round-tripping, round-robin wrap-around, the enderman teleport cooldown
 and its refusal to land in water, the wander limit and its panic exemption, address-based package

@@ -26,6 +26,12 @@ public class WalkLocomotion implements WorkerLocomotion {
 
 	/** How close counts as back at the post. */
 	private static final int RETURN_CLOSE_ENOUGH = 2;
+	/** How close counts as standing at the station. */
+	private static final int STATION_CLOSE_ENOUGH = 1;
+	/** Rounds are an amble, not a commute. */
+	private static final float PATROL_SPEED_FACTOR = 0.6F;
+	/** How close counts as having reached a stop on the rounds. */
+	static final int PATROL_ARRIVED = 2;
 
 	@Override
 	public void approach(Mob mob, WorkerTarget target) {
@@ -60,6 +66,41 @@ public class WalkLocomotion implements WorkerLocomotion {
 		brain.setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(post));
 		brain.setMemory(MemoryModuleType.WALK_TARGET,
 			new WalkTarget(post, (float) (double) CWConfig.WALK_SPEED.get(), RETURN_CLOSE_ENOUGH));
+	}
+
+	/**
+	 * Keeps an idle worker standing where it is.
+	 *
+	 * <p>Occupying {@code WALK_TARGET} is the whole mechanism. What would otherwise wander a villager
+	 * off — {@code VillageBoundRandomStroll} and the rest of the idle package — are one-shots that do
+	 * nothing but write that memory, while {@code MoveToTargetSink}, the behaviour that actually
+	 * walks the mob, reads it from CORE at a higher priority than the idle package. Rewriting it
+	 * every tick, before the brain runs, means a stroll's destination is overwritten before anything
+	 * ever acts on it, and the villager simply stays put.
+	 *
+	 * <p>Deliberately does not touch {@code LOOK_TARGET}: a worker waiting for something to do should
+	 * still glance around.
+	 */
+	@Override
+	public void holdAt(Mob mob, BlockPos station) {
+		if (VillagerPanicTrigger.isHurt(mob) || VillagerPanicTrigger.hasHostile(mob))
+			return;
+
+		mob.getBrain()
+			.setMemory(MemoryModuleType.WALK_TARGET,
+				new WalkTarget(station, (float) (double) CWConfig.WALK_SPEED.get(), STATION_CLOSE_ENOUGH));
+	}
+
+	/** Ambles towards somewhere on the worker's rounds, looking where it is going. */
+	@Override
+	public void patrolTo(Mob mob, BlockPos destination) {
+		if (VillagerPanicTrigger.isHurt(mob) || VillagerPanicTrigger.hasHostile(mob))
+			return;
+
+		Brain<?> brain = mob.getBrain();
+		float speed = (float) (double) CWConfig.WALK_SPEED.get() * PATROL_SPEED_FACTOR;
+		brain.setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(destination));
+		brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, speed, PATROL_ARRIVED));
 	}
 
 	@Override

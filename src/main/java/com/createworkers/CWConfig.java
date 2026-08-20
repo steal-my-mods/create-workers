@@ -5,6 +5,16 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 /** Server-side tunables for how workers behave. */
 public class CWConfig {
 
+	/** What a worker does between jobs. */
+	public enum IdleBehaviour {
+		/** Slow rounds between the worker's own assigned blocks. */
+		PATROL,
+		/** Stand where the last job finished. */
+		HOLD_STATION,
+		/** Leave it to the mob's own idle behaviour. */
+		WANDER
+	}
+
 	public static final ModConfigSpec SPEC;
 
 	/** How far apart two of a hat's programmed targets may be. */
@@ -23,6 +33,8 @@ public class CWConfig {
 	public static final ModConfigSpec.IntValue PATH_TIMEOUT;
 	/** How far a worker may stray from its post and its targets before being sent back. */
 	public static final ModConfigSpec.IntValue WANDER_RADIUS;
+	/** What a worker does when it has nothing to haul. */
+	public static final ModConfigSpec.EnumValue<IdleBehaviour> IDLE_BEHAVIOUR;
 
 	static {
 		ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -33,7 +45,7 @@ public class CWConfig {
 			.comment("How far apart the furthest two inventories on one hard hat may be — the width of",
 				"a single worker's beat, checked as you assign them. Half of it is how far any target",
 				"can sit from the job site, which is what the hiring and wander checks measure against.")
-			.defineInRange("maxTargetSpread", 64, 8, 256);
+			.defineInRange("maxTargetSpread", 48, 8, 256);
 
 		TRANSFER_COOLDOWN = builder
 			.comment("Ticks a worker pauses after moving an item.")
@@ -64,6 +76,16 @@ public class CWConfig {
 			.comment("How far a worker may stray from its work site, or from any of its programmed",
 				"targets, before it is sent back. Workers are free to mill about inside this.")
 			.defineInRange("wanderRadius", 12, 4, 64);
+
+		IDLE_BEHAVIOUR = builder
+			.comment("What a worker does when there is nothing to haul.",
+				"PATROL: strolls slowly between its own assigned blocks, as though checking on them.",
+				"  Safe by construction -- the only places it goes are ones it already walks to for",
+				"  work, so it cannot wander anywhere it could not already get back from.",
+				"HOLD_STATION: stands where it finished its last job. The most predictable option.",
+				"WANDER: leaves idling to vanilla, which strolls up to ten blocks at a time, repeatedly.",
+				"  Livelier, but an idle villager can stroll off a catwalk and have to find its way back.")
+			.defineEnum("idleBehaviour", IdleBehaviour.PATROL);
 
 		builder.pop();
 		SPEC = builder.build();

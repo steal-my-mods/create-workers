@@ -474,6 +474,76 @@ public class WorkerGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * An idle villager must hold its station rather than strolling. The idle package's wanderers are
+	 * one-shots that only write WALK_TARGET, so occupying that memory is what pins them — and the
+	 * check that matters is that it survives a stroll having already written its own destination.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void idleVillagersHoldTheirStation(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		BlockPos station = helper.absolutePos(SPAWN);
+		WalkLocomotion locomotion = new WalkLocomotion();
+		Brain<Villager> brain = villager.getBrain();
+
+		// Stand in for a stroll that has already fired and chosen somewhere to go.
+		brain.setMemory(MemoryModuleType.WALK_TARGET,
+			new WalkTarget(helper.absolutePos(new BlockPos(9, 1, 1)), 0.5F, 1));
+
+		locomotion.holdAt(villager, station);
+
+		WalkTarget held = brain.getMemory(MemoryModuleType.WALK_TARGET)
+			.orElse(null);
+		helper.assertTrue(held != null, "holding station should occupy the walk target");
+		helper.assertTrue(held.getTarget()
+			.currentBlockPosition()
+			.equals(station), "a stroll's destination should have been overwritten by the station");
+		helper.assertTrue(brain.getMemory(MemoryModuleType.LOOK_TARGET)
+			.isEmpty(), "holding station should leave the worker free to look around");
+
+		// Still no leashing of a villager that is running for its life.
+		brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+		brain.setMemory(MemoryModuleType.HURT_BY, villager.damageSources()
+			.generic());
+		locomotion.holdAt(villager, station);
+		helper.assertTrue(brain.getMemory(MemoryModuleType.WALK_TARGET)
+			.isEmpty(), "a panicking villager must not be pinned to its station");
+		helper.succeed();
+	}
+
+	/**
+	 * Idle rounds may only visit blocks the worker was programmed with. That is the whole safety
+	 * argument: those are the places it already walks to in order to work, so idling can never strand
+	 * it somewhere it could not get back from.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void idleRoundsOnlyVisitProgrammedBlocks(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = employ(helper, villager);
+		data.resolvePoints(villager);
+
+		List<BlockPos> stops = Workers.patrolStops(data);
+		helper.assertTrue(stops.size() == 2, "both assigned depots should be stops, got " + stops.size());
+		helper.assertTrue(stops.contains(helper.absolutePos(SOURCE)), "the input depot should be a stop");
+		helper.assertTrue(stops.contains(helper.absolutePos(TARGET)), "the output depot should be a stop");
+
+		// Ambling is slower than working travel, and aimed at a stop.
+		WalkLocomotion locomotion = new WalkLocomotion();
+		locomotion.patrolTo(villager, helper.absolutePos(TARGET));
+		WalkTarget stroll = villager.getBrain()
+			.getMemory(MemoryModuleType.WALK_TARGET)
+			.orElse(null);
+		helper.assertTrue(stroll != null, "patrolling should set a walk target");
+		helper.assertTrue(stroll.getTarget()
+			.currentBlockPosition()
+			.equals(helper.absolutePos(TARGET)), "it should head for the stop it was given");
+		helper.assertTrue(stroll.getSpeedModifier() < (float) (double) CWConfig.WALK_SPEED.get(),
+			"rounds should be slower than working travel");
+		helper.succeed();
+	}
+
 	// --- helpers ---
 
 	/**

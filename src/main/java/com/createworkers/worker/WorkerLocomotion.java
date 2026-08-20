@@ -30,6 +30,20 @@ public interface WorkerLocomotion {
 	default void returnTo(Mob mob, BlockPos post) {
 	}
 
+	/**
+	 * Called every tick while the worker is idle and on its patch, to keep it standing at
+	 * {@code station} rather than drifting.
+	 */
+	default void holdAt(Mob mob, BlockPos station) {
+	}
+
+	/**
+	 * Called while the worker is idly making its rounds, to amble towards {@code destination}.
+	 * Slower than working travel — it has nowhere it needs to be.
+	 */
+	default void patrolTo(Mob mob, BlockPos destination) {
+	}
+
 	/** Per-tick upkeep while employed, whether or not there is work to do. */
 	default void tickEmployed(Mob mob) {
 	}

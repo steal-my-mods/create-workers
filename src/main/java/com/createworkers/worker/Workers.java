@@ -4,6 +4,9 @@ import org.jetbrains.annotations.Nullable;
 
 import com.createworkers.registry.CWAttachments;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.createworkers.worker.target.WorkerTarget;
 
 import net.minecraft.core.BlockPos;
@@ -70,6 +73,25 @@ public class Workers {
 			if (pos.closerThan(target.getPos(), radius))
 				return false;
 		return true;
+	}
+
+	/**
+	 * Everywhere a worker may amble to on its idle rounds: exactly the blocks it was programmed with.
+	 *
+	 * <p>Keeping the rounds to the programme is what makes idling safe. These are the same positions
+	 * the worker already walks to in order to do its job, so a worker that can work its beat can
+	 * always walk its beat, and it can never idle its way somewhere it cannot get back from.
+	 */
+	public static List<BlockPos> patrolStops(WorkerData data) {
+		List<BlockPos> stops = new ArrayList<>(data.getInputs()
+			.size()
+			+ data.getOutputs()
+				.size());
+		for (WorkerTarget target : data.getInputs())
+			stops.add(target.getPos());
+		for (WorkerTarget target : data.getOutputs())
+			stops.add(target.getPos());
+		return stops;
 	}
 
 	/**

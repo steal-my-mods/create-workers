@@ -1,12 +1,16 @@
 package com.createworkers.worker;
 
 import java.util.EnumSet;
+import java.util.List;
+
+import org.jetbrains.annotations.Nullable;
 
 import com.createworkers.CWConfig;
 import com.createworkers.net.WorkerStatePacket;
 import com.createworkers.worker.WorkerData.Phase;
 import com.createworkers.worker.target.WorkerTarget;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -23,12 +27,23 @@ public class WorkerJobGoal extends Goal {
 
 	/** How long to idle before re-scanning when there was nothing to do. */
 	private static final int IDLE_RESCAN_TICKS = 20;
+	/** How long a worker lingers at a stop on its rounds. */
+	private static final int DWELL_MIN_TICKS = 60;
+	private static final int DWELL_MAX_TICKS = 200;
 	/** How long to idle after abandoning an unreachable target. */
 	private static final int UNREACHABLE_TICKS = 60;
 
 	private final Mob mob;
 	private final WorkerLocomotion locomotion;
 	private int travelTicks;
+	/** Where the worker was standing when it ran out of work; null whenever it has somewhere to be. */
+	@Nullable
+	private BlockPos station;
+	/** The stop on the worker's idle rounds it is currently ambling towards. */
+	@Nullable
+	private BlockPos patrolStop;
+	/** Ticks left standing at a stop, looking it over. */
+	private int dwellTicks;
 
 	public WorkerJobGoal(Mob mob, WorkerLocomotion locomotion) {
 		this.mob = mob;
@@ -60,6 +75,7 @@ public class WorkerJobGoal extends Goal {
 	public void stop() {
 		locomotion.stop(mob);
 		travelTicks = 0;
+		forgetIdling();
 	}
 
 	@Override
@@ -105,11 +121,87 @@ public class WorkerJobGoal extends Goal {
 	 * nothing in the job goal occupies them during a cooldown.
 	 */
 	private void keepNearPost(WorkerData data) {
-		if (data.getTargetPoint() != null)
+		if (data.getTargetPoint() != null) {
+			forgetIdling();
 			return; // already headed somewhere, and that takes priority
-		if (!Workers.isOffStation(mob.blockPosition(), data, CWConfig.WANDER_RADIUS.get()))
+		}
+
+		// Strayed off the patch entirely: walk back to the middle of the job.
+		if (Workers.isOffStation(mob.blockPosition(), data, CWConfig.WANDER_RADIUS.get())) {
+			forgetIdling();
+			locomotion.returnTo(mob, data.getJobSite());
 			return;
-		locomotion.returnTo(mob, data.getJobSite());
+		}
+
+		switch (CWConfig.IDLE_BEHAVIOUR.get()) {
+			case WANDER -> forgetIdling(); // vanilla's problem now; the leash above is the backstop
+			case HOLD_STATION -> holdStation();
+			case PATROL -> patrol(data);
+		}
+	}
+
+	/**
+	 * Holds the spot the worker was standing on when the work ran out.
+	 *
+	 * <p>Anchoring to a remembered position rather than to wherever it happens to be now is what
+	 * stops it creeping — an anchor that followed the worker would inch along with every nudge. It is
+	 * also somewhere it can definitely stand and get back to, which the geometric job site may not be.
+	 */
+	private void holdStation() {
+		if (station == null)
+			station = mob.blockPosition()
+				.immutable();
+		locomotion.holdAt(mob, station);
+	}
+
+	/**
+	 * Idle rounds: amble to one of the worker's own assigned blocks, stand and look at it for a
+	 * while, then pick another. Gives a waiting worker something to do that looks like work, without
+	 * ever sending it anywhere it does not already walk to while working.
+	 */
+	private void patrol(WorkerData data) {
+		if (dwellTicks > 0) {
+			dwellTicks--;
+			holdStation(); // stood at a stop, having a look at it
+			return;
+		}
+
+		if (patrolStop == null) {
+			patrolStop = pickPatrolStop(data);
+			station = null;
+			if (patrolStop == null) {
+				holdStation(); // nothing to walk between
+				return;
+			}
+		}
+
+		if (mob.blockPosition()
+			.closerThan(patrolStop, WalkLocomotion.PATROL_ARRIVED)) {
+			patrolStop = null;
+			station = mob.blockPosition()
+				.immutable();
+			dwellTicks = DWELL_MIN_TICKS
+				+ mob.getRandom()
+					.nextInt(DWELL_MAX_TICKS - DWELL_MIN_TICKS + 1);
+			return;
+		}
+
+		locomotion.patrolTo(mob, patrolStop);
+	}
+
+	@Nullable
+	private BlockPos pickPatrolStop(WorkerData data) {
+		List<BlockPos> stops = Workers.patrolStops(data);
+		if (stops.isEmpty())
+			return null;
+		return stops.get(mob.getRandom()
+			.nextInt(stops.size()));
+	}
+
+	private void forgetIdling() {
+		station = null;
+		patrolStop = null;
+		dwellTicks = 0;
 	}
 
 	private void travel(WorkerData data) {
