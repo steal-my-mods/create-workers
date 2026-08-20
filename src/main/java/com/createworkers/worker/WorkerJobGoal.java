@@ -109,7 +109,7 @@ public class WorkerJobGoal extends Goal {
 			return; // already headed somewhere, and that takes priority
 		if (!Workers.isOffStation(mob.blockPosition(), data, CWConfig.WANDER_RADIUS.get()))
 			return;
-		locomotion.returnTo(mob, data.getWorkSite());
+		locomotion.returnTo(mob, data.getJobSite());
 	}
 
 	private void travel(WorkerData data) {

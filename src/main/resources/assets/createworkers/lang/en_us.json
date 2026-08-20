@@ -9,5 +9,7 @@
   "createworkers.message.already_employed": "They are already on the clock",
   "createworkers.message.hired": "Clocked in with %1$s assigned inventories",
   "createworkers.message.retired": "Clocked out",
-  "createworkers.message.selection_cleared": "All inventories cleared"
+  "createworkers.message.selection_cleared": "All inventories cleared",
+  "createworkers.message.target_too_far": "Too far from another assigned block (%1$s blocks apart, limit %2$s)",
+  "createworkers.message.too_far_from_job": "Too far from the job site at %1$s, %2$s, %3$s — hire them nearer the work"
 }

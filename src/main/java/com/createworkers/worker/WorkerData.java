@@ -5,7 +5,6 @@ import java.util.List;
 
 import org.jetbrains.annotations.Nullable;
 
-import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.program.WorkerProgram;
 import com.simibubi.create.AllBlockEntityTypes;
@@ -17,7 +16,6 @@ import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint.Mo
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -42,7 +40,8 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	private ItemStack hat = ItemStack.EMPTY;
 	private ItemStack held = ItemStack.EMPTY;
 	private Phase phase = Phase.SEARCH_INPUTS;
-	private BlockPos workSite = BlockPos.ZERO;
+	/** Derived from the programme, not from wherever the hat was handed over. Not persisted. */
+	private BlockPos jobSite = BlockPos.ZERO;
 	private int targetIndex = -1;
 	private int lastInputIndex = -1;
 	private int lastOutputIndex = -1;
@@ -90,8 +89,9 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		return targetIndex;
 	}
 
-	public BlockPos getWorkSite() {
-		return workSite;
+	/** The centre of this worker's programmed targets — its post, and the anchor for the leash. */
+	public BlockPos getJobSite() {
+		return jobSite;
 	}
 
 	public int getCooldown() {
@@ -110,10 +110,10 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	}
 
 	/** Puts the entity to work with the given hat. */
-	public void employ(ItemStack hatStack, WorkerProgram program, BlockPos workSite) {
+	public void employ(ItemStack hatStack, WorkerProgram program) {
 		this.hat = hatStack.copyWithCount(1);
 		this.program = program.copy();
-		this.workSite = workSite.immutable();
+		this.jobSite = this.program.centre();
 		this.phase = Phase.SEARCH_INPUTS;
 		this.targetIndex = -1;
 		this.lastInputIndex = -1;
@@ -135,6 +135,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		hat = ItemStack.EMPTY;
 		held = ItemStack.EMPTY;
 		program = WorkerProgram.EMPTY;
+		jobSite = BlockPos.ZERO;
 		phase = Phase.SEARCH_INPUTS;
 		targetIndex = -1;
 		releasePoints();
@@ -202,15 +203,11 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 
 		Level level = worker.level();
 		ArmBlockEntity host = host(level, worker.blockPosition());
-		int range = CWConfig.WORKER_RANGE.get();
 		for (Tag entry : program.points()) {
 			if (!(entry instanceof CompoundTag compound))
 				continue;
 			WorkerTarget target = WorkerTarget.deserialize(compound, level);
 			if (target == null)
-				continue;
-			if (!target.getPos()
-				.closerThan(workSite, range))
 				continue;
 			target.bind(host);
 			if (target.getMode() == Mode.DEPOSIT)
@@ -365,7 +362,6 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 			tag.put("Held", held.save(provider));
 		tag.put("Program", program.tag());
 		tag.putString("Phase", phase.name());
-		tag.put("WorkSite", NbtUtils.writeBlockPos(workSite));
 		tag.putInt("TargetIndex", targetIndex);
 		tag.putInt("LastInput", lastInputIndex);
 		tag.putInt("LastOutput", lastOutputIndex);
@@ -378,9 +374,8 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		hat = tag.contains("Hat") ? ItemStack.parseOptional(provider, tag.getCompound("Hat")) : ItemStack.EMPTY;
 		held = tag.contains("Held") ? ItemStack.parseOptional(provider, tag.getCompound("Held")) : ItemStack.EMPTY;
 		program = new WorkerProgram(tag.getCompound("Program"));
+		jobSite = program.centre();
 		phase = readPhase(tag.getString("Phase"));
-		workSite = NbtUtils.readBlockPos(tag, "WorkSite")
-			.orElse(BlockPos.ZERO);
 		targetIndex = tag.getInt("TargetIndex");
 		lastInputIndex = tag.getInt("LastInput");
 		lastOutputIndex = tag.getInt("LastOutput");

@@ -54,14 +54,14 @@ public class Workers {
 	}
 
 	/**
-	 * Whether a worker has strayed off its patch: further than {@code radius} from both its work
+	 * Whether a worker has strayed off its patch: further than {@code radius} from both its job
 	 * site and every inventory it was programmed with.
 	 *
 	 * <p>Targets count as posts in their own right, so a worker standing at the far end of a long
-	 * run is at work rather than wandering, however far that is from where it was hired.
+	 * run is at work rather than wandering, however far that is from the middle of its beat.
 	 */
 	public static boolean isOffStation(BlockPos pos, WorkerData data, int radius) {
-		if (pos.closerThan(data.getWorkSite(), radius))
+		if (pos.closerThan(data.getJobSite(), radius))
 			return false;
 		for (WorkerTarget target : data.getInputs())
 			if (pos.closerThan(target.getPos(), radius))

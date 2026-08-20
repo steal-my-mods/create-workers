@@ -219,8 +219,7 @@ public class WorkerGameTests {
 
 		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
 		WorkerData data = Workers.getOrCreate(villager);
-		data.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.of(List.of(inA, inB, out)),
-			villager.blockPosition());
+		data.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.of(List.of(inA, inB, out)));
 		data.resolvePoints(villager);
 
 		helper.assertTrue(data.getInputs()
@@ -437,6 +436,44 @@ public class WorkerGameTests {
 		});
 	}
 
+	/**
+	 * The job site is derived from the programme, and the spread rule is a diameter rather than a
+	 * chain of short links — the distinction that decides whether one worker can be handed a run
+	 * stretching hundreds of blocks.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void jobSiteAndSpreadAreDerivedFromTheProgramme(GameTestHelper helper) {
+		List<BlockPos> run = List.of(new BlockPos(0, 64, 0), new BlockPos(40, 64, 0));
+
+		helper.assertTrue(WorkerProgram.centre(run)
+			.equals(new BlockPos(20, 64, 0)), "the job site should be the middle of the run");
+
+		helper.assertTrue(WorkerProgram.firstTooFar(run, new BlockPos(20, 64, 0), 64) == null,
+			"a block inside the run should be accepted");
+
+		// 60 from its nearest neighbour, but 100 from the far end: a chain rule would allow this and
+		// let one worker be given an arbitrarily long line. The diameter rule refuses it.
+		BlockPos blocker = WorkerProgram.firstTooFar(run, new BlockPos(100, 64, 0), 64);
+		helper.assertTrue(blocker != null, "a block beyond the far end of the run should be refused");
+		helper.assertTrue(blocker.equals(new BlockPos(0, 64, 0)),
+			"it should be refused against the far end of the run, not its nearest neighbour");
+
+		helper.succeed();
+	}
+
+	/** A hat whose targets are too far apart must be refused by the server, not just the client. */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void overSpreadProgrammesAreRejected(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		WorkerTarget near = target(helper, SOURCE);
+		WorkerTarget far = target(helper, TARGET);
+
+		WorkerProgram tight = WorkerProgram.of(List.of(near, far));
+		helper.assertTrue(!tight.exceedsSpread(64), "two depots a few blocks apart are well within the spread");
+		helper.assertTrue(tight.exceedsSpread(4), "the same pair should breach a spread of 4");
+		helper.succeed();
+	}
+
 	// --- helpers ---
 
 	/**
@@ -466,7 +503,7 @@ public class WorkerGameTests {
 			List.of(in, target(helper, SMELTING_FUNNEL), target(helper, STORAGE_FUNNEL)));
 
 		Workers.getOrCreate(villager)
-			.employ(new ItemStack(CWItems.HARD_HAT.get()), program, villager.blockPosition());
+			.employ(new ItemStack(CWItems.HARD_HAT.get()), program);
 		return villager;
 	}
 
@@ -582,7 +619,7 @@ public class WorkerGameTests {
 
 		WorkerProgram program = WorkerProgram.of(List.of(in, out));
 		WorkerData data = Workers.getOrCreate(mob);
-		data.employ(new ItemStack(CWItems.HARD_HAT.get()), program, mob.blockPosition());
+		data.employ(new ItemStack(CWItems.HARD_HAT.get()), program);
 		return data;
 	}
 

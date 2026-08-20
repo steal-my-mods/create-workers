@@ -7,8 +7,8 @@ public class CWConfig {
 
 	public static final ModConfigSpec SPEC;
 
-	/** How far from a worker a programmed inventory may be before it is ignored. */
-	public static final ModConfigSpec.IntValue WORKER_RANGE;
+	/** How far apart two of a hat's programmed targets may be. */
+	public static final ModConfigSpec.IntValue MAX_TARGET_SPREAD;
 	/** Ticks a worker waits after completing a transfer before looking for more work. */
 	public static final ModConfigSpec.IntValue TRANSFER_COOLDOWN;
 	/** Movement speed modifier applied to walking workers. */
@@ -29,9 +29,11 @@ public class CWConfig {
 
 		builder.comment("Create: Workers").push("workers");
 
-		WORKER_RANGE = builder
-			.comment("Maximum distance between a worker and one of its programmed inventories.")
-			.defineInRange("workerRange", 32, 4, 128);
+		MAX_TARGET_SPREAD = builder
+			.comment("How far apart the furthest two inventories on one hard hat may be — the width of",
+				"a single worker's beat, checked as you assign them. Half of it is how far any target",
+				"can sit from the job site, which is what the hiring and wander checks measure against.")
+			.defineInRange("maxTargetSpread", 64, 8, 256);
 
 		TRANSFER_COOLDOWN = builder
 			.comment("Ticks a worker pauses after moving an item.")

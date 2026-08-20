@@ -1,5 +1,6 @@
 package com.createworkers.net;
 
+import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
@@ -34,6 +35,10 @@ public record ConfigureHatPacket(WorkerProgram program) implements CustomPacketP
 		context.enqueueWork(() -> {
 			Player player = context.player();
 			if (player == null)
+				return;
+			// The client refuses these as you click, but it is the client, so check again here.
+			if (packet.program()
+				.exceedsSpread(CWConfig.MAX_TARGET_SPREAD.get()))
 				return;
 			for (InteractionHand hand : InteractionHand.values()) {
 				ItemStack stack = player.getItemInHand(hand);

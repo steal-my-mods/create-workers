@@ -2,12 +2,14 @@ package com.createworkers.worker;
 
 import java.util.List;
 
+import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.net.WorkerStatePacket;
 import com.createworkers.program.WorkerProgram;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
@@ -89,7 +91,19 @@ public class WorkerEvents {
 			return;
 		}
 
-		data.employ(stack, program, target.blockPosition());
+		// Refuse rather than quietly dropping the targets they cannot get to. The wander leash will
+		// walk them the rest of the way in, so this only has to catch the genuinely absurd.
+		BlockPos jobSite = program.centre();
+		int spread = CWConfig.MAX_TARGET_SPREAD.get();
+		if (!target.blockPosition()
+			.closerThan(jobSite, spread)) {
+			player.displayClientMessage(Component.translatable("createworkers.message.too_far_from_job",
+				jobSite.getX(), jobSite.getY(), jobSite.getZ())
+				.withStyle(ChatFormatting.RED), true);
+			return;
+		}
+
+		data.employ(stack, program);
 		if (!player.getAbilities().instabuild)
 			stack.shrink(1);
 

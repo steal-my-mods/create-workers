@@ -29,11 +29,28 @@ left-clicking removes it. Selections are outlined in the world while you hold th
 Unlike the arm, a programmed hat can be picked back up and edited — the existing selection is
 restored rather than starting from scratch.
 
+One worker walks between everything on its hat, so a hat only covers so much ground: no two assigned
+blocks may be more than `maxTargetSpread` apart. That is a *diameter*, not a chain of short links — a
+block sixty from its nearest neighbour but a hundred from the far end of the run is refused, because
+one worker would have to walk that hundred. You are told as you click, rather than discovering later
+that a target quietly went missing.
+
 **3. Hire someone.** Right-click a villager or an enderman with the programmed hat. They put it on
 and get to work. Sneak + empty-hand right-click to retire them and get the hat (and any cargo) back.
 
 **4. Wear it yourself.** It is a real helmet, worth the same protection as a leather cap, and it
 renders as the same 3D hat the workers wear rather than as a texture painted on your head.
+
+### The job site
+
+A worker's **job site** is the centre of the blocks on its hat — derived from the programme, not from
+wherever you happened to be standing when you handed it over. It is what the wander leash anchors on,
+so a worker hired at the edge of its run gets drawn into the middle of the work rather than loitering
+where you left it. Because of the spread rule, no assigned block is ever more than half of
+`maxTargetSpread` away from it.
+
+Hiring further than `maxTargetSpread` from the job site is refused outright, with the coordinates in
+the message. Nothing is ever silently dropped from a hat.
 
 ### What they can carry from and to
 
@@ -104,7 +121,7 @@ endermen stop being hostile — they are on the clock.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `workerRange` | 32 | Max distance from the work site to a programmed inventory |
+| `maxTargetSpread` | 64 | How far apart the furthest two blocks on one hat may be — the width of a worker's beat |
 | `transferCooldown` | 10 | Ticks paused after moving an item |
 | `walkSpeed` | 0.6 | Movement speed modifier for walking workers |
 | `teleportCooldown` | 20 | Ticks between enderman teleports |
@@ -141,7 +158,7 @@ load each mod twice.
 ./gradlew runGameTestServer
 ```
 
-Twelve in-world GameTests, headless, under a minute, non-zero exit on failure. They cover target
+Fifteen in-world GameTests, headless, under a minute, non-zero exit on failure. They cover target
 parity with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm on its
 own, program serialization round-tripping, round-robin wrap-around, the enderman teleport cooldown
 and its refusal to land in water, the wander limit and its panic exemption, address-based package
@@ -198,7 +215,7 @@ wander off or trade while working, and an employed enderman stops being hostile.
 **Tips.** For a continuous loop rather than a single trip, feed the source from a chest → funnel →
 **belt** and set the belt as the input, so items keep arriving and the worker keeps ferrying. To
 watch it move faster, edit `run/config/createworkers-server.toml` — drop `transferCooldown` to `0`
-and raise `walkSpeed`. `workerRange` caps how far apart the targets can be.
+and raise `walkSpeed`. `maxTargetSpread` caps how far apart the assigned blocks can be.
 
 ## How it works
 

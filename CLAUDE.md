@@ -36,7 +36,7 @@ the Ponder jar.
 
 | Path | Role |
 |---|---|
-| `program/WorkerProgram` | The hat's inventory list. Data component; **absolute** positions (anchor `BlockPos.ZERO`) because workers move |
+| `program/WorkerProgram` | The hat's inventory list. Data component; **absolute** positions (anchor `BlockPos.ZERO`) because workers move. Also owns the geometry: `centre()` (job site) and `firstTooFar`/`exceedsSpread` (the diameter rule) |
 | `worker/target/WorkerTarget` | What a worker can use — a thin wrapper over Create's `ArmInteractionPoint`, holding the host so it stays out of upstream signatures |
 | `worker/WorkerData` | Per-entity state (NeoForge attachment). Holds the port of `ArmBlockEntity`'s transfer algorithm |
 | `worker/WorkerJobGoal` | Phase machine: search input → travel → collect → search output → travel → deposit |
@@ -52,6 +52,13 @@ the Ponder jar.
 
 ## Things that will bite you
 
+- **Range is a property of the programme, not of a position.** `maxTargetSpread` is a *diameter*:
+  every pair of a hat's targets must be within it, checked in `HatSelectionHandler` as you click and
+  re-checked server-side in `ConfigureHatPacket` (never trust the client). The **job site** is
+  `WorkerProgram.centre()`, the middle of the target box — not where the player stood at hire time.
+  It is derived, never persisted, and recomputed on deserialize. `resolvePoints` therefore filters
+  nothing: a target on the hat is a target. Don't reintroduce a silent range filter — the point of
+  this shape is that a target is either refused as you assign it or honoured.
 - **Villagers use the brain, not goals.** Never steer their navigator directly. `WalkLocomotion`
   pins the `WALK_TARGET` memory every tick and lets `MoveToTargetSink` (villager CORE package,
   priority 1) path. Keeping that memory occupied is also what stops them wandering off — the idle

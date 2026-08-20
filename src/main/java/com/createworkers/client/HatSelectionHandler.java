@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.net.ConfigureHatPacket;
@@ -16,6 +17,7 @@ import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
@@ -66,6 +68,21 @@ public class HatSelectionHandler {
 			point = WorkerTarget.create(level, pos, state);
 			if (point == null)
 				return;
+
+			// One worker walks between all of these, so the whole programme has to stay inside a
+			// beat it can actually serve. Refused here rather than dropped later, so nothing is ever
+			// quietly missing from a hat.
+			int maxSpread = CWConfig.MAX_TARGET_SPREAD.get();
+			BlockPos tooFar = WorkerProgram.firstTooFar(selectedPositions(), pos, maxSpread);
+			if (tooFar != null) {
+				player.displayClientMessage(Component.translatable("createworkers.message.target_too_far",
+					Mth.floor(Math.sqrt(pos.distSqr(tooFar))), maxSpread)
+					.withStyle(ChatFormatting.RED), true);
+				event.setCanceled(true);
+				event.setCancellationResult(InteractionResult.SUCCESS);
+				return;
+			}
+
 			selection.add(point);
 		}
 
@@ -180,6 +197,13 @@ public class HatSelectionHandler {
 					.getColor())
 				.lineWidth(1 / 16f);
 		}
+	}
+
+	private static List<BlockPos> selectedPositions() {
+		List<BlockPos> positions = new ArrayList<>(selection.size());
+		for (WorkerTarget point : selection)
+			positions.add(point.getPos());
+		return positions;
 	}
 
 	private static WorkerTarget find(BlockPos pos) {
