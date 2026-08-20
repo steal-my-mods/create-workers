@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+
+# Minecraft dev runs
+run/
+runs/
+run-*/
+logs/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+eclipse/
+
+# OS
+.DS_Store
+
+# Local publish target
+repo/

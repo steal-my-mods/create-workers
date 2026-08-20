@@ -1,0 +1,13 @@
+{
+  "itemGroup.createworkers": "Create: Workers",
+  "item.createworkers.hard_hat": "Hard Hat",
+  "createworkers.hard_hat.unprogrammed": "No inventories assigned",
+  "createworkers.hard_hat.hint": "Right-click belts, depots, funnels and other Arm-compatible blocks to assign them",
+  "createworkers.hard_hat.summary": "%1$s input(s), %2$s output(s)",
+  "createworkers.hard_hat.assign_hint": "Right-click a villager or enderman to put them to work",
+  "createworkers.message.hat_not_programmed": "Assign some Arm-compatible blocks to the hard hat first",
+  "createworkers.message.already_employed": "They are already on the clock",
+  "createworkers.message.hired": "Clocked in with %1$s assigned inventories",
+  "createworkers.message.retired": "Clocked out",
+  "createworkers.message.selection_cleared": "All inventories cleared"
+}
