@@ -22,6 +22,11 @@ logs/
 bin/
 eclipse/
 
+# Claude Code local state. CLAUDE.md at the repo root is deliberately tracked; anything
+# else under .claude/ is per-machine scratch, worktrees included.
+.claude/worktrees/
+.claude/settings.local.json
+
 # OS
 .DS_Store
 
