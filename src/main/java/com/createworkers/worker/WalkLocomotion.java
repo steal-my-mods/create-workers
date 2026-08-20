@@ -7,6 +7,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.behavior.VillagerPanicTrigger;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.phys.Vec3;
@@ -23,6 +24,9 @@ import net.minecraft.world.phys.Vec3;
  */
 public class WalkLocomotion implements WorkerLocomotion {
 
+	/** How close counts as back at the post. */
+	private static final int RETURN_CLOSE_ENOUGH = 2;
+
 	@Override
 	public void approach(Mob mob, WorkerTarget target) {
 		BlockPos pos = target.getPos();
@@ -38,6 +42,24 @@ public class WalkLocomotion implements WorkerLocomotion {
 	public boolean canReach(Mob mob, WorkerTarget target) {
 		double reach = CWConfig.REACH_DISTANCE.get();
 		return mob.distanceToSqr(Vec3.atCenterOf(target.getPos())) <= reach * reach;
+	}
+
+	/**
+	 * Walks an idle worker back to its post.
+	 *
+	 * <p>Never while it is panicking: a villager fleeing a zombie has every reason to leave its
+	 * patch, and hauling it back would get it killed. Vanilla's own panic predicate is reused so
+	 * this agrees exactly with when the brain takes over.
+	 */
+	@Override
+	public void returnTo(Mob mob, BlockPos post) {
+		if (VillagerPanicTrigger.isHurt(mob) || VillagerPanicTrigger.hasHostile(mob))
+			return;
+
+		Brain<?> brain = mob.getBrain();
+		brain.setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(post));
+		brain.setMemory(MemoryModuleType.WALK_TARGET,
+			new WalkTarget(post, (float) (double) CWConfig.WALK_SPEED.get(), RETURN_CLOSE_ENOUGH));
 	}
 
 	@Override

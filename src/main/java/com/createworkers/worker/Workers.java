@@ -4,6 +4,9 @@ import org.jetbrains.annotations.Nullable;
 
 import com.createworkers.registry.CWAttachments;
 
+import com.createworkers.worker.target.WorkerTarget;
+
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.EnderMan;
@@ -48,6 +51,25 @@ public class Workers {
 		if (mob instanceof Villager)
 			return new WalkLocomotion();
 		return null;
+	}
+
+	/**
+	 * Whether a worker has strayed off its patch: further than {@code radius} from both its work
+	 * site and every inventory it was programmed with.
+	 *
+	 * <p>Targets count as posts in their own right, so a worker standing at the far end of a long
+	 * run is at work rather than wandering, however far that is from where it was hired.
+	 */
+	public static boolean isOffStation(BlockPos pos, WorkerData data, int radius) {
+		if (pos.closerThan(data.getWorkSite(), radius))
+			return false;
+		for (WorkerTarget target : data.getInputs())
+			if (pos.closerThan(target.getPos(), radius))
+				return false;
+		for (WorkerTarget target : data.getOutputs())
+			if (pos.closerThan(target.getPos(), radius))
+				return false;
+		return true;
 	}
 
 	/**

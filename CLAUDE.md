@@ -40,7 +40,7 @@ the Ponder jar.
 | `worker/target/WorkerTarget` | What a worker can use — a thin wrapper over Create's `ArmInteractionPoint`, holding the host so it stays out of upstream signatures |
 | `worker/WorkerData` | Per-entity state (NeoForge attachment). Holds the port of `ArmBlockEntity`'s transfer algorithm |
 | `worker/WorkerJobGoal` | Phase machine: search input → travel → collect → search output → travel → deposit |
-| `worker/WalkLocomotion` | Villagers |
+| `worker/WalkLocomotion` | Villagers. Also owns `returnTo`, the wander leash |
 | `worker/TeleportLocomotion` | Endermen. Holds the teleport cooldown, so locomotion instances are **per-worker**, not shared |
 | `worker/WorkerEvents` | Hiring, retiring, drops, client sync, cleanup |
 | `client/HatSelectionHandler` | Client-side programming UX (mirrors `ArmInteractionPointHandler`) |
@@ -75,6 +75,12 @@ the Ponder jar.
 - Vanilla renders villager professions as *texture overlays re-rendered over the same mesh*
   (`VillagerProfessionLayer` → `renderColoredCutoutModel`), not as extra geometry — worth knowing if
   the vest ever needs to hug the robe rather than sit over it.
+- **Endermen don't need a wander leash, villagers do.** The job goal holds `Goal.Flag.MOVE`, which
+  stops other *goals* (an enderman's random stroll) from moving the mob — but the villager brain is
+  not a goal and ignores flags entirely, so villagers drift during cooldowns. `Workers.isOffStation`
+  counts programmed targets as posts, not just the hire spot, or a worker at the far end of a long
+  run reads as wandering. Never leash a panicking villager; reuse `VillagerPanicTrigger.isHurt` /
+  `hasHostile` so the check agrees exactly with when the brain takes over.
 - **Don't assert behaviour with wall-clock thresholds.** A "not delivered within 25 ticks" check for
   the teleport cooldown passed happily with the cooldown set to 1. `teleportsRespectTheirCooldown`
   asserts the mechanism instead, and was mutation-checked by deleting the gate.

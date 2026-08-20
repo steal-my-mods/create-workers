@@ -7,6 +7,7 @@ import com.createworkers.CreateWorkers;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWItems;
 import com.createworkers.worker.TeleportLocomotion;
+import com.createworkers.worker.WalkLocomotion;
 import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.Workers;
 import com.createworkers.worker.target.WorkerTarget;
@@ -19,6 +20,9 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.Brain;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
@@ -240,6 +244,51 @@ public class WorkerGameTests {
 				&& level.getFluidState(spot.above())
 					.isEmpty(),
 				"chose a landing spot standing in fluid: " + spot);
+		helper.succeed();
+	}
+
+	/** Targets count as posts, so a worker at the far end of a long run is at work, not wandering. */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void wanderLimitCountsTargetsAsPosts(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = employ(helper, villager);
+		data.resolvePoints(villager);
+
+		helper.assertTrue(!Workers.isOffStation(helper.absolutePos(SPAWN), data, 2),
+			"standing at the work site should count as being at work");
+		helper.assertTrue(!Workers.isOffStation(helper.absolutePos(TARGET), data, 2),
+			"standing at a programmed target should count as being at work, however far from the hire spot");
+		helper.assertTrue(Workers.isOffStation(helper.absolutePos(new BlockPos(9, 1, 1)), data, 2),
+			"a corner with no target nearby should count as wandering");
+		helper.succeed();
+	}
+
+	/** A strayed villager gets walked back — unless it is running for its life. */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void strayingVillagersAreSentBackUnlessPanicking(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		BlockPos post = helper.absolutePos(SOURCE);
+		WalkLocomotion locomotion = new WalkLocomotion();
+		Brain<Villager> brain = villager.getBrain();
+
+		brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+		locomotion.returnTo(villager, post);
+		WalkTarget walkTarget = brain.getMemory(MemoryModuleType.WALK_TARGET)
+			.orElse(null);
+		helper.assertTrue(walkTarget != null, "a strayed villager should be given a walk target");
+		helper.assertTrue(walkTarget.getTarget()
+			.currentBlockPosition()
+			.equals(post), "the walk target should be its post");
+
+		// Now panicking: leashing it home would walk it straight back into whatever it is fleeing.
+		brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+		brain.setMemory(MemoryModuleType.HURT_BY, villager.damageSources()
+			.generic());
+		locomotion.returnTo(villager, post);
+		helper.assertTrue(brain.getMemory(MemoryModuleType.WALK_TARGET)
+			.isEmpty(), "a panicking villager must not be dragged back to its post");
 		helper.succeed();
 	}
 

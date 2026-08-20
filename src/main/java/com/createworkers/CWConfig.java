@@ -21,6 +21,8 @@ public class CWConfig {
 	public static final ModConfigSpec.DoubleValue REACH_DISTANCE;
 	/** Ticks a walking worker may spend failing to reach a target before giving up on it. */
 	public static final ModConfigSpec.IntValue PATH_TIMEOUT;
+	/** How far a worker may stray from its post and its targets before being sent back. */
+	public static final ModConfigSpec.IntValue WANDER_RADIUS;
 
 	static {
 		ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -55,6 +57,11 @@ public class CWConfig {
 		PATH_TIMEOUT = builder
 			.comment("Ticks a walking worker may spend failing to reach a target before skipping it.")
 			.defineInRange("pathTimeout", 200, 40, 2000);
+
+		WANDER_RADIUS = builder
+			.comment("How far a worker may stray from its work site, or from any of its programmed",
+				"targets, before it is sent back. Workers are free to mill about inside this.")
+			.defineInRange("wanderRadius", 12, 4, 64);
 
 		builder.pop();
 		SPEC = builder.build();

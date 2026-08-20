@@ -2,6 +2,7 @@ package com.createworkers.worker;
 
 import com.createworkers.worker.target.WorkerTarget;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Mob;
 
 /**
@@ -20,6 +21,13 @@ public interface WorkerLocomotion {
 
 	/** Called once the worker stops heading anywhere. */
 	default void stop(Mob mob) {
+	}
+
+	/**
+	 * Called while the worker is idle and has strayed too far, to send it back to {@code post}.
+	 * Only meaningful for workers that can wander off under their own steam.
+	 */
+	default void returnTo(Mob mob, BlockPos post) {
 	}
 
 	/** Per-tick upkeep while employed, whether or not there is work to do. */

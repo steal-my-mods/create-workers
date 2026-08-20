@@ -71,6 +71,7 @@ public class WorkerJobGoal extends Goal {
 	public void tick() {
 		WorkerData data = data();
 		locomotion.tickEmployed(mob);
+		keepNearPost(data);
 
 		if (data.tickCooldown())
 			return;
@@ -96,6 +97,19 @@ public class WorkerJobGoal extends Goal {
 			}
 			case MOVE_TO_INPUT, MOVE_TO_OUTPUT -> travel(data);
 		}
+	}
+
+	/**
+	 * Keeps an idle worker on its patch. This matters for villagers: their brain fills the gaps
+	 * between jobs with strolling, trips to a job site and trips to the village meeting point, and
+	 * nothing in the job goal occupies them during a cooldown.
+	 */
+	private void keepNearPost(WorkerData data) {
+		if (data.getTargetPoint() != null)
+			return; // already headed somewhere, and that takes priority
+		if (!Workers.isOffStation(mob.blockPosition(), data, CWConfig.WANDER_RADIUS.get()))
+			return;
+		locomotion.returnTo(mob, data.getWorkSite());
 	}
 
 	private void travel(WorkerData data) {
