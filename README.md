@@ -274,12 +274,15 @@ tracking clients.
 
 ## Roadmap
 
-Ideas deliberately left out of the MVP:
+Ideas deliberately left out of the MVP. Anything worked through in detail lives in [`docs/`](docs/):
 
 - **Energy.** Workers should not be strictly better free Mechanical Arms. Give them an inventory to
   fetch "fuel" from — chorus fruit for endermen, any food for villagers — and have them stop when
   they run out.
-- **Working hours.** Villagers knock off at night, or keep to set hours.
+- **Working hours.** Villagers knock off at night, or keep to set hours, and go somewhere to wait it
+  out. Designed out in [docs/working-hours.md](docs/working-hours.md), including the argument that it
+  might only be an annoyance — it is the one idea here that makes workers *less* predictable, so it is
+  written up rather than queued.
 - **Bots.** A third worker type, hired by right-clicking a block with the hat the way Steam 'n' Rails
   does with conductors. They would run on backtanks: when empty, go to an inventory, drop the spent
   backtank and pick up the fullest one available.

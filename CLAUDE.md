@@ -121,6 +121,15 @@ the Ponder jar.
   the teleport cooldown passed happily with the cooldown set to 1. `teleportsRespectTheirCooldown`
   asserts the mechanism instead, and was mutation-checked by deleting the gate.
 
+## Design notes
+
+`docs/` holds write-ups of features that were thought through but not built, including the reasoning
+against building them. Read the relevant one before starting such a feature, and update it if the
+thinking changes — the point is that the analysis is not redone from scratch.
+
+- `docs/working-hours.md` — night shifts, designating a bed on the hat, and why the whole idea may be
+  an annoyance
+
 ## Conventions
 
 Tabs for indentation, matching Create's own style. Registry classes are `CW*` under `registry/`.
