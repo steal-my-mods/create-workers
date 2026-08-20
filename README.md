@@ -289,14 +289,6 @@ Ideas deliberately left out of the MVP. Anything worked through in detail lives 
 - **Nicer models.** The current hat and vest are built from code with generated textures — functional
   placeholders rather than proper art.
 
-## Building for other loaders
-
-This targets NeoForge 1.21.1 because that is the only loader Create 6 ships for on 1.21.1. Create's
-Forge build exists only for 1.20.1, so supporting both loaders means supporting two Minecraft
-versions. The Create-facing code is essentially identical across the two (the whole `mechanicalArm`
-package matches), so the split would be in the Minecraft APIs — data components vs NBT, the payload
-networking rewrite, and capability lookups. Adding a second Stonecutter target is the intended path.
-
 ## License
 
 MIT
