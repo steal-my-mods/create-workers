@@ -15,6 +15,8 @@ public class CWConfig {
 	public static final ModConfigSpec.DoubleValue WALK_SPEED;
 	/** Ticks an enderman waits between teleports. */
 	public static final ModConfigSpec.IntValue TELEPORT_COOLDOWN;
+	/** Furthest an enderman may cover in a single teleport; longer trips take several hops. */
+	public static final ModConfigSpec.IntValue TELEPORT_RANGE;
 	/** How close a walking worker must get to an inventory before it can reach it. */
 	public static final ModConfigSpec.DoubleValue REACH_DISTANCE;
 	/** Ticks a walking worker may spend failing to reach a target before giving up on it. */
@@ -40,6 +42,11 @@ public class CWConfig {
 		TELEPORT_COOLDOWN = builder
 			.comment("Ticks an enderman waits between teleports.")
 			.defineInRange("teleportCooldown", 20, 1, 200);
+
+		TELEPORT_RANGE = builder
+			.comment("Furthest an enderman may cover in one teleport. Longer trips are made in",
+				"several hops, each costing another teleportCooldown.")
+			.defineInRange("teleportRange", 24, 4, 128);
 
 		REACH_DISTANCE = builder
 			.comment("How close a walking worker must be to an inventory to use it.")

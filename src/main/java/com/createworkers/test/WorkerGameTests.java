@@ -2,9 +2,11 @@ package com.createworkers.test;
 
 import java.util.List;
 
+import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWItems;
+import com.createworkers.worker.TeleportLocomotion;
 import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.Workers;
 import com.createworkers.worker.target.WorkerTarget;
@@ -22,6 +24,7 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -181,6 +184,65 @@ public class WorkerGameTests {
 		helper.succeedWhen(() -> assertDelivered(helper));
 	}
 
+	/**
+	 * Teleporting must cost time, or an enderman is a strictly better Mechanical Arm.
+	 *
+	 * <p>Asserted against the mechanism rather than against wall-clock delivery time: the enderman is
+	 * put back where it started between calls, so the only thing that can keep it there is the
+	 * cooldown gate. A first version of this measured "not delivered within 25 ticks" and passed
+	 * happily with the cooldown turned down to 1, guarding nothing.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void teleportsRespectTheirCooldown(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		EnderMan enderman = helper.spawn(EntityType.ENDERMAN, SPAWN);
+		WorkerTarget target = target(helper, SOURCE);
+		TeleportLocomotion locomotion = new TeleportLocomotion();
+
+		Vec3 home = enderman.position();
+		locomotion.approach(enderman, target);
+		helper.assertTrue(enderman.position()
+			.distanceToSqr(home) > 1.0D, "the first approach should teleport the enderman");
+
+		int cooldown = CWConfig.TELEPORT_COOLDOWN.get();
+		for (int tick = 1; tick <= cooldown; tick++) {
+			enderman.teleportTo(home.x, home.y, home.z);
+			locomotion.approach(enderman, target);
+			helper.assertTrue(enderman.position()
+				.distanceToSqr(home) < 1.0D,
+				"teleported again after only " + tick + " of " + cooldown + " cooldown ticks");
+		}
+
+		enderman.teleportTo(home.x, home.y, home.z);
+		locomotion.approach(enderman, target);
+		helper.assertTrue(enderman.position()
+			.distanceToSqr(home) > 1.0D, "should teleport again once the cooldown has elapsed");
+		helper.succeed();
+	}
+
+	/** Whatever else happens, an enderman must not blink into water and start drowning. */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void endermanNeverLandsInWater(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, AllBlocks.DEPOT.getDefaultState());
+		for (int x = 0; x < SITE_SIZE; x++)
+			for (int z = 0; z < SITE_SIZE; z++)
+				if (x != SOURCE.getX() || z != SOURCE.getZ())
+					helper.setBlock(new BlockPos(x, 1, z), Blocks.WATER);
+
+		EnderMan enderman = helper.spawn(EntityType.ENDERMAN, new BlockPos(5, 3, 5));
+		ServerLevel level = helper.getLevel();
+		BlockPos spot = TeleportLocomotion.findLandingSpot(enderman, helper.absolutePos(SOURCE), 2);
+
+		if (spot != null)
+			helper.assertTrue(level.getFluidState(spot)
+				.isEmpty()
+				&& level.getFluidState(spot.above())
+					.isEmpty(),
+				"chose a landing spot standing in fluid: " + spot);
+		helper.succeed();
+	}
+
 	// --- helpers -----------------------------------------------------------------------------
 
 	/**
@@ -234,15 +296,18 @@ public class WorkerGameTests {
 	}
 
 	private static void assertDelivered(GameTestHelper helper) {
-		IItemHandler handler = handlerAt(helper, TARGET);
-		helper.assertTrue(handler != null, "target depot should expose an item handler");
+		helper.assertTrue(handlerAt(helper, TARGET) != null, "target depot should expose an item handler");
+		helper.assertTrue(hasDelivered(helper), "target depot should have received cobblestone but got none");
+	}
 
-		int delivered = 0;
-		for (int slot = 0; slot < handler.getSlots(); slot++) {
-			ItemStack stack = handler.getStackInSlot(slot);
-			if (stack.is(Items.COBBLESTONE))
-				delivered += stack.getCount();
-		}
-		helper.assertTrue(delivered > 0, "target depot should have received cobblestone but got none");
+	private static boolean hasDelivered(GameTestHelper helper) {
+		IItemHandler handler = handlerAt(helper, TARGET);
+		if (handler == null)
+			return false;
+		for (int slot = 0; slot < handler.getSlots(); slot++)
+			if (handler.getStackInSlot(slot)
+				.is(Items.COBBLESTONE))
+				return true;
+		return false;
 	}
 }

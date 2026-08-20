@@ -41,7 +41,7 @@ the Ponder jar.
 | `worker/WorkerData` | Per-entity state (NeoForge attachment). Holds the port of `ArmBlockEntity`'s transfer algorithm |
 | `worker/WorkerJobGoal` | Phase machine: search input → travel → collect → search output → travel → deposit |
 | `worker/WalkLocomotion` | Villagers |
-| `worker/TeleportLocomotion` | Endermen |
+| `worker/TeleportLocomotion` | Endermen. Holds the teleport cooldown, so locomotion instances are **per-worker**, not shared |
 | `worker/WorkerEvents` | Hiring, retiring, drops, client sync, cleanup |
 | `client/HatSelectionHandler` | Client-side programming UX (mirrors `ArmInteractionPointHandler`) |
 | `client/WorkerGearLayer` | Hard hat + hi-vis vest render layer |
@@ -68,6 +68,16 @@ the Ponder jar.
   real key is `create.mechanical_arm.*`.
 - GameTest templates: `data/createworkers/structure/*.nbt` (singular `structure` in 1.21). The
   template is intentionally empty — tests lay their own floor with `layFloor`.
+- **Gear geometry has to clear what is already drawn underneath.** Villagers wear a `jacket` overlay
+  (body inflated 0.5), so a vest inflated by that same 0.5 lands exactly on it and z-fights. The
+  villager vest uses 1.0; the enderman, which has no overlay, uses 0.5. Declare boxes at whole-number
+  sizes and grow them with `CubeDeformation` so UVs stay on exact texels.
+- Vanilla renders villager professions as *texture overlays re-rendered over the same mesh*
+  (`VillagerProfessionLayer` → `renderColoredCutoutModel`), not as extra geometry — worth knowing if
+  the vest ever needs to hug the robe rather than sit over it.
+- **Don't assert behaviour with wall-clock thresholds.** A "not delivered within 25 ticks" check for
+  the teleport cooldown passed happily with the cooldown set to 1. `teleportsRespectTheirCooldown`
+  asserts the mechanism instead, and was mutation-checked by deleting the gate.
 
 ## Conventions
 

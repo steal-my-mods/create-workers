@@ -48,10 +48,15 @@ a worker than it is for an arm. Put a funnel on the chest, same as you always wo
 
 | | Villager | Enderman |
 |---|---|---|
-| Travel | Walks, pathfinding to each inventory | Teleports directly |
+| Travel | Walks, pathfinding to each target | Teleports, up to `teleportRange` per hop |
+| Pacing | Walking speed | A cooldown between hops, so a haul costs real time |
 | Blocked by | Terrain it cannot path through | Nowhere safe to land |
 | Safety | — | Refuses to land in water, rain, fire or lava |
 | Cargo shown | Held in front of the chest | Held as a carried block, plus in-hand for non-blocks |
+
+Endermen are fast but not free: each teleport is followed by a cooldown, and one hop only covers
+`teleportRange`, so moving goods across a base takes several hops and visibly longer than working a
+tight cluster.
 
 Workers keep their job across save/reload, and drop the hat and their cargo if they die. Employed
 endermen stop being hostile — they are on the clock.
@@ -66,6 +71,7 @@ endermen stop being hostile — they are on the clock.
 | `transferCooldown` | 10 | Ticks paused after moving an item |
 | `walkSpeed` | 0.6 | Movement speed modifier for walking workers |
 | `teleportCooldown` | 20 | Ticks between enderman teleports |
+| `teleportRange` | 24 | Furthest one teleport may cover; longer trips take several hops |
 | `reachDistance` | 2.5 | How close a worker must get to use an inventory |
 | `pathTimeout` | 200 | Ticks spent failing to reach a target before skipping it |
 
@@ -97,10 +103,11 @@ load each mod twice.
 ./gradlew runGameTestServer
 ```
 
-Six in-world GameTests, headless, roughly forty seconds, non-zero exit on failure. They cover target
-parity with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm on its
-own, program serialization round-tripping, round-robin wrap-around, and both a villager and an
-enderman moving a stack between two depots end to end.
+Eight in-world GameTests, headless, roughly forty seconds, non-zero exit on failure. They cover
+target parity with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm
+on its own, program serialization round-tripping, round-robin wrap-around, the enderman teleport
+cooldown and its refusal to land in water, and both a villager and an enderman moving a stack
+between two depots end to end.
 
 Run these after any change to worker behaviour, targets or serialization.
 

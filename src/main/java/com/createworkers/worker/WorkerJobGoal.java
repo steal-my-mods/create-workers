@@ -118,7 +118,7 @@ public class WorkerJobGoal extends Goal {
 			data.setCooldown(CWConfig.TRANSFER_COOLDOWN.get());
 
 			if (acted || !ItemStack.matches(before, data.getHeld())) {
-				locomotion.onCargoChanged(mob, data.getHeld());
+				Workers.updateCargoAppearance(mob, data.getHeld());
 				WorkerStatePacket.sync(mob, data);
 				mob.level()
 					.playSound(null, mob.blockPosition(), SoundEvents.ITEM_PICKUP, SoundSource.NEUTRAL, 0.2F,

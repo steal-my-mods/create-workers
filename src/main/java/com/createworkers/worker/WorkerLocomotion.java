@@ -3,9 +3,13 @@ package com.createworkers.worker;
 import com.createworkers.worker.target.WorkerTarget;
 
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.item.ItemStack;
 
-/** How a particular kind of worker gets from one inventory to the next. */
+/**
+ * How a particular kind of worker gets from one target to the next.
+ *
+ * <p>Instances belong to a single worker rather than being shared, because some carry pacing state
+ * — see {@link TeleportLocomotion}'s cooldown.
+ */
 public interface WorkerLocomotion {
 
 	/** Called every tick while the worker is heading for {@code point}. */
@@ -16,10 +20,6 @@ public interface WorkerLocomotion {
 
 	/** Called once the worker stops heading anywhere. */
 	default void stop(Mob mob) {
-	}
-
-	/** Called whenever the carried stack changes, for anything visual the mob owns itself. */
-	default void onCargoChanged(Mob mob, ItemStack cargo) {
 	}
 
 	/** Per-tick upkeep while employed, whether or not there is work to do. */

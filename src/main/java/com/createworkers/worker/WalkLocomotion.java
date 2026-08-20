@@ -23,8 +23,6 @@ import net.minecraft.world.phys.Vec3;
  */
 public class WalkLocomotion implements WorkerLocomotion {
 
-	public static final WalkLocomotion INSTANCE = new WalkLocomotion();
-
 	@Override
 	public void approach(Mob mob, WorkerTarget target) {
 		BlockPos pos = target.getPos();

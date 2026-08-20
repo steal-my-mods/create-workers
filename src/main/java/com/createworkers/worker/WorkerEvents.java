@@ -93,11 +93,8 @@ public class WorkerEvents {
 		if (!player.getAbilities().instabuild)
 			stack.shrink(1);
 
-		if (target instanceof Mob mob) {
-			WorkerLocomotion locomotion = Workers.locomotionFor(mob);
-			if (locomotion != null)
-				locomotion.onCargoChanged(mob, data.getHeld());
-		}
+		if (target instanceof Mob mob)
+			Workers.updateCargoAppearance(mob, data.getHeld());
 
 		WorkerStatePacket.sync(target, data);
 		player.displayClientMessage(Component.translatable("createworkers.message.hired", program.size())
@@ -121,20 +118,15 @@ public class WorkerEvents {
 				player.drop(drop, false);
 
 		if (target instanceof Mob mob) {
+			Workers.updateCargoAppearance(mob, ItemStack.EMPTY);
 			WorkerLocomotion locomotion = Workers.locomotionFor(mob);
 			if (locomotion != null)
-				locomotion.onCargoChanged(mob, ItemStack.EMPTY);
-			locomotionStop(mob, locomotion);
+				locomotion.stop(mob);
 		}
 
 		WorkerStatePacket.sync(target, data);
 		player.displayClientMessage(Component.translatable("createworkers.message.retired")
 			.withStyle(ChatFormatting.YELLOW), true);
-	}
-
-	private static void locomotionStop(Mob mob, WorkerLocomotion locomotion) {
-		if (locomotion != null)
-			locomotion.stop(mob);
 	}
 
 	/** A worker that dies on the job drops its hat and whatever it was carrying. */
