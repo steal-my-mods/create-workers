@@ -46,6 +46,7 @@ the Ponder jar.
 | `client/HatSelectionHandler` | Client-side programming UX (mirrors `ArmInteractionPointHandler`) |
 | `client/WorkerGearLayer` | Hard hat + hi-vis vest render layer |
 | `client/WorkerCargoLayer` | Visible cargo |
+| `recipe/ClearProgramRecipe` | Crafting a hat by itself blanks its program, the way a Create filter clears |
 
 ## Things that will bite you
 
@@ -66,6 +67,11 @@ the Ponder jar.
   rather than chests.
 - **Create's lang keys are namespaced.** `Mode.getTranslationKey()` returns `mechanical_arm.*`; the
   real key is `create.mechanical_arm.*`.
+- **The clearing recipe is a class, not four lines of JSON.** Create blanks a filter with a plain
+  `crafting_shapeless` of the item on itself, because a vanilla crafting result is a factory-fresh
+  stack — which for armour also means a free repair and a stripped set of enchantments. So
+  `ClearProgramRecipe` subclasses `ShapelessRecipe` and copies the input hat over, removing only the
+  program component. 1.21.1 has no `crafting_transmute` (that arrived in 1.21.2) to do it in data.
 - GameTest templates: `data/createworkers/structure/*.nbt` (singular `structure` in 1.21). The
   template is intentionally empty — tests lay their own floor with `layFloor`.
 - **Gear geometry has to clear what is already drawn underneath.** Villagers wear a `jacket` overlay

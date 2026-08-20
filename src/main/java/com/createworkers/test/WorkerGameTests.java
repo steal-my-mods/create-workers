@@ -4,7 +4,9 @@ import java.util.List;
 
 import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
+import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
+import com.createworkers.recipe.ClearProgramRecipe;
 import com.createworkers.registry.CWItems;
 import com.createworkers.worker.TeleportLocomotion;
 import com.createworkers.worker.WalkLocomotion;
@@ -22,8 +24,10 @@ import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint.Mo
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
@@ -34,6 +38,10 @@ import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
@@ -141,6 +149,55 @@ public class WorkerGameTests {
 		helper.assertTrue(first.getPos()
 			.equals(helper.absolutePos(SOURCE)), "position should survive the round trip");
 		helper.assertTrue(first.getMode() == Mode.TAKE, "mode should survive the round trip");
+		helper.succeed();
+	}
+
+	/**
+	 * Crafting a hat by itself clears it, the way crafting a Create filter by itself blanks it.
+	 *
+	 * <p>The hat has to come back out otherwise untouched: a plain shapeless recipe would hand over a
+	 * factory-fresh helmet, repairing it for free and eating its enchantments, which is why the
+	 * recipe is a class rather than four lines of JSON.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void craftingAHatByItselfClearsIt(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		ServerLevel level = helper.getLevel();
+
+		WorkerTarget in = target(helper, SOURCE);
+		WorkerTarget out = target(helper, TARGET);
+		in.cycleMode();
+
+		ItemStack hat = new ItemStack(CWItems.HARD_HAT.get());
+		HardHatItem.setProgram(hat, WorkerProgram.of(List.of(in, out)));
+		hat.setDamageValue(100);
+		hat.set(DataComponents.CUSTOM_NAME, Component.literal("Site Foreman"));
+
+		CraftingInput input = CraftingInput.of(1, 1, List.of(hat));
+		RecipeHolder<CraftingRecipe> recipe = level.getRecipeManager()
+			.getRecipeFor(RecipeType.CRAFTING, input, level)
+			.orElse(null);
+		helper.assertTrue(recipe != null, "a lone hard hat should match a crafting recipe");
+		helper.assertTrue(recipe.value() instanceof ClearProgramRecipe,
+			"a lone hard hat should match the clearing recipe, got " + recipe.id());
+
+		ItemStack cleared = recipe.value()
+			.assemble(input, level.registryAccess());
+		helper.assertTrue(cleared.is(CWItems.HARD_HAT.get()), "clearing a hat should hand back a hat");
+		helper.assertTrue(HardHatItem.getProgram(cleared)
+			.isEmpty(), "the cleared hat should hold no inventories");
+		helper.assertTrue(cleared.getDamageValue() == 100,
+			"clearing must not repair the hat, damage came back as " + cleared.getDamageValue());
+		helper.assertTrue(cleared.has(DataComponents.CUSTOM_NAME),
+			"clearing must leave the rest of the hat alone");
+
+		// Two hats are vanilla's repair recipe; clearing must not swallow that.
+		CraftingInput pair = CraftingInput.of(2, 1, List.of(hat.copy(), hat.copy()));
+		RecipeHolder<CraftingRecipe> repair = level.getRecipeManager()
+			.getRecipeFor(RecipeType.CRAFTING, pair, level)
+			.orElse(null);
+		helper.assertTrue(repair == null || !(repair.value() instanceof ClearProgramRecipe),
+			"two hats should still be a repair, not a clear");
 		helper.succeed();
 	}
 
