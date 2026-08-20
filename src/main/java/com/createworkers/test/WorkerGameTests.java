@@ -12,9 +12,16 @@ import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.Workers;
 import com.createworkers.worker.target.WorkerTarget;
 import com.simibubi.create.AllBlocks;
+import com.simibubi.create.AllItems;
+import com.simibubi.create.content.logistics.box.PackageItem;
+import com.simibubi.create.content.logistics.funnel.AbstractDirectionalFunnelBlock;
+import com.simibubi.create.content.logistics.funnel.FunnelBlock;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import com.simibubi.create.foundation.blockEntity.behaviour.filtering.FilteringBehaviour;
 import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint.Mode;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -49,6 +56,14 @@ public class WorkerGameTests {
 	private static final BlockPos SPAWN = new BlockPos(5, 1, 5);
 	private static final int STOCK = 16;
 	private static final int SITE_SIZE = 11;
+
+	// Sorting-office rig: a chest beneath each filtered funnel.
+	private static final BlockPos SMELTING_CHEST = new BlockPos(2, 1, 1);
+	private static final BlockPos SMELTING_FUNNEL = new BlockPos(2, 2, 1);
+	private static final BlockPos STORAGE_CHEST = new BlockPos(8, 1, 1);
+	private static final BlockPos STORAGE_FUNNEL = new BlockPos(8, 2, 1);
+	/** Ticks to let the funnels latch onto the chests beneath them. */
+	private static final int FUNNEL_WARMUP = 10;
 
 	/** Workers must accept exactly what an arm accepts — Create blocks yes, plain inventories no. */
 	@GameTest(template = "work_site", timeoutTicks = 200)
@@ -292,7 +307,177 @@ public class WorkerGameTests {
 		helper.succeed();
 	}
 
-	// --- helpers -----------------------------------------------------------------------------
+	/**
+	 * Addressed packages route themselves.
+	 *
+	 * <p>None of this is our routing code: Create's {@code FunnelPoint.insert} refuses a stack its
+	 * filter rejects, a Package Filter tests by address, and the arm transfer algorithm we already
+	 * port simulates each output in turn and keeps whichever one accepts. Put a package filter on a
+	 * brass funnel and a worker becomes a postman.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 300)
+	public static void packagesRouteByFunnelAddress(GameTestHelper helper) {
+		Villager postman = setUpSortingOffice(helper, "Storage");
+
+		helper.runAfterDelay(FUNNEL_WARMUP, () -> {
+			WorkerData data = resolved(postman);
+			helper.assertTrue(data.getOutputs()
+				.size() == 2, "expected two funnel outputs, got " + data.getOutputs()
+					.size());
+
+			// The filters themselves, before any worker logic is involved.
+			ItemStack parcel = addressedPackage("Storage");
+			helper.assertTrue(accepts(outputAt(data, helper, STORAGE_FUNNEL), parcel),
+				"the Storage funnel should accept a package addressed to Storage");
+			helper.assertTrue(!accepts(outputAt(data, helper, SMELTING_FUNNEL), parcel),
+				"the Smelting funnel should refuse a package addressed to Storage");
+
+			// And now the worker, choosing for itself.
+			helper.assertTrue(data.searchForItem() == 0, "should have found the package on the depot");
+			helper.assertTrue(data.collectFrom(data.getInputs()
+				.get(0)), "should have collected the package");
+			helper.assertTrue(PackageItem.isPackage(data.getHeld()), "should be carrying a package");
+
+			int chosen = data.searchForDestination();
+			helper.assertTrue(chosen >= 0, "should have found a funnel willing to take a Storage package");
+			WorkerTarget destination = data.getOutputs()
+				.get(chosen);
+			helper.assertTrue(destination.getPos()
+				.equals(helper.absolutePos(STORAGE_FUNNEL)),
+				"should route to the Storage funnel, not the Smelting one");
+
+			data.depositTo(destination);
+			helper.assertTrue(countPackages(helper, STORAGE_CHEST) == 1,
+				"the Storage chest should hold the package");
+			helper.assertTrue(countPackages(helper, SMELTING_CHEST) == 0,
+				"the Smelting chest should be untouched");
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * A package nobody will take is left where it is rather than carried around forever — the same
+	 * "only pick up what you can put down" rule the arm follows, applied to addresses.
+	 *
+	 * <p>The sanity check on the Storage funnel matters: without it this passes just as happily when
+	 * the funnels are rejecting <em>everything</em>, which is exactly how it first fooled me.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 300)
+	public static void unroutablePackagesAreLeftAlone(GameTestHelper helper) {
+		Villager postman = setUpSortingOffice(helper, "Nowhere");
+
+		helper.runAfterDelay(FUNNEL_WARMUP, () -> {
+			WorkerData data = resolved(postman);
+
+			helper.assertTrue(accepts(outputAt(data, helper, STORAGE_FUNNEL), addressedPackage("Storage")),
+				"the rig is broken if the Storage funnel will not even take a Storage package");
+
+			helper.assertTrue(data.searchForItem() == -1,
+				"a package no funnel will accept should be left on the depot");
+			helper.assertTrue(data.getHeld()
+				.isEmpty(), "the worker should not have picked anything up");
+			helper.succeed();
+		});
+	}
+
+	// --- helpers ---
+
+	/**
+	 * Builds a two-destination sorting office: a depot holding one package, and two brass funnels
+	 * each filtered to a different address, each feeding its own chest.
+	 */
+	private static Villager setUpSortingOffice(GameTestHelper helper, String parcelAddress) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, AllBlocks.DEPOT.getDefaultState());
+		helper.setBlock(SMELTING_CHEST, Blocks.CHEST);
+		helper.setBlock(STORAGE_CHEST, Blocks.CHEST);
+		placeFilteredFunnel(helper, SMELTING_FUNNEL, "Smelting");
+		placeFilteredFunnel(helper, STORAGE_FUNNEL, "Storage");
+
+		ItemStack parcel = addressedPackage(parcelAddress);
+		IItemHandler depot = handlerAt(helper, SOURCE);
+		if (depot == null)
+			throw new IllegalStateException("depot exposed no item handler");
+		if (!ItemHandlerHelper.insertItem(depot, parcel, false)
+			.isEmpty())
+			throw new IllegalStateException("could not put the package on the depot");
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerTarget in = target(helper, SOURCE);
+		in.cycleMode(); // -> TAKE; funnels are deposit-only and stay as outputs
+		WorkerProgram program = WorkerProgram.of(
+			List.of(in, target(helper, SMELTING_FUNNEL), target(helper, STORAGE_FUNNEL)));
+
+		Workers.getOrCreate(villager)
+			.employ(new ItemStack(CWItems.HARD_HAT.get()), program, villager.blockPosition());
+		return villager;
+	}
+
+	/**
+	 * A funnel only finds the inventory it feeds once its block entity has ticked, so the rig needs a
+	 * moment to settle before anything is asserted against it.
+	 */
+	private static WorkerData resolved(Villager villager) {
+		WorkerData data = Workers.getOrCreate(villager);
+		data.invalidatePoints();
+		data.resolvePoints(villager);
+		return data;
+	}
+
+	private static ItemStack addressedPackage(String address) {
+		ItemStack parcel = PackageItem.containing(List.of(new ItemStack(Items.COBBLESTONE, 8)));
+		PackageItem.addAddress(parcel, address);
+		return parcel;
+	}
+
+	private static WorkerTarget outputAt(WorkerData data, GameTestHelper helper, BlockPos relative) {
+		BlockPos pos = helper.absolutePos(relative);
+		for (WorkerTarget candidate : data.getOutputs())
+			if (candidate.getPos()
+				.equals(pos))
+				return candidate;
+		throw new IllegalStateException("no output resolved at " + relative);
+	}
+
+	/** Whether a simulated insert actually consumed any of the stack. */
+	private static boolean accepts(WorkerTarget target, ItemStack stack) {
+		return !ItemStack.matches(target.insert(stack.copy(), true), stack);
+	}
+
+	/**
+	 * A brass funnel feeding the block below it, filtered to one package address.
+	 *
+	 * <p>A funnel's {@code FACING} points <em>away</em> from the inventory it serves — Create targets
+	 * {@code getFunnelFacing(state).getOpposite()} — so one sitting on top of a chest faces UP, into
+	 * the world where items arrive. Facing it DOWN aims it at the air above and it silently accepts
+	 * nothing.
+	 */
+	private static void placeFilteredFunnel(GameTestHelper helper, BlockPos relative, String address) {
+		helper.setBlock(relative, AllBlocks.BRASS_FUNNEL.getDefaultState()
+			.setValue(AbstractDirectionalFunnelBlock.FACING, Direction.UP)
+			.setValue(FunnelBlock.EXTRACTING, false));
+
+		FilteringBehaviour filtering =
+			BlockEntityBehaviour.get(helper.getLevel(), helper.absolutePos(relative), FilteringBehaviour.TYPE);
+		if (filtering == null)
+			throw new IllegalStateException("brass funnel has no filtering behaviour at " + relative);
+
+		ItemStack filter = AllItems.PACKAGE_FILTER.asStack();
+		PackageItem.addAddress(filter, address);
+		if (!filtering.setFilter(filter))
+			throw new IllegalStateException("funnel refused the package filter at " + relative);
+	}
+
+	private static int countPackages(GameTestHelper helper, BlockPos relative) {
+		IItemHandler handler = handlerAt(helper, relative);
+		if (handler == null)
+			return 0;
+		int found = 0;
+		for (int slot = 0; slot < handler.getSlots(); slot++)
+			if (PackageItem.isPackage(handler.getStackInSlot(slot)))
+				found++;
+		return found;
+	}
 
 	/**
 	 * Lays the floor the workers stand on. The game test framework clears the volume to air, and

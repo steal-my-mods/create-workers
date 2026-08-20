@@ -44,6 +44,34 @@ A worker is an arm with legs, not a bigger arm. So the usual Create rule still a
 type of Inventory can be interacted with directly" — and a plain chest is no more a valid target for
 a worker than it is for an arm. Put a funnel on the chest, same as you always would.
 
+### Sorting packages by address
+
+Workers double as postmen, and this needs no extra setup beyond what Create already gives you.
+
+Put a **Package Filter** on a **Brass Funnel** and set an address on it. That funnel will then only
+accept packages whose address matches, and a worker carrying a package will walk past the funnels
+that refuse it and deliver to the one that takes it. Give each destination its own address and a
+single worker will sort a mixed stream of packages between them.
+
+Two behaviours worth knowing:
+
+- Addresses are **glob patterns**, so a funnel filtered to `Smelting*` catches `Smelting_Iron` and
+  `Smelting_Gold`, and `*` catches everything.
+- A worker will **not pick up a package it cannot deliver**. If no funnel in its program accepts the
+  address, the package is left where it is rather than carried around forever — the same "only take
+  what you can put down" rule the Mechanical Arm follows.
+
+None of this is special-cased for packages. Create's funnels already refuse a stack their filter
+rejects, its Package Filter already tests by address, and the arm transfer algorithm already tries
+each output and keeps whichever accepts. Workers inherit all three.
+
+**Postboxes and frogports** are reached the same way belts and Mechanical Arms reach them — through a
+funnel or an attached inventory, not directly. They expose an automation inventory that is itself
+address-aware in both directions: it refuses a package addressed to that port (automation inserts are
+outbound mail, so you cannot post to yourself) and will only give up packages that *are* addressed to
+it (inbound mail). So a worker feeding a funnel on a postbox is posting mail, and a worker collecting
+from an extracting funnel on one is emptying the mailbox.
+
 ### Villagers vs endermen
 
 | | Villager | Enderman |
@@ -112,11 +140,12 @@ load each mod twice.
 ./gradlew runGameTestServer
 ```
 
-Ten in-world GameTests, headless, under a minute, non-zero exit on failure. They cover target parity
-with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm on its own,
-program serialization round-tripping, round-robin wrap-around, the enderman teleport cooldown and its
-refusal to land in water, the wander limit and its panic exemption, and both a villager and an
-enderman moving a stack between two depots end to end.
+Twelve in-world GameTests, headless, under a minute, non-zero exit on failure. They cover target
+parity with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm on its
+own, program serialization round-tripping, round-robin wrap-around, the enderman teleport cooldown
+and its refusal to land in water, the wander limit and its panic exemption, address-based package
+routing (including that an undeliverable package is left alone), and both a villager and an enderman
+moving a stack between two depots end to end.
 
 Run these after any change to worker behaviour, targets or serialization.
 
