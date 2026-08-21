@@ -182,6 +182,14 @@ publishMods {
     changelog = providers.provider { latestChangelog() }
     type = BETA
     modLoaders.add('neoforge')
+    // Without this the version is listed as "create-workers 0.1.0", after the Gradle project
+    // name, which is not what the mod is called anywhere a player can see.
+    displayName = "${mod_name} ${mod_version}"
+
+    // `./gradlew publishMods -PdryRun=true` rehearses the whole thing -- resolving the jar,
+    // pulling the changelog section, checking every destination is configured -- and writes what
+    // it would have uploaded to build/ instead of uploading it.
+    dryRun = providers.gradleProperty('dryRun').map { it.toBoolean() }.orElse(false)
 
     curseforge {
         projectId = curseforge_project_id

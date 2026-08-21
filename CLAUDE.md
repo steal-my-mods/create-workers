@@ -11,6 +11,7 @@ endermen haul items between inventories the way a Mechanical Arm does.
 ./gradlew runServer          # dev dedicated server (needs run/eula.txt)
 ./gradlew runGameTestServer  # automated in-world tests -- the real check
 ./gradlew publishMods        # upload to CurseForge, Modrinth and GitHub Releases
+./gradlew publishMods -PdryRun=true   # ...or rehearse it without uploading anything
 ```
 
 JDK 21 required. `gradle/gradle-daemon-jvm.properties` pins the daemon to it, so the commands work
