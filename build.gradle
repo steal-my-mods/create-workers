@@ -180,7 +180,7 @@ publishMods {
     file = tasks.named('jar', Jar).flatMap { it.archiveFile }
     // Lazily, so a missing changelog section fails the release rather than an ordinary build.
     changelog = providers.provider { latestChangelog() }
-    type = BETA
+    type = STABLE
     modLoaders.add('neoforge')
     // Without this the version is listed as "create-workers 0.1.0", after the Gradle project
     // name, which is not what the mod is called anywhere a player can see.
