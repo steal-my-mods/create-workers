@@ -36,12 +36,8 @@ import zlib
 
 SPRITE = 'src/main/resources/assets/createworkers/textures/item/hard_hat.png'
 
-OUT = 256                      # final size, matching Create's icon
+REFERENCE = 256                # the size every measurement below was tuned at
 SS = 3                         # supersampling factor per axis
-N = OUT * SS
-CX = CY = OUT / 2.0
-RADIUS = 124.0                 # outer edge of the badge
-RING = 9.0                     # white ring thickness
 
 # --- palette -------------------------------------------------------------------
 WHITE       = (255.0, 255.0, 255.0)
@@ -51,16 +47,37 @@ FIELD_DEEP  = ( 56.0, 114.0, 168.0)
 GRID        = (126.0, 190.0, 228.0)
 SHADOW      = ( 30.0,  64.0, 100.0)
 
-# --- graph paper ---------------------------------------------------------------
-GRID_SPACING = 46.0
-GRID_HALF_WIDTH = 2.5
+# --- weights, which are fractions rather than lengths and so do not scale ------
 GRID_ALPHA = 0.28
-
-# --- presentation --------------------------------------------------------------
-SPRITE_SCALE = 11              # whole number, so sprite pixels stay square
-STROKE = 6.0                   # white outline thickness, in output pixels
-SHADOW_DX, SHADOW_DY = 6.0, 8.0
 SHADOW_ALPHA = 0.26
+
+# --- geometry, in reference pixels ---------------------------------------------
+# The badge is the same drawing at every size, so a single factor moves all of it. That
+# factor has to leave SPRITE_SCALE a whole number -- keeping the sprite's pixels square is
+# the entire reason it is scaled by an integer -- so the output size must be a multiple of
+# REFERENCE. 256 is the in-jar logo; 512 is what CurseForge and Modrinth want for a project
+# icon, since both downscale gracefully and neither upscales.
+GEOMETRY = {
+    'RADIUS': 124.0,           # outer edge of the badge
+    'RING': 9.0,               # white ring thickness
+    'GRID_SPACING': 46.0,
+    'GRID_HALF_WIDTH': 2.5,
+    'SPRITE_SCALE': 11,        # whole number, so sprite pixels stay square
+    'STROKE': 6.0,             # white outline thickness
+    'SHADOW_DX': 6.0,
+    'SHADOW_DY': 8.0,
+    'GLOW_DX': -44.0,          # where the light sits, relative to the centre
+    'GLOW_DY': -52.0,
+}
+
+
+def configure(size):
+    """Scales the geometry above to the requested output size. Call before rendering."""
+    if size <= 0 or size % REFERENCE:
+        raise SystemExit('size must be a positive multiple of {}, got {}'.format(REFERENCE, size))
+    factor = size // REFERENCE
+    globals().update({name: value * factor for name, value in GEOMETRY.items()})
+    globals().update(OUT=size, N=size * SS, CX=size / 2.0, CY=size / 2.0)
 
 
 def lerp(a, b, t):
@@ -225,7 +242,7 @@ def outline_distance(buffer, reach):
 
 def background(x, y):
     """The graph-paper field at one point, before the subject is laid over it."""
-    glow = math.hypot(x - (CX - 44.0), y - (CY - 52.0)) / (RADIUS * 1.55)
+    glow = math.hypot(x - (CX + GLOW_DX), y - (CY + GLOW_DY)) / (RADIUS * 1.55)
     colour = lerp(FIELD_LIGHT, FIELD, min(1.0, glow))
     distance = math.hypot(x - CX, y - CY)
     rim = min(1.0, max(0.0, (distance / RADIUS - 0.55) / 0.45)) ** 1.4
@@ -318,9 +335,17 @@ def write_png(path, rows):
 
 
 def main():
-    target = sys.argv[1] if len(sys.argv) > 1 else 'src/main/resources/createworkers_icon.png'
-    size = write_png(target, render())
-    print("wrote {} ({}x{}, {} bytes)".format(target, OUT, OUT, size))
+    arguments = sys.argv[1:]
+    size = REFERENCE
+    if '--size' in arguments:
+        at = arguments.index('--size')
+        size = int(arguments[at + 1])
+        del arguments[at:at + 2]
+    target = arguments[0] if arguments else 'src/main/resources/createworkers_icon.png'
+
+    configure(size)
+    written = write_png(target, render())
+    print("wrote {} ({}x{}, {} bytes)".format(target, OUT, OUT, written))
 
 
 if __name__ == '__main__':

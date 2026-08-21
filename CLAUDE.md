@@ -10,6 +10,7 @@ endermen haul items between inventories the way a Mechanical Arm does.
 ./gradlew runClient          # dev client
 ./gradlew runServer          # dev dedicated server (needs run/eula.txt)
 ./gradlew runGameTestServer  # automated in-world tests -- the real check
+./gradlew publishMods        # upload to CurseForge, Modrinth and GitHub Releases
 ```
 
 JDK 21 required. `gradle/gradle-daemon-jvm.properties` pins the daemon to it, so the commands work
@@ -31,6 +32,33 @@ them is published to a public Maven** — Create ships them jar-in-jar. So `buil
 `compileOnly` is deliberate: at runtime FML loads them from Create's own jar, and a second copy on
 the runtime classpath makes each mod load twice. Catnip is not a separate artifact — it lives inside
 the Ponder jar.
+
+## Distribution
+
+Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), driven by
+`.github/workflows/release.yml` on a `v*` tag. Things in there that are decisions, not accidents:
+
+- **`minecraft_version_range` is `[1.21.1,1.21.2)`,** not the MDK's default `[1.21.1,1.22)`. This
+  mod reaches into the villager brain and needs Create 6 for 1.21.1; the wider range would let it
+  install on 1.21.4 and break there instead of refusing.
+- **The changelog drives the release notes.** `publishMods` reads the `CHANGELOG.md` section whose
+  heading names the current `mod_version` and fails if there isn't one — a missing entry should
+  stop a release rather than ship the previous version's notes under a new number. It is wired as
+  a lazy provider so an ordinary `./gradlew build` never trips over it.
+- **`archivesName` carries the Minecraft version** (`createworkers-1.21.1-0.1.0.jar`). If you
+  change it, remember the three sites will not let you rename a file after upload.
+- **`LICENSE` and `NOTICE.md` ship in the jar under `META-INF/`.** `WorkerData`'s transfer
+  algorithm is a port of Create's `ArmBlockEntity`, Create's code is MIT, and MIT wants its notice
+  carried with "copies or substantial portions" — a jar handed to a player is a copy. Create's
+  `assets/` are separately All Rights Reserved, which is why no Create art is used and the badge
+  icon is generated from this mod's own sprite instead.
+- **The logo script is size-parameterised** (`--size`, a multiple of 256): 256 for the in-jar
+  `logoFile`, 512 in `branding/` for the project pages. Multiples only, or `SPRITE_SCALE` goes
+  fractional and the sprite's pixels stop being square.
+- **Commits use a repo-local identity** (`Steal-My-Mods`, the account noreply address) set in
+  `.git/config`, deliberately not the global one. Don't "fix" it back.
+- Both project ids in `gradle.properties` are blank until the CurseForge and Modrinth projects
+  exist; `publishMods` is the only thing that needs them.
 
 ## Architecture landmarks
 

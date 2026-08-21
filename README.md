@@ -172,7 +172,8 @@ load each mod twice.
 `src/main/resources/createworkers_icon.png` is generated, not hand-drawn:
 
 ```bash
-python3 tools/generate_logo.py
+python3 tools/generate_logo.py                                   # 256px, the in-jar logo
+python3 tools/generate_logo.py --size 512 branding/icon-512.png  # 512px, for the project pages
 ```
 
 It builds the badge Create and its addons all use — a white-ringed circle of blue graph paper with
@@ -180,6 +181,12 @@ the mod's item in front — with the palette and proportions sampled from Create
 subject is the hard hat's item sprite scaled up by a whole number, so it stays crisp and matches what
 the player sees in their inventory. The script needs nothing but the standard library; it reads and
 writes the PNGs itself.
+
+Every measurement in it is tuned at 256 and scaled by a single factor, so `--size` must be a
+multiple of 256: any other size leaves the sprite's scale fractional and its pixels no longer
+square, which is the one thing the whole approach exists to avoid. The jar keeps the 256 version
+because the mods list draws it small. CurseForge and Modrinth want 512 — both downscale well and
+neither upscales.
 
 ## Testing
 
@@ -189,7 +196,7 @@ writes the PNGs itself.
 ./gradlew runGameTestServer
 ```
 
-Seventeen in-world GameTests, headless, under a minute, non-zero exit on failure. They cover target
+Twenty in-world GameTests, headless, under a minute, non-zero exit on failure. They cover target
 parity with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm on its
 own, program serialization round-tripping, round-robin wrap-around, the enderman teleport cooldown
 and its refusal to land in water, the wander limit and its panic exemption, address-based package
@@ -247,6 +254,34 @@ wander off or trade while working, and an employed enderman stops being hostile.
 **belt** and set the belt as the input, so items keep arriving and the worker keeps ferrying. To
 watch it move faster, edit `run/config/createworkers-server.toml` — drop `transferCooldown` to `0`
 and raise `walkSpeed`. `maxTargetSpread` caps how far apart the assigned blocks can be.
+
+## Releasing
+
+Uploads are driven from the repo rather than typed into three web forms:
+
+```bash
+./gradlew publishMods
+```
+
+That pushes the jar to CurseForge, Modrinth and GitHub Releases, taking the release notes from
+the `CHANGELOG.md` section that names the current `mod_version`. It needs `CURSEFORGE_TOKEN` and
+`MODRINTH_TOKEN` in the environment, plus both project ids in `gradle.properties` — blank until
+the projects exist on each site.
+
+You should not need to run it by hand, though. Pushing a `v*` tag runs
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which builds, runs the
+GameTests, and publishes only if they pass:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+It refuses a tag that disagrees with `mod_version`, because none of the three sites lets you
+rename a file after upload.
+
+Three things are still manual, once, before the first release: create the two projects, put their
+ids in `gradle.properties`, and add the tokens as repository secrets. Both sites review a first
+submission by hand, so budget a day or two.
 
 ## How it works
 
@@ -306,4 +341,9 @@ Ideas deliberately left out of the MVP. Anything worked through in detail lives 
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
+
+`WorkerData`'s transfer algorithm is a port of Create's `ArmBlockEntity`, and Create's code is
+MIT as well, so its notice travels along in [NOTICE.md](NOTICE.md) and inside the jar under
+`META-INF/`. No Create asset is used or redistributed — Create's `assets/` are All Rights
+Reserved, and every texture, model and icon here is original.

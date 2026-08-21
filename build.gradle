@@ -2,13 +2,16 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'net.neoforged.moddev' version '2.0.144'
+    id 'me.modmuss50.mod-publish-plugin' version '2.2.0'
 }
 
 version = mod_version
 group = mod_group_id
 
 base {
-    archivesName = mod_id
+    // The Minecraft version belongs in the file name: a player with three of these in a
+    // downloads folder has nothing else to tell them apart.
+    archivesName = "${mod_id}-${minecraft_version}"
 }
 
 java {
@@ -142,5 +145,63 @@ publishing {
     }
     repositories {
         maven { url = "file://${project.projectDir}/repo" }
+    }
+}
+
+// The licence and the third-party notices travel inside the jar. MIT asks for its notice to
+// be included in "copies or substantial portions", and a jar handed to a player is a copy --
+// Create's transfer algorithm is in there, so Create's notice has to be too.
+tasks.named('jar', Jar).configure {
+    from(file('LICENSE')) { into 'META-INF' }
+    from(file('NOTICE.md')) { into 'META-INF' }
+}
+
+// Release notes come from CHANGELOG.md so that a release is described in one place instead of
+// being retyped into three web forms. It looks up the section for the version actually being
+// published rather than whatever is at the top: forgetting to write an entry should stop the
+// release, not ship the previous version's notes under a new number.
+def latestChangelog() {
+    def source = file('CHANGELOG.md')
+    def lines = source.exists() ? source.readLines() : []
+    def start = lines.findIndexOf { it.startsWith('## ') && it.contains(mod_version) }
+    if (start < 0) {
+        throw new GradleException(
+                "CHANGELOG.md has no '## ' section naming ${mod_version} -- write one before publishing.")
+    }
+    def rest = lines.drop(start + 1)
+    def next = rest.findIndexOf { it.startsWith('## ') }
+    return (next < 0 ? rest : rest.take(next)).join('\n').trim()
+}
+
+// Uploads the jar to CurseForge, Modrinth and GitHub Releases in one go. Note this is
+// `publishMods`, nothing to do with the `publishing` block above -- that one is maven-publish,
+// for other addons compiling against this mod.
+publishMods {
+    file = tasks.named('jar', Jar).flatMap { it.archiveFile }
+    // Lazily, so a missing changelog section fails the release rather than an ordinary build.
+    changelog = providers.provider { latestChangelog() }
+    type = BETA
+    modLoaders.add('neoforge')
+
+    curseforge {
+        projectId = curseforge_project_id
+        projectSlug = 'create-workers'
+        accessToken = providers.environmentVariable('CURSEFORGE_TOKEN')
+        minecraftVersions.add(minecraft_version)
+        // Both sides are required: the server runs the workers, the client renders their gear.
+        clientRequired = true
+        serverRequired = true
+        requires('create')
+    }
+    modrinth {
+        projectId = modrinth_project_id
+        accessToken = providers.environmentVariable('MODRINTH_TOKEN')
+        minecraftVersions.add(minecraft_version)
+        requires('create')
+    }
+    github {
+        repository = github_repository
+        accessToken = providers.environmentVariable('GITHUB_TOKEN')
+        commitish = providers.environmentVariable('GITHUB_SHA').orElse('dev')
     }
 }
