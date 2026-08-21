@@ -10,7 +10,7 @@ endermen haul items between inventories the way a Mechanical Arm does.
 ./gradlew runClient          # dev client
 ./gradlew runServer          # dev dedicated server (needs run/eula.txt)
 ./gradlew runGameTestServer  # automated in-world tests -- the real check
-./gradlew publishMods        # upload to CurseForge, Modrinth and GitHub Releases
+./gradlew publishMods        # upload to CurseForge and GitHub Releases
 ./gradlew publishMods -PdryRun=true   # ...or rehearse it without uploading anything
 ```
 
@@ -47,7 +47,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   stop a release rather than ship the previous version's notes under a new number. It is wired as
   a lazy provider so an ordinary `./gradlew build` never trips over it.
 - **`archivesName` carries the Minecraft version** (`createworkers-1.21.1-0.1.0.jar`). If you
-  change it, remember the three sites will not let you rename a file after upload.
+  change it, remember neither site will let you rename a file after upload.
 - **`LICENSE` and `NOTICE.md` ship in the jar under `META-INF/`.** `WorkerData`'s transfer
   algorithm is a port of Create's `ArmBlockEntity`, Create's code is MIT, and MIT wants its notice
   carried with "copies or substantial portions" — a jar handed to a player is a copy. Create's
@@ -58,8 +58,17 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   fractional and the sprite's pixels stop being square.
 - **Commits use a repo-local identity** (`Steal-My-Mods`, the account noreply address) set in
   `.git/config`, deliberately not the global one. Don't "fix" it back.
-- Both project ids in `gradle.properties` are blank until the CurseForge and Modrinth projects
-  exist; `publishMods` is the only thing that needs them.
+- **CurseForge and GitHub only — Modrinth is deliberately not a destination.** Modrinth's Content
+  Rules gained a section 6 on generative AI in August 2026. Its disclosure requirement is no
+  obstacle (tick "Contains AI-generated content" and move on), but **6.2 flatly bans project images
+  "created or derived from generative AI output"** with no disclosure lane, and the badge icon is
+  scaled up from `hard_hat.png`, whose pixels this mod's own tooling chose. CurseForge asks only
+  that a *misleading* AI-modified showcase image carry a disclaimer, which a badge of the actual
+  item is not. So the first release goes to CurseForge while that is still an open question. To
+  restore Modrinth: redraw `hard_hat.png` by hand, uncomment `modrinth_project_id` (the project and
+  slug are already reserved), re-add the `modrinth` block to `publishMods` **and** `MODRINTH_TOKEN`
+  to `release.yml` — an empty token fails at upload, not at configuration, which half-publishes a
+  release after CurseForge has already accepted the jar.
 
 ## Architecture landmarks
 

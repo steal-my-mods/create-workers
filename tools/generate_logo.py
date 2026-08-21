@@ -55,8 +55,8 @@ SHADOW_ALPHA = 0.26
 # The badge is the same drawing at every size, so a single factor moves all of it. That
 # factor has to leave SPRITE_SCALE a whole number -- keeping the sprite's pixels square is
 # the entire reason it is scaled by an integer -- so the output size must be a multiple of
-# REFERENCE. 256 is the in-jar logo; 512 is what CurseForge and Modrinth want for a project
-# icon, since both downscale gracefully and neither upscales.
+# REFERENCE. 256 is the in-jar logo; 512 is what CurseForge wants for a project icon, since it
+# downscales gracefully and never upscales.
 GEOMETRY = {
     'RADIUS': 124.0,           # outer edge of the badge
     'RING': 9.0,               # white ring thickness

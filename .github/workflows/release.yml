@@ -1,8 +1,8 @@
 name: Release
 
 # Tag a release and this uploads it: `git tag v0.1.0 && git push origin v0.1.0`.
-# Needs three repository secrets -- CURSEFORGE_TOKEN and MODRINTH_TOKEN are yours to create;
-# GITHUB_TOKEN is provided by Actions. Both project ids must be filled in in gradle.properties.
+# Needs one repository secret you create yourself, CURSEFORGE_TOKEN; GITHUB_TOKEN is provided by
+# Actions. `curseforge_project_id` must be filled in in gradle.properties.
 on:
   push:
     tags: ['v*']
@@ -25,7 +25,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
 
       # A tag that disagrees with mod_version would publish the jar under the wrong number on
-      # three sites at once, and none of them let you rename a file after upload.
+      # both sites at once, and neither lets you rename a file after upload.
       - name: Check the tag matches mod_version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -48,9 +48,8 @@ jobs:
       - name: GameTests
         run: ./gradlew runGameTestServer
 
-      - name: Publish to CurseForge, Modrinth and GitHub
+      - name: Publish to CurseForge and GitHub
         run: ./gradlew publishMods
         env:
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
-          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

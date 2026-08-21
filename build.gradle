@@ -157,7 +157,7 @@ tasks.named('jar', Jar).configure {
 }
 
 // Release notes come from CHANGELOG.md so that a release is described in one place instead of
-// being retyped into three web forms. It looks up the section for the version actually being
+// being retyped into a web form. It looks up the section for the version actually being
 // published rather than whatever is at the top: forgetting to write an entry should stop the
 // release, not ship the previous version's notes under a new number.
 def latestChangelog() {
@@ -173,7 +173,7 @@ def latestChangelog() {
     return (next < 0 ? rest : rest.take(next)).join('\n').trim()
 }
 
-// Uploads the jar to CurseForge, Modrinth and GitHub Releases in one go. Note this is
+// Uploads the jar to CurseForge and GitHub Releases in one go. Note this is
 // `publishMods`, nothing to do with the `publishing` block above -- that one is maven-publish,
 // for other addons compiling against this mod.
 publishMods {
@@ -201,12 +201,9 @@ publishMods {
         serverRequired = true
         requires('create')
     }
-    modrinth {
-        projectId = modrinth_project_id
-        accessToken = providers.environmentVariable('MODRINTH_TOKEN')
-        minecraftVersions.add(minecraft_version)
-        requires('create')
-    }
+    // No `modrinth` block, deliberately -- see the Distribution notes in CLAUDE.md. Don't add one
+    // back by only pasting the block: an empty MODRINTH_TOKEN fails at upload rather than at
+    // configuration time, which half-publishes a release.
     github {
         repository = github_repository
         accessToken = providers.environmentVariable('GITHUB_TOKEN')

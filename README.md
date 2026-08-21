@@ -185,8 +185,8 @@ writes the PNGs itself.
 Every measurement in it is tuned at 256 and scaled by a single factor, so `--size` must be a
 multiple of 256: any other size leaves the sprite's scale fractional and its pixels no longer
 square, which is the one thing the whole approach exists to avoid. The jar keeps the 256 version
-because the mods list draws it small. CurseForge and Modrinth want 512 — both downscale well and
-neither upscales.
+because the mods list draws it small. CurseForge wants 512 for the project page, and it downscales
+well but never upscales.
 
 ## Testing
 
@@ -257,16 +257,19 @@ and raise `walkSpeed`. `maxTargetSpread` caps how far apart the assigned blocks 
 
 ## Releasing
 
-Uploads are driven from the repo rather than typed into three web forms:
+Uploads are driven from the repo rather than typed into web forms:
 
 ```bash
 ./gradlew publishMods
 ```
 
-That pushes the jar to CurseForge, Modrinth and GitHub Releases, taking the release notes from
-the `CHANGELOG.md` section that names the current `mod_version`. It needs `CURSEFORGE_TOKEN` and
-`MODRINTH_TOKEN` in the environment, plus both project ids in `gradle.properties` — blank until
-the projects exist on each site.
+That pushes the jar to CurseForge and GitHub Releases, taking the release notes from the
+`CHANGELOG.md` section that names the current `mod_version`. It needs `CURSEFORGE_TOKEN` in the
+environment and `curseforge_project_id` in `gradle.properties`.
+
+Modrinth is not a destination for now, while its new rules on generative AI in project images are
+still an open question for the badge icon — see the Distribution notes in
+[`CLAUDE.md`](CLAUDE.md). The project there is reserved, not abandoned.
 
 You should not need to run it by hand, though. Pushing a `v*` tag runs
 [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds, runs the
@@ -276,11 +279,11 @@ GameTests, and publishes only if they pass:
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-It refuses a tag that disagrees with `mod_version`, because none of the three sites lets you
-rename a file after upload.
+It refuses a tag that disagrees with `mod_version`, because neither site lets you rename a file
+after upload.
 
-Three things are still manual, once, before the first release: create the two projects, put their
-ids in `gradle.properties`, and add the tokens as repository secrets. Both sites review a first
+One thing is still manual before the first release: add `CURSEFORGE_TOKEN` as a repository secret.
+The project itself already exists and its id is in `gradle.properties`. CurseForge reviews a first
 submission by hand, so budget a day or two.
 
 ## How it works

@@ -5,8 +5,8 @@ Notable changes to Create: Workers, newest first. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
 `publishMods` reads the section matching `mod_version` and posts it as the release notes on
-CurseForge, Modrinth and GitHub — so write entries for a player reading a download page, not
-for someone reading the diff.
+CurseForge and GitHub — so write entries for a player reading a download page, not for someone
+reading the diff.
 
 ## [0.1.0] — 2026-08-21
 
