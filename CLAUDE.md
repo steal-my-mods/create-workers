@@ -59,11 +59,12 @@ the Ponder jar.
   It is derived, never persisted, and recomputed on deserialize. `resolvePoints` therefore filters
   nothing: a target on the hat is a target. Don't reintroduce a silent range filter — the point of
   this shape is that a target is either refused as you assign it or honoured.
-- **Villagers use the brain, not goals.** Never steer their navigator directly. `WalkLocomotion`
-  pins the `WALK_TARGET` memory every tick and lets `MoveToTargetSink` (villager CORE package,
-  priority 1) path. Keeping that memory occupied is also what stops them wandering off — the idle
-  and job-site behaviours require it to be *absent* to start. `Mob.serverAiStep()` is `final` and
-  runs goals *before* the brain, so a goal setting the memory is seen the same tick.
+- **Villagers use the brain, not goals.** Never choose a destination for their navigator directly —
+  the only thing ever set on it by hand is the speed of a path the sink already started.
+  `WalkLocomotion` pins the `WALK_TARGET` memory every tick and lets `MoveToTargetSink` (villager
+  CORE package, priority 1) path. Keeping that memory occupied is also what stops them wandering
+  off — the idle and job-site behaviours require it to be *absent* to start. `Mob.serverAiStep()` is
+  `final` and runs goals *before* the brain, so a goal setting the memory is seen the same tick.
 - **`WorkerData` owns a detached `ArmBlockEntity`.** Create's interaction points take one only to
   ask `isRemoved()` — it is the liveness token for their `BlockCapabilityCache`. Always
   `releasePoints()` when a worker unloads or the caches outlive the entity.
@@ -117,15 +118,30 @@ the Ponder jar.
   idle rounds are the worker's own targets, so a worker ambling to one when work appears is usually
   already walking to the very block the job is at: the new walk target is the same position, nothing
   re-paths, and it strolls to work at idle pace. All of `WalkLocomotion` therefore goes through
-  `walkTo`, which also sets the speed on the navigation directly.
+  `walkTo`, which also sets the speed on the navigation directly — but only when the walk target it
+  is overwriting was already the same position, which is what makes the running path the *same trip*
+  rather than some other one. (Not `navigation.getTargetPos()`, the obvious comparison and always
+  unequal: `GroundPathNavigation.createPath` retargets a solid block to the first non-solid one
+  above it, so a path to a depot is a path to the air over the depot. Comparing against it disables
+  the nudge outright, which is what `workFoundOnTheRoundsIsWalkedAtWorkingPace` failed on.) Without
+  the gate the nudge lands on whatever path happens to be running:
+  a panicking villager's flight (pinned to working pace instead of vanilla's faster one, since a
+  goal writes it before `navigation.tick()` and the brain cannot get it back), or the last stride of
+  an amble the worker has already arrived at, which `holdAt` would bump to working pace and end
+  every idle round with a sprint — which `arrivingOnTheRoundsKeepsTheAmblePace` covers.
   `workFoundOnTheRoundsIsWalkedAtWorkingPace` asserts the speed the move control is actually driven
-  at, not the memory, and was mutation-checked by deleting the nudge.
+  at, not the memory, and was mutation-checked by deleting the nudge; it starts the trip from a
+  third speed that is neither pace, so no leg can pass on a speed the test itself supplied.
 - **Endermen don't need a wander leash, villagers do.** The job goal holds `Goal.Flag.MOVE`, which
   stops other *goals* (an enderman's random stroll) from moving the mob — but the villager brain is
   not a goal and ignores flags entirely, so villagers drift during cooldowns. `Workers.isOffStation`
   counts programmed targets as posts, not just the hire spot, or a worker at the far end of a long
   run reads as wandering. Never leash a panicking villager; reuse `VillagerPanicTrigger.isHurt` /
-  `hasHostile` so the check agrees exactly with when the brain takes over.
+  `hasHostile` so the check agrees exactly with when the brain takes over — every path in
+  `WalkLocomotion` checks it, `approach` included (`workersOnTheirWayToAJobStillPanic`), so a worker
+  mid-haul flees like any other villager. `SetWalkTargetAwayFrom` sits at the same brain priority as
+  the sink that reads the memory, so rewriting it every tick during a panic competes with the flight
+  rather than losing to it.
 - **Don't assert behaviour with wall-clock thresholds.** A "not delivered within 25 ticks" check for
   the teleport cooldown passed happily with the cooldown set to 1. `teleportsRespectTheirCooldown`
   asserts the mechanism instead, and was mutation-checked by deleting the gate.

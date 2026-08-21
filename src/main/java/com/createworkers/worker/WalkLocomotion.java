@@ -14,9 +14,10 @@ import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Villagers walk. They are brain-driven rather than goal-driven, so instead of steering the
- * navigator directly this keeps {@code WALK_TARGET} pinned every tick and lets the villager's
- * own {@code MoveToTargetSink} do the pathfinding.
+ * Villagers walk. They are brain-driven rather than goal-driven, so rather than choosing a
+ * destination for the navigator this keeps {@code WALK_TARGET} pinned every tick and lets the
+ * villager's own {@code MoveToTargetSink} do the pathfinding. The one thing ever set on the
+ * navigation by hand is the speed of a path the sink has already started — see {@link #walkTo}.
  *
  * <p>That cooperates with the brain rather than fighting it, and it doubles as the way to stop
  * a working villager wandering off: the idle behaviours that would send it strolling, to its
@@ -32,8 +33,19 @@ public class WalkLocomotion implements WorkerLocomotion {
 	/** How close counts as having reached a stop on the rounds. */
 	static final int PATROL_ARRIVED = 2;
 
+	/**
+	 * Walks a worker to the block it is about to use.
+	 *
+	 * <p>Never while it is panicking, for the same reason as {@link #returnTo}: a villager fleeing a
+	 * zombie is the brain's business, and where it runs to is decided by {@code SetWalkTargetAwayFrom}
+	 * — which sits at the same brain priority as the sink that reads the memory, so a goal rewriting
+	 * that memory every tick is competing with the flight rather than deferring to it.
+	 */
 	@Override
 	public void approach(Mob mob, WorkerTarget target) {
+		if (isPanicking(mob))
+			return;
+
 		BlockPos pos = target.getPos();
 		int closeEnough = Math.max(1, (int) Math.floor(CWConfig.REACH_DISTANCE.get()));
 
@@ -106,12 +118,12 @@ public class WalkLocomotion implements WorkerLocomotion {
 	}
 
 	/** The pace of a worker on the clock. */
-	static float workingSpeed() {
+	public static float workingSpeed() {
 		return (float) (double) CWConfig.WALK_SPEED.get();
 	}
 
 	/** The pace of a worker on its rounds: an amble, not a commute. */
-	static float amblingSpeed() {
+	public static float amblingSpeed() {
 		return workingSpeed() * (float) (double) CWConfig.IDLE_SPEED_FACTOR.get();
 	}
 
@@ -130,13 +142,31 @@ public class WalkLocomotion implements WorkerLocomotion {
 	 * target is the same position, nothing re-paths, and it strolls to work at idle pace for the rest
 	 * of the trip. Setting the speed on the navigation directly is what makes the change take effect
 	 * the same tick, and the sink overwrites it with this same value whenever it does path again.
+	 *
+	 * <p>Only ever the trip that is already going where this one is. The memory it is about to
+	 * overwrite is the record of that: the sink builds its path from the walk target, so a previous
+	 * walk target at {@code pos} means the path now running is this same trip, asked for a tick ago at
+	 * some other speed. Anything else — a flight the panic behaviour wrote, or the stride into a stop
+	 * the worker has just arrived at, where {@code holdAt} moves the destination a block or two — is
+	 * going somewhere else, and pricing that at this speed would have a worker sprint a walk it was
+	 * strolling. Below two blocks the sink will not re-path either, so leaving it alone leaves the
+	 * pace it started with.
+	 *
+	 * <p>Not the navigation's own target, which looks like the obvious thing to compare against and is
+	 * never equal: {@code GroundPathNavigation.createPath} retargets a solid block to the first
+	 * non-solid one above it, so a path to a depot is a path to the air over the depot.
 	 */
 	private static void walkTo(Mob mob, BlockPos pos, float speed, int closeEnough) {
-		mob.getBrain()
-			.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(pos, speed, closeEnough));
+		Brain<?> brain = mob.getBrain();
+		boolean sameTrip = brain.getMemory(MemoryModuleType.WALK_TARGET)
+			.map(previous -> previous.getTarget()
+				.currentBlockPosition()
+				.equals(pos))
+			.orElse(false);
+		brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(pos, speed, closeEnough));
 
 		PathNavigation navigation = mob.getNavigation();
-		if (!navigation.isDone())
+		if (sameTrip && !navigation.isDone())
 			navigation.setSpeedModifier(speed);
 	}
 }

@@ -99,13 +99,13 @@ from an extracting funnel on one is emptying the mailbox.
 | Blocked by | Terrain it cannot path through | Nowhere safe to land |
 | Safety | — | Refuses to land in water, rain, fire or lava |
 | Cargo shown | Held in front of the chest | Held as a carried block, plus in-hand for non-blocks |
-| Idling | Slow rounds between its assigned blocks | Stands by; does not teleport idly |
+| Idling | Unhurried rounds between its assigned blocks | Stands by; does not teleport idly |
 
 Endermen are fast but not free: each teleport is followed by a cooldown, and one hop only covers
 `teleportRange`, so moving goods across a base takes several hops and visibly longer than working a
 tight cluster.
 
-**Workers do their rounds.** With nothing to haul, a worker ambles slowly between the blocks on its
+**Workers do their rounds.** With nothing to haul, a worker ambles between the blocks on its
 own hat, standing at each for a while as though checking on it, then moving on. It looks like a
 worker with time on their hands, and it is safe by construction: the only places it goes are ones it
 already walks to in order to work, so idling can never strand it somewhere it cannot get back from.
@@ -123,7 +123,7 @@ wandering. A villager fleeing a mob is never pinned or dragged back.
 
 | | Behaviour |
 |---|---|
-| `PATROL` | Slow rounds between its own assigned blocks. The default — lively and predictable |
+| `PATROL` | Unhurried rounds between its own assigned blocks, at `idleSpeedFactor` of walking speed. The default — lively and predictable |
 | `HOLD_STATION` | Stands where it finished its last job. The most predictable |
 | `WANDER` | Vanilla idling within `wanderRadius`. Liveliest, and the one that can lose a worker off a catwalk |
 
@@ -139,6 +139,7 @@ endermen stop being hostile — they are on the clock.
 | `maxTargetSpread` | 48 | How far apart the furthest two blocks on one hat may be — the width of a worker's beat |
 | `transferCooldown` | 10 | Ticks paused after moving an item |
 | `walkSpeed` | 0.6 | Movement speed modifier for walking workers |
+| `idleSpeedFactor` | 0.85 | Pace of a worker on its idle rounds, as a fraction of `walkSpeed` |
 | `teleportCooldown` | 20 | Ticks between enderman teleports |
 | `teleportRange` | 24 | Furthest one teleport may cover; longer trips take several hops |
 | `reachDistance` | 2.5 | How close a worker must get to use an inventory |

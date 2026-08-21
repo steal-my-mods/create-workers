@@ -546,19 +546,24 @@ public class WorkerGameTests {
 		helper.assertTrue(stroll.getTarget()
 			.currentBlockPosition()
 			.equals(helper.absolutePos(TARGET)), "it should head for the stop it was given");
-		float amble = (float) (double) CWConfig.WALK_SPEED.get() * (float) (double) CWConfig.IDLE_SPEED_FACTOR.get();
+		float amble = WalkLocomotion.amblingSpeed();
 		helper.assertTrue(Math.abs(stroll.getSpeedModifier() - amble) < TOLERANCE,
 			"rounds should walk at the idle fraction of working speed, got " + stroll.getSpeedModifier());
 		helper.succeed();
 	}
 
 	/**
-	 * Work turning up mid-amble must be walked to at working pace.
+	 * Work turning up mid-amble must be walked to at working pace, and the rounds themselves ambled.
 	 *
 	 * <p>The walk target alone proves nothing here. MoveToTargetSink hands a speed to the navigation
 	 * only when it paths, and once running it re-paths only if the destination has moved more than two
 	 * blocks -- while a stop on the rounds is very often the exact block the job is at. So what has to
 	 * be asserted is the speed the navigation the mob is actually following ends up with.
+	 *
+	 * <p>The sequence is the real one: the goal writes the walk target, the sink paths for it, and
+	 * later ticks ask for the same destination again. Standing in for the sink here, so the trip can
+	 * be started at a speed that is neither pace -- then each leg below has to move the navigation off
+	 * it rather than passing on a speed this test supplied.
 	 */
 	@GameTest(template = "work_site", timeoutTicks = 200)
 	public static void workFoundOnTheRoundsIsWalkedAtWorkingPace(GameTestHelper helper) {
@@ -572,26 +577,117 @@ public class WorkerGameTests {
 			data.resolvePoints(villager);
 
 			WalkLocomotion locomotion = new WalkLocomotion();
-			float working = (float) (double) CWConfig.WALK_SPEED.get();
-			float amble = working * (float) (double) CWConfig.IDLE_SPEED_FACTOR.get();
-			BlockPos stop = helper.absolutePos(TARGET);
-			// The sink walks to the floor beside a stop, the stop itself being a block.
-			BlockPos beside = helper.absolutePos(TARGET.west());
+			float working = WalkLocomotion.workingSpeed();
+			float amble = WalkLocomotion.amblingSpeed();
+			// Slower than any amble the config allows (a quarter of walking speed at the least), so
+			// each leg below has to move the navigation off it.
+			float setup = working / 8.0F;
 
-			// Ambling to a stop, with the brain's sink already following a path at idle pace.
+			// The worker's own output depot, which is both a stop on its rounds and a place it works.
+			WorkerTarget work = data.getOutputs()
+				.get(0);
+			BlockPos stop = work.getPos();
+			helper.assertTrue(stop.equals(helper.absolutePos(TARGET)), "the output depot should be the stop");
+
+			// Off on the rounds: the goal names the stop, then the sink paths for it -- here at a speed
+			// that is neither pace, standing in for the sink.
 			locomotion.patrolTo(villager, stop);
 			PathNavigation navigation = villager.getNavigation();
-			helper.assertTrue(navigation.moveTo(beside.getX() + 0.5D, beside.getY(), beside.getZ() + 0.5D, amble),
+			helper.assertTrue(navigation.moveTo(navigation.createPath(stop, 0), setup),
 				"the villager should be able to path to one of its own stops");
 			navigation.tick();
+			helper.assertTrue(Math.abs(travelSpeed(villager) - setup) < TOLERANCE,
+				"the setup walk should be under way at its own speed, got " + travelSpeed(villager));
+
+			// Another tick of the rounds, same stop: the sink will not re-path, so the amble has to be
+			// put on the navigation directly.
+			locomotion.patrolTo(villager, stop);
+			navigation.tick();
 			helper.assertTrue(Math.abs(travelSpeed(villager) - amble) < TOLERANCE,
-				"the amble should be under way at idle pace, got " + travelSpeed(villager));
+				"the rounds should be walked at idle pace, got " + travelSpeed(villager));
 
 			// Work turns up, at that very block.
-			locomotion.approach(villager, target(helper, TARGET));
+			locomotion.approach(villager, work);
 			navigation.tick();
 			helper.assertTrue(Math.abs(travelSpeed(villager) - working) < TOLERANCE,
 				"a worker that finds work mid-amble should walk to it at working pace, got " + travelSpeed(villager));
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * The stride into a stop keeps its amble.
+	 *
+	 * <p>A worker that has arrived is held at where it is standing, which is a different block from
+	 * the stop and no more than PATROL_ARRIVED from it -- close enough that the sink will not re-path.
+	 * The speed nudge has to leave that trip alone, or every idle round ends with a sprint.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void arrivingOnTheRoundsKeepsTheAmblePace(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = employ(helper, villager);
+
+		helper.runAfterDelay(SETTLE_TICKS, () -> {
+			data.resolvePoints(villager);
+
+			WalkLocomotion locomotion = new WalkLocomotion();
+			float amble = WalkLocomotion.amblingSpeed();
+			BlockPos stop = data.getOutputs()
+				.get(0)
+				.getPos();
+
+			// Ambling to the stop, as the goal and the sink leave it.
+			locomotion.patrolTo(villager, stop);
+			PathNavigation navigation = villager.getNavigation();
+			helper.assertTrue(navigation.moveTo(navigation.createPath(stop, 0), amble),
+				"the villager should be able to path to one of its own stops");
+			navigation.tick();
+
+			// Arrived: held at the block it is standing on, one over from the stop.
+			locomotion.holdAt(villager, stop.west());
+			navigation.tick();
+			helper.assertTrue(Math.abs(travelSpeed(villager) - amble) < TOLERANCE,
+				"the stride into a stop should keep its amble, got " + travelSpeed(villager));
+			helper.succeed();
+		});
+	}
+
+	/** A worker on its way to a job flees like any other villager. */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void workersOnTheirWayToAJobStillPanic(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = employ(helper, villager);
+
+		helper.runAfterDelay(SETTLE_TICKS, () -> {
+			data.resolvePoints(villager);
+
+			WalkLocomotion locomotion = new WalkLocomotion();
+			WorkerTarget work = data.getOutputs()
+				.get(0);
+			Brain<Villager> brain = villager.getBrain();
+			// A flight already under way, at the faster pace the panic behaviour asks for.
+			float fleeing = WalkLocomotion.workingSpeed() * 1.5F;
+			BlockPos away = helper.absolutePos(SOURCE_B);
+
+			brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(away, fleeing, 1));
+			PathNavigation navigation = villager.getNavigation();
+			helper.assertTrue(navigation.moveTo(navigation.createPath(away, 0), fleeing),
+				"the villager should be able to flee across the site");
+			navigation.tick();
+			brain.setMemory(MemoryModuleType.HURT_BY, villager.damageSources()
+				.generic());
+
+			locomotion.approach(villager, work);
+			navigation.tick();
+			helper.assertTrue(brain.getMemory(MemoryModuleType.WALK_TARGET)
+				.map(target -> target.getTarget()
+					.currentBlockPosition()
+					.equals(away))
+				.orElse(false), "a panicking worker must not be walked to its job");
+			helper.assertTrue(Math.abs(travelSpeed(villager) - fleeing) < TOLERANCE,
+				"a panicking worker should still be fleeing at the brain's pace, got " + travelSpeed(villager));
 			helper.succeed();
 		});
 	}
@@ -695,17 +791,17 @@ public class WorkerGameTests {
 		return found;
 	}
 
-	/**
-	 * Lays the floor the workers stand on. The game test framework clears the volume to air, and
-	 * relying on a hand-written structure template to supply the floor proved fragile, so the tests
-	 * build their own.
-	 */
 	/** The speed the mob's move control is actually being driven at. */
 	private static double travelSpeed(Mob mob) {
 		return mob.getMoveControl()
 			.getSpeedModifier();
 	}
 
+	/**
+	 * Lays the floor the workers stand on. The game test framework clears the volume to air, and
+	 * relying on a hand-written structure template to supply the floor proved fragile, so the tests
+	 * build their own.
+	 */
 	private static void layFloor(GameTestHelper helper) {
 		for (int x = 0; x < SITE_SIZE; x++)
 			for (int z = 0; z < SITE_SIZE; z++)
