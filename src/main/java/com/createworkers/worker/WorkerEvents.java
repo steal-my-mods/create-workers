@@ -17,6 +17,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -24,6 +25,9 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
+import net.neoforged.neoforge.event.entity.EntityMobGriefingEvent;
+import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
@@ -141,6 +145,63 @@ public class WorkerEvents {
 		WorkerStatePacket.sync(target, data);
 		player.displayClientMessage(Component.translatable("createworkers.message.retired")
 			.withStyle(ChatFormatting.YELLOW), true);
+	}
+
+	/**
+	 * A worker enderman teleports where the job sends it and nowhere else.
+	 *
+	 * <p>Left alone, vanilla's own teleports swamp the deliberate hop {@link TeleportLocomotion}
+	 * makes. {@code EnderMan.customServerAiStep} rolls, on every tick that it is day and the sky is
+	 * visible overhead, a better-than-one-in-thirty chance of blinking to a random point up to 32
+	 * blocks away — and it runs <em>after</em> the goals in {@code Mob.serverAiStep}, so it lands on
+	 * top of the hop the worker has just made. The 600-tick grace period that normally holds it back
+	 * is keyed off {@code targetChangeTime}, which {@link TeleportLocomotion#tickEmployed} resets to
+	 * zero every tick by clearing the target, so a worker never gets that reprieve: it is a hop to
+	 * the depot, then a jump to nowhere, over and over, and a haul that should take two hops times
+	 * out instead.
+	 *
+	 * <p>Cancelling here catches every vanilla enderman teleport — the daylight wander, the
+	 * projectile dodge, the jump towards a staring player — and none of the mod's own, which go
+	 * straight to {@code LivingEntity.randomTeleport} and fire no event. Unlike a panicking villager,
+	 * an enderman fleeing 32 blocks in a random direction has no way back: nothing walks it home,
+	 * because it does not walk.
+	 */
+	@SubscribeEvent
+	public static void onEnderTeleport(EntityTeleportEvent.EnderEntity event) {
+		if (Workers.isEmployed(event.getEntity()))
+			event.setCanceled(true);
+	}
+
+	/**
+	 * A worker enderman does not rearrange the scenery. Both of the block-moving goals gate on the
+	 * mob-griefing check, so vetoing that is enough to stop the pair of them without touching the
+	 * goal list — and neither carries a {@code Goal.Flag}, so the job goal's hold on MOVE does not
+	 * stop them by itself.
+	 *
+	 * <p>Taking is the frequent one, a one-in-twenty roll on every tick the enderman is not already
+	 * holding a block, which is often enough that a worker standing on dirt digs up its own floor. It
+	 * also lies about the cargo: the block an enderman holds is exactly what
+	 * {@link Workers#updateCargoAppearance} hands a block cargo to, so a stolen block shows up as
+	 * the worker's load and the next real one silently deletes it. Placing is rarer and worse — it
+	 * plants the cargo in the world while {@link WorkerData} still holds the item, minting a copy.
+	 *
+	 * <p>Endermen only. An employed villager still gets to work its fields.
+	 */
+	@SubscribeEvent
+	public static void onMobGriefing(EntityMobGriefingEvent event) {
+		if (event.getEntity() instanceof EnderMan enderman && Workers.isEmployed(enderman))
+			event.setCanGrief(false);
+	}
+
+	/**
+	 * An enderman drops the block it is holding as loot of its own, and for a worker that block is
+	 * its cargo — which {@link #onLivingDrops} is already handing back. Clearing it as the worker
+	 * dies, before the death loot is gathered, is what stops a block cargo dropping twice.
+	 */
+	@SubscribeEvent
+	public static void onLivingDeath(LivingDeathEvent event) {
+		if (event.getEntity() instanceof Mob mob && Workers.isEmployed(mob))
+			Workers.updateCargoAppearance(mob, ItemStack.EMPTY);
 	}
 
 	/** A worker that dies on the job drops its hat and whatever it was carrying. */

@@ -21,9 +21,10 @@ First release.
 - **Villager workers.** Right-click a villager with a programmed hat and they clock in, walking
   between the blocks on the hat and hauling items the way an arm moves them. They pathfind
   around obstacles, keep to their patch instead of wandering off, and still flee from mobs.
-- **Enderman workers.** The same job, done by teleporting — several hops for a long haul, with a
-  cooldown between them, and no landing in water, rain, fire or lava. Employed endermen stop
-  being hostile.
+- **Enderman workers.** The same job, done by teleporting — several hops for a long haul, each
+  one closing the distance, with a cooldown between them, and no landing in water, rain, fire
+  or lava. Employed endermen stop being hostile, stop blinking off at random in the daylight,
+  and leave the blocks around them where they are.
 - **Idle rounds.** With nothing to haul, a worker ambles between its own assigned blocks and
   stands at each a while. Configurable via `idleBehaviour`: `PATROL`, `HOLD_STATION` or
   `WANDER`.

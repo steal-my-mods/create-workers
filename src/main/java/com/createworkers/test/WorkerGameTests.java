@@ -43,9 +43,11 @@ import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.event.EventHooks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import net.neoforged.neoforge.items.IItemHandler;
@@ -322,6 +324,83 @@ public class WorkerGameTests {
 				&& level.getFluidState(spot.above())
 					.isEmpty(),
 				"chose a landing spot standing in fluid: " + spot);
+		helper.succeed();
+	}
+
+	/**
+	 * Vanilla teleports are vetoed for anyone on the clock.
+	 *
+	 * <p>Asserted through the very hook vanilla goes through, because every one of its own teleports
+	 * is a private call this test cannot make: the daylight wander that fires several times a minute
+	 * under an open sky, the projectile dodge, the jump towards a staring player. The unemployed
+	 * control matters as much as the employed case — this handler sees every enderman in the world,
+	 * and a wild one must still behave like a wild one.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void employedEndermenOnlyTeleportForWork(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		EnderMan worker = helper.spawn(EntityType.ENDERMAN, SPAWN);
+		EnderMan wild = helper.spawn(EntityType.ENDERMAN, new BlockPos(5, 1, 7));
+		employ(helper, worker);
+
+		Vec3 somewhere = wild.position();
+		helper.assertTrue(EventHooks.onEnderTeleport(worker, somewhere.x, somewhere.y, somewhere.z)
+			.isCanceled(), "a worker's own vanilla teleports should be refused");
+		helper.assertTrue(!EventHooks.onEnderTeleport(wild, somewhere.x, somewhere.y, somewhere.z)
+			.isCanceled(), "an unemployed enderman should teleport as it always has");
+		helper.succeed();
+	}
+
+	/**
+	 * A worker enderman leaves the scenery alone: no digging its own floor up, and no planting its
+	 * cargo in the world while still holding the item.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void employedEndermenLeaveBlocksAlone(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		ServerLevel level = helper.getLevel();
+		level.getGameRules()
+			.getRule(GameRules.RULE_MOBGRIEFING)
+			.set(true, level.getServer());
+
+		EnderMan worker = helper.spawn(EntityType.ENDERMAN, SPAWN);
+		EnderMan wild = helper.spawn(EntityType.ENDERMAN, new BlockPos(5, 1, 7));
+		employ(helper, worker);
+
+		helper.assertTrue(!EventHooks.canEntityGrief(level, worker),
+			"a worker should not be allowed to move blocks about");
+		helper.assertTrue(EventHooks.canEntityGrief(level, wild),
+			"an unemployed enderman should still obey the game rule, not the hard hat");
+		helper.succeed();
+	}
+
+	/**
+	 * A hop too long for one teleport must still be a step of a journey.
+	 *
+	 * <p>The waypoint the worker aims at is a point in mid-air on the line to the target, so the
+	 * footing nearest to <em>it</em> is as often behind the worker as ahead of it. The negative case
+	 * is the one with teeth: every foothold near this waypoint is further from the target than the
+	 * worker already is, so the only correct answer is to refuse the hop. Scoring by nearness to the
+	 * waypoint instead — the obvious reading — hands back a landing spot that goes backwards, which
+	 * is what a run of these looks like from the ground.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void longHopsOnlyLandCloserToTheTarget(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		EnderMan enderman = helper.spawn(EntityType.ENDERMAN, SPAWN);
+		BlockPos target = helper.absolutePos(TARGET);
+		double covered = enderman.blockPosition()
+			.distSqr(target);
+
+		BlockPos backwards = TeleportLocomotion.findWaypointSpot(enderman, helper.absolutePos(SOURCE), target);
+		helper.assertTrue(backwards == null,
+			"should refuse a hop that ends further from the target than it started, but chose " + backwards);
+
+		BlockPos onwards = TeleportLocomotion.findWaypointSpot(enderman, helper.absolutePos(new BlockPos(7, 1, 7)),
+			target);
+		helper.assertTrue(onwards != null, "should find a foothold on open ground towards the target");
+		helper.assertTrue(onwards.distSqr(target) < covered,
+			"a hop should close the distance, but " + onwards + " is no nearer the target than the start");
 		helper.succeed();
 	}
 

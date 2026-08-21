@@ -97,6 +97,10 @@ public class Workers {
 	/**
 	 * Updates anything the mob itself draws for its cargo. Endermen already have a vanilla layer for
 	 * a carried block, so a block cargo is handed to that rather than drawn twice.
+	 *
+	 * <p>That only tells the truth because an employed enderman is barred from picking blocks up and
+	 * putting them down of its own accord — see {@code WorkerEvents.onMobGriefing}. Otherwise the
+	 * block in its hands is whatever it last dug out of the floor.
 	 */
 	public static void updateCargoAppearance(Mob mob, ItemStack cargo) {
 		if (!(mob instanceof EnderMan enderman))

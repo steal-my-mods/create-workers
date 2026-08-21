@@ -71,7 +71,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `worker/WorkerJobGoal` | Phase machine: search input → travel → collect → search output → travel → deposit |
 | `worker/WalkLocomotion` | Villagers. Also owns `returnTo`, the wander leash |
 | `worker/TeleportLocomotion` | Endermen. Holds the teleport cooldown, so locomotion instances are **per-worker**, not shared |
-| `worker/WorkerEvents` | Hiring, retiring, drops, client sync, cleanup |
+| `worker/WorkerEvents` | Hiring, retiring, drops, client sync, cleanup, and the vetoes that stop vanilla's own enderman AI from undoing the job |
 | `client/HatSelectionHandler` | Client-side programming UX (mirrors `ArmInteractionPointHandler`) |
 | `client/WorkerGearLayer` | Hard hat + hi-vis vest render layer |
 | `client/model/HardHatArmorModel` | The same hat geometry as a `HumanoidModel`, for the hat worn by a player |
@@ -161,6 +161,27 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   `workFoundOnTheRoundsIsWalkedAtWorkingPace` asserts the speed the move control is actually driven
   at, not the memory, and was mutation-checked by deleting the nudge; it starts the trip from a
   third speed that is neither pace, so no leg can pass on a speed the test itself supplied.
+- **An enderman fights the job on three fronts of its own, and none of them are goals.**
+  `Goal.Flag.MOVE` buys nothing against any of them. `customServerAiStep` — which runs *after* the
+  goals in `Mob.serverAiStep` — rolls a better-than-1-in-30 chance **every tick** that it is day and
+  the sky is visible of blinking to a random point up to 32 blocks off, so it lands squarely on top
+  of the hop the worker just made; the 600-tick grace period that normally holds that back keys off
+  `targetChangeTime`, which `tickEmployed` resets to zero every tick by clearing the target, so a
+  worker never gets it. Separately, `EndermanTakeBlockGoal` (1-in-20 per tick, whenever its hands are
+  empty) digs up the floor the worker stands on and puts the stolen block exactly where
+  `updateCargoAppearance` draws a block cargo, so the worker appears to be hauling dirt; and
+  `EndermanLeaveBlockGoal` plants the cargo in the world while `WorkerData` still holds the item,
+  minting a copy. All three are shut off in `WorkerEvents`: the teleports via
+  `EntityTeleportEvent.EnderEntity` (which vanilla's teleports fire and
+  `LivingEntity.randomTeleport`, the mod's own hop, does not), the two goals via the mob-griefing
+  check they both gate on. Endermen only — an employed villager still farms.
+- **A long hop has to be scored against the target, not against the waypoint.** `chooseLanding` aims
+  at a point on the straight line one full teleport away, but that point hangs in mid-air, so the
+  footing nearest *it* is as often behind the worker as ahead. `findWaypointSpot` therefore ranks
+  candidates by their distance to the real target and seeds the search with the distance the worker
+  has already covered, so a hop that would not close the gap is refused outright rather than taken
+  and undone. `longHopsOnlyLandCloserToTheTarget` covers it, and was mutation-checked by scoring
+  against the waypoint instead — which picks a landing spot back at the input depot.
 - **Endermen don't need a wander leash, villagers do.** The job goal holds `Goal.Flag.MOVE`, which
   stops other *goals* (an enderman's random stroll) from moving the mob — but the villager brain is
   not a goal and ignores flags entirely, so villagers drift during cooldowns. `Workers.isOffStation`
