@@ -46,6 +46,11 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   heading names the current `mod_version` and fails if there isn't one — a missing entry should
   stop a release rather than ship the previous version's notes under a new number. It is wired as
   a lazy provider so an ordinary `./gradlew build` never trips over it.
+- **The `github` block sets `tagName` explicitly.** Without it the plugin invents its own tag from
+  `mod_version`, so pushing `v0.2.0` produced a release filed under a second, bare `0.2.0` tag on the
+  same commit. Both 0.1.0 and 0.2.0 shipped before this was noticed and still carry both tags; they
+  are left alone, because deleting a tag a published release points at breaks its URL. From the next
+  release there is one tag apiece.
 - **`archivesName` carries the Minecraft version** (`createworkers-1.21.1-0.1.0.jar`). If you
   change it, remember neither site will let you rename a file after upload.
 - **`LICENSE` and `NOTICE.md` ship in the jar under `META-INF/`.** `WorkerData`'s transfer
