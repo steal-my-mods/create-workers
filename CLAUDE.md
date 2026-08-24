@@ -86,6 +86,9 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/model/HardHatArmorModel` | The same hat geometry as a `HumanoidModel`, for the hat worn by a player |
 | `client/HardHatClientExtensions` | Feeds that model to the armour renderer; re-baked on resource reload |
 | `client/WorkerCargoLayer` | Visible cargo |
+| `client/ponder/CWPonderPlugin` | Hands the scenes to Ponder. A scene is filed under an **item id**, which is what the "hold W" prompt keys off |
+| `client/ponder/HardHatScene` | The hat's scene: programme, hire, haul, clock off |
+| `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
 | `recipe/ClearProgramRecipe` | Crafting a hat by itself blanks its program, the way a Create filter clears |
 
 ## Things that will bite you
@@ -121,7 +124,27 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   `ClearProgramRecipe` subclasses `ShapelessRecipe` and copies the input hat over, removing only the
   program component. 1.21.1 has no `crafting_transmute` (that arrived in 1.21.2) to do it in data.
 - GameTest templates: `data/createworkers/structure/*.nbt` (singular `structure` in 1.21). The
-  template is intentionally empty — tests lay their own floor with `layFloor`.
+  template is intentionally empty — tests lay their own floor with `layFloor`. Ponder's schematics
+  are a different set of files under a different root: `assets/createworkers/ponder/<name>.nbt`,
+  the path Ponder builds by hand as `ponder/%s.nbt`.
+- **Ponder text does not fall back to the string in the code.** The English handed to `.text(...)`
+  in a storyboard is only a default for a lang generator; with editing mode off,
+  `PonderLocalization.getSpecific` goes straight to `I18n.get`, so a beat with no
+  `createworkers.ponder.<scene>.text_<n>` key renders the key. The `n` is an incrementing counter
+  over the `.text(` calls *in the order the storyboard makes them*, so inserting a beat in the
+  middle silently shifts every line after it onto the wrong step. Nothing checks this; compare the
+  calls against the lang file after touching either.
+- **A ponder level reports itself as client-side, so a worker in a scene is a puppet.** No brain,
+  no `serverAiStep`, nothing that would move it — hence `WalkInstruction`, which sets the position
+  every tick. The facing and the leg swing then come for free out of `LivingEntity.tick`, which
+  derives both from the distance between the entity and `xo/yo/zo` — but only if something
+  refreshes those. `setOldPosAndRot` is the only thing that does and a ponder level never calls it
+  (it snapshots `xOld/yOld/zOld`, which is a different set of fields, for the render
+  interpolation), so left alone the measured step is "distance from where it spawned", growing all
+  the way across the plate with the legs at a flat-out run from the second stride.
+- **The ponder scene's plate is generated, not built in a creative world.**
+  `tools/generate_ponder_structure.py` writes it. The two Depot positions live in both that script
+  and `HardHatScene`, and nothing ties them together — move one and move the other.
 - **Armour is not just a texture on a head box.** A helmet normally renders as the vanilla head
   geometry with the armour sheet stretched over it, which looks like a painted scalp.
   `HardHatArmorModel` swaps in the real hat cubes via `IClientItemExtensions.getHumanoidArmorModel`.

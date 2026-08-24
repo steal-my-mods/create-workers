@@ -11,5 +11,14 @@
   "createworkers.message.retired": "Clocked out",
   "createworkers.message.selection_cleared": "All inventories cleared",
   "createworkers.message.target_too_far": "Too far from another assigned block (%1$s blocks apart, limit %2$s)",
-  "createworkers.message.too_far_from_job": "Too far from the job site at %1$s, %2$s, %3$s — hire them nearer the work"
+  "createworkers.message.too_far_from_job": "Too far from the job site at %1$s, %2$s, %3$s — hire them nearer the work",
+
+  "createworkers.ponder.hard_hat.header": "Putting Workers to Work",
+  "createworkers.ponder.hard_hat.text_1": "Workers carry items between inventories, much like a Mechanical Arm that can walk",
+  "createworkers.ponder.hard_hat.text_2": "Right-Click Arm-compatible blocks while holding the Hard Hat to assign them",
+  "createworkers.ponder.hard_hat.text_3": "The first Right-Click marks a block as an Input, a second turns it into an Output",
+  "createworkers.ponder.hard_hat.text_4": "One worker walks between all of them, so every assigned block has to stay within reach of every other",
+  "createworkers.ponder.hard_hat.text_5": "Right-Click a Villager or an Enderman with the programmed Hat to put them to work",
+  "createworkers.ponder.hard_hat.text_6": "They will carry items from the assigned Inputs to the assigned Outputs, and keep at it",
+  "createworkers.ponder.hard_hat.text_7": "Sneak and Right-Click them with an empty hand to clock them out — the Hat and anything they are carrying come back"
 }

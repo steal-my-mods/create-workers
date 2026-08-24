@@ -2,14 +2,17 @@ package com.createworkers.client;
 
 import com.createworkers.client.model.HardHatArmorModel;
 import com.createworkers.client.model.WorkerGearModels;
+import com.createworkers.client.ponder.CWPonderPlugin;
 import com.createworkers.registry.CWItems;
 
+import net.createmod.ponder.foundation.PonderIndex;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent;
 
@@ -20,6 +23,16 @@ public class CWClient {
 		modBus.addListener(CWClient::registerLayerDefinitions);
 		modBus.addListener(CWClient::addEntityLayers);
 		modBus.addListener(CWClient::registerClientExtensions);
+		modBus.addListener(CWClient::registerPonderScenes);
+	}
+
+	/**
+	 * Where Create registers its own Ponder plugin, so the scenes are all in place before anything
+	 * asks the index to compile them. Enqueued rather than run inline because client setup is
+	 * dispatched in parallel and Ponder's plugin list is a plain {@code ArrayList}.
+	 */
+	private static void registerPonderScenes(FMLClientSetupEvent event) {
+		event.enqueueWork(() -> PonderIndex.addPlugin(new CWPonderPlugin()));
 	}
 
 	private static void registerLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {

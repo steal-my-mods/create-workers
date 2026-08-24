@@ -8,6 +8,15 @@ Notable changes to Create: Workers, newest first. The format follows
 CurseForge and GitHub — so write entries for a player reading a download page, not for someone
 reading the diff.
 
+## [0.2.0] — 2026-08-24
+
+### Added
+
+- **A Ponder scene for the Hard Hat.** Hold **W** over a hat in your inventory and Create's own
+  in-game explainer walks through the whole job: assigning a Depot as an input, right-clicking a
+  second one twice to make it an output, hiring a villager, and watching them carry an ingot
+  across the yard and clock off again.
+
 ## [0.1.0] — 2026-08-21
 
 First release.
