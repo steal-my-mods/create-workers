@@ -46,6 +46,19 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   heading names the current `mod_version` and fails if there isn't one — a missing entry should
   stop a release rather than ship the previous version's notes under a new number. It is wired as
   a lazy provider so an ordinary `./gradlew build` never trips over it.
+- **The CurseForge token is checked with curl before anything is built.** `publishMods` uploads to two
+  sites, and a missing or expired token fails at *upload* — by which point GitHub may already have
+  accepted the release, leaving a version published on one site and not the other, with no way to
+  rename or replace a file on either. A few seconds of curl against the upload API's cheapest
+  authenticated GET turns that into a failure before anything has shipped anywhere. The status codes
+  were measured against the real API rather than assumed: 200 valid, **400 malformed**, 401 absent.
+  All three fail the release as a bad token; anything else fails it as "could not reach CurseForge",
+  because a 502 is not a bad secret.
+- **Running the release workflow by hand rehearses by default.** `workflow_dispatch` has a `dry_run`
+  input defaulting to true, so a manual trigger runs the whole path — token check, build, tests,
+  generator diff, changelog lookup — and writes what it *would* have uploaded instead of uploading it.
+  A tag push always publishes for real. Without the default, a curious click on "Run workflow" from
+  `dev` publishes whatever `mod_version` currently says, over a version already on CurseForge.
 - **The `github` block sets `tagName` explicitly.** Without it the plugin invents its own tag from
   `mod_version`, so pushing `v0.2.0` produced a release filed under a second, bare `0.2.0` tag on the
   same commit. Both 0.1.0 and 0.2.0 shipped before this was noticed and still carry both tags; they
