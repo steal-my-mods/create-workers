@@ -12,6 +12,9 @@ endermen haul items between inventories the way a Mechanical Arm does.
 ./gradlew runGameTestServer  # automated in-world tests -- the real check
 ./gradlew publishMods        # upload to CurseForge and GitHub Releases
 ./gradlew publishMods -PdryRun=true   # ...or rehearse it without uploading anything
+python3 tools/generate_logo.py         # the in-jar badge at 256
+python3 tools/generate_logo.py branding/icon-512.png --size 512   # ...and the 512 CurseForge wants
+python3 tools/generate_ponder_structure.py   # the Ponder scene's structure NBT
 ```
 
 JDK 21 required. `gradle/gradle-daemon-jvm.properties` pins the daemon to it, so the commands work
@@ -59,6 +62,12 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   generator diff, changelog lookup — and writes what it *would* have uploaded instead of uploading it.
   A tag push always publishes for real. Without the default, a curious click on "Run workflow" from
   `dev` publishes whatever `mod_version` currently says, over a version already on CurseForge.
+- **Both workflows re-run the generators and fail on a diff.** The badge and the Ponder structure are
+  generated, so a stale checked-in file would ship in the jar with nothing to notice it. Regenerating
+  has to be a no-op. The check stages first (`git add -A` then `git diff --cached`) because a bare
+  `git diff` says nothing about a file a generator has newly created. Both generators are already
+  byte-deterministic — the Ponder one writes with `mtime=0` for exactly this reason — so the gate was
+  green the day it was added; it is there to keep it that way.
 - **The `github` block sets `tagName` explicitly.** Without it the plugin invents its own tag from
   `mod_version`, so pushing `v0.2.0` produced a release filed under a second, bare `0.2.0` tag on the
   same commit. Both 0.1.0 and 0.2.0 shipped before this was noticed and still carry both tags; they

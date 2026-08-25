@@ -85,6 +85,19 @@ jobs:
       - name: GameTests
         run: ./gradlew runGameTestServer
 
+      # The badge and the Ponder structure are generated, so a stale checked-in file is a real
+      # defect -- it would ship in the jar. Regenerating must be a no-op; if it is not, someone
+      # edited a generated file by hand or changed a generator and forgot to re-run it.
+      - name: Generated assets are up to date
+        run: |
+          python3 tools/generate_logo.py
+          python3 tools/generate_logo.py branding/icon-512.png --size 512
+          python3 tools/generate_ponder_structure.py
+          # Staged, not a bare diff: a generator that starts emitting a new file nobody committed
+          # leaves it untracked, and `git diff` says nothing about untracked files.
+          git add -A
+          git diff --cached --exit-code
+
       - name: Publish to CurseForge and GitHub
         run: ./gradlew publishMods $EXTRA_ARGS
         env:
