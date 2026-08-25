@@ -88,8 +88,15 @@ public record WorkerProgram(CompoundTag tag) {
 	 * The centre of the box the given positions sit in.
 	 *
 	 * <p>This is what a worker's job site is derived from, rather than wherever the player happened
-	 * to be standing when they handed the hat over. Because the spread rule keeps every pair of
-	 * targets within {@code maxTargetSpread}, no target is ever further than half of that from here.
+	 * to be standing when they handed the hat over. The spread rule bounds the distances between
+	 * targets, so this always lands in among them rather than at one end of the run.
+	 *
+	 * <p>It does not put every target within half of {@code maxTargetSpread} of here, though: the
+	 * rule bounds target-to-target distances, while this is the centre of the box they span, so a
+	 * set spread over all three axes can leave a corner further out. With a spread of 48, targets at
+	 * (0,0,0), (33,0,0), (0,33,0) and (0,0,33) are all within 47 of each other yet sit 27.7 from the
+	 * centre at (16,16,16). Nothing depends on the half: hiring measures the full spread, and the
+	 * wander leash counts every target as a post.
 	 */
 	public static BlockPos centre(Collection<BlockPos> positions) {
 		if (positions.isEmpty())

@@ -29,6 +29,9 @@ left-clicking removes it. Selections are outlined in the world while you hold th
 Unlike the arm, a programmed hat can be picked back up and edited — the existing selection is
 restored rather than starting from scratch.
 
+Crafting a programmed hat on its own blanks it, the way a Create filter clears. The same hat comes
+back, keeping its damage and its enchantments, rather than a factory-fresh one.
+
 One worker walks between everything on its hat, so a hat only covers so much ground: no two assigned
 blocks may be more than `maxTargetSpread` apart. That is a *diameter*, not a chain of short links — a
 block sixty from its nearest neighbour but a hundred from the far end of the run is refused, because
@@ -38,16 +41,22 @@ that a target quietly went missing.
 **3. Hire someone.** Right-click a villager or an enderman with the programmed hat. They put it on
 and get to work. Sneak + empty-hand right-click to retire them and get the hat (and any cargo) back.
 
-**4. Wear it yourself.** It is a real helmet, worth the same protection as a leather cap, and it
-renders as the same 3D hat the workers wear rather than as a texture painted on your head.
+**4. Wear it yourself.** It is a real helmet — two points of armour, the same as an iron one, and
+rather more durable — and it renders as the same 3D hat the workers wear rather than as a texture
+painted on your head.
+
+**Or let the game explain it.** Hold **W** over a Hard Hat in your inventory and Create's own Ponder
+screen walks through the whole job: assigning one Depot as an input, right-clicking a second twice to
+make it an output, hiring a villager, and watching them carry an ingot across the yard and clock off
+again.
 
 ### The job site
 
 A worker's **job site** is the centre of the blocks on its hat — derived from the programme, not from
 wherever you happened to be standing when you handed it over. It is what the wander leash anchors on,
 so a worker hired at the edge of its run gets drawn into the middle of the work rather than loitering
-where you left it. Because of the spread rule, no assigned block is ever more than half of
-`maxTargetSpread` away from it.
+where you left it. Because the spread rule bounds how far apart the targets can be, it always lands
+in among them rather than at one end of the run — with two targets, exactly halfway between them.
 
 Hiring further than `maxTargetSpread` from the job site is refused outright, with the coordinates in
 the message. Nothing is ever silently dropped from a hat.
@@ -55,8 +64,9 @@ the message. Nothing is ever silently dropped from a hat.
 ### What they can carry from and to
 
 Exactly what a Mechanical Arm can reach, no more: belts, depots, funnels, basins, mechanical
-crafters, deployers, saws, millstones, blaze burners, chutes, packagers, plus campfires, composters,
-jukeboxes and respawn anchors — and anything another addon registers as an interaction point type.
+crafters, deployers, saws, millstones, crushing wheels, blaze burners, chutes, packagers, plus
+campfires, composters, jukeboxes and respawn anchors — and anything another addon registers as an
+interaction point type.
 
 A worker is an arm with legs, not a bigger arm. So the usual Create rule still applies — "not every
 type of Inventory can be interacted with directly" — and a plain chest is no more a valid target for
@@ -98,7 +108,7 @@ from an extracting funnel on one is emptying the mailbox.
 | Pacing | Walking speed | A cooldown between hops, so a haul costs real time |
 | Blocked by | Terrain it cannot path through | Nowhere safe to land |
 | Safety | — | Refuses to land in water, rain, fire or lava |
-| Cargo shown | Held in front of the chest | Held as a carried block, plus in-hand for non-blocks |
+| Cargo shown | Held in front of the chest | The vanilla carrying pose for blocks, in front of the chest for anything else |
 | Idling | Unhurried rounds between its assigned blocks | Stands by; does not teleport idly |
 
 Endermen are fast but not free: each teleport is followed by a cooldown, and one hop only covers
@@ -152,8 +162,8 @@ endermen stop being hostile — they are on the clock.
 ```bash
 ./gradlew build              # compile and jar
 ./gradlew runClient          # dev client
-./gradlew runServer          # dev dedicated server
-./gradlew runGameTestServer  # run the automated tests
+./gradlew runServer          # dev dedicated server (needs run/eula.txt)
+./gradlew runGameTestServer  # run the automated tests (needs run-gametest/eula.txt)
 ```
 
 Requires JDK 21, but you should not have to think about it: `gradle/gradle-daemon-jvm.properties`
@@ -188,6 +198,23 @@ square, which is the one thing the whole approach exists to avoid. The jar keeps
 because the mods list draws it small. CurseForge wants 512 for the project page, and it downscales
 well but never upscales.
 
+### The Ponder scene's plate
+
+The little diorama the Ponder scene plays out on is generated as well, rather than built in a
+creative world and saved:
+
+```bash
+python3 tools/generate_ponder_structure.py   # assets/createworkers/ponder/hard_hat.nbt
+```
+
+It writes the NBT directly, gzipped with `mtime=0` so an unchanged scene produces a byte-identical
+file. The two Depot positions live in both that script and `HardHatScene` with nothing tying them
+together — move one and move the other.
+
+Both CI workflows re-run this and the logo script and fail on any diff. A generated file that has
+gone stale would otherwise ship in the jar with nothing to notice it, so regenerating has to be a
+no-op.
+
 ## Testing
 
 ### Automated
@@ -196,12 +223,16 @@ well but never upscales.
 ./gradlew runGameTestServer
 ```
 
-Twenty in-world GameTests, headless, under a minute, non-zero exit on failure. They cover target
-parity with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm on its
-own, program serialization round-tripping, round-robin wrap-around, the enderman teleport cooldown
-and its refusal to land in water, the wander limit and its panic exemption, address-based package
-routing (including that an undeliverable package is left alone), and both a villager and an enderman
-moving a stack between two depots end to end.
+Twenty-three in-world GameTests, headless, under a minute, non-zero exit on failure. They cover
+target parity with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm
+on its own, program serialization round-tripping, the clearing recipe, round-robin wrap-around, the
+job site and the spread rule being derived from the programme (and an over-spread programme refused),
+the enderman teleport cooldown, its refusal to land in water, its long hops only landing closer to
+the target, and the vetoes that stop vanilla teleporting it off the job or digging up the blocks
+under it, the wander limit and its panic exemption (mid-haul included), holding station and the
+patrol stops along with the pace a worker ambles and then walks at, address-based package routing
+(including that an undeliverable package is left alone), and both a villager and an enderman moving a
+stack between two depots end to end.
 
 Run these after any change to worker behaviour, targets or serialization.
 
@@ -247,8 +278,9 @@ What to look for:
 | Wearing it yourself | Put the hat in your helmet slot |
 | Retiring | Sneak + **empty hand** right-click returns the hat and any cargo |
 
-Two behaviours that are deliberate and might otherwise read as bugs: an employed villager will not
-wander off or trade while working, and an employed enderman stops being hostile.
+Two behaviours that are deliberate and might otherwise read as bugs: an employed villager keeps to
+its patch instead of strolling off, and an employed enderman stops being hostile. Trading is not
+blocked, though — right-click a worker with a profession and its trade screen opens as usual.
 
 **Tips.** For a continuous loop rather than a single trip, feed the source from a chest → funnel →
 **belt** and set the belt as the input, so items keep arriving and the worker keeps ferrying. To
@@ -264,8 +296,11 @@ Uploads are driven from the repo rather than typed into web forms:
 ```
 
 That pushes the jar to CurseForge and GitHub Releases, taking the release notes from the
-`CHANGELOG.md` section that names the current `mod_version`. It needs `CURSEFORGE_TOKEN` in the
-environment and `curseforge_project_id` in `gradle.properties`.
+`CHANGELOG.md` section that names the current `mod_version`. It needs `CURSEFORGE_TOKEN` and
+`GITHUB_TOKEN` in the environment and `curseforge_project_id` in `gradle.properties`. Add
+`-PdryRun=true` and it rehearses the lot — resolving the jar, pulling the changelog section, checking
+every destination is configured — writing what it would have uploaded to `build/` instead of
+uploading it.
 
 Modrinth is not a destination for now, while its new rules on generative AI in project images are
 still an open question for the badge icon — see the Distribution notes in
@@ -276,15 +311,24 @@ You should not need to run it by hand, though. Pushing a `v*` tag runs
 GameTests, and publishes only if they pass:
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.3.0 && git push origin v0.3.0
 ```
 
-It refuses a tag that disagrees with `mod_version`, because neither site lets you rename a file
-after upload.
+Three things in there are guards rather than steps, and each one fails the release outright rather
+than let it half-publish — neither site lets you rename or replace a file after upload:
 
-One thing is still manual before the first release: add `CURSEFORGE_TOKEN` as a repository secret.
-The project itself already exists and its id is in `gradle.properties`. CurseForge reviews a first
-submission by hand, so budget a day or two.
+- **The CurseForge token is checked with curl before anything is built**, so an expired secret fails
+  before GitHub has accepted a release that CurseForge then never gets.
+- **The tag has to agree with `mod_version`**, or the jar goes up under the wrong number on both
+  sites at once.
+- **The generators are re-run and any diff fails the build**, so a stale badge or Ponder plate
+  cannot ship inside the jar.
+
+Running the workflow by hand rehearses by default: its *Rehearse without uploading anything*
+checkbox starts ticked, so a curious click walks the whole path — token check, build, GameTests,
+generator diff, changelog lookup — without uploading. A tag push always publishes for real.
+
+`CURSEFORGE_TOKEN` is a repository secret you add yourself; `GITHUB_TOKEN` comes from Actions.
 
 ## How it works
 
@@ -324,6 +368,11 @@ outlive the entity.
 **Render state travels in its own packet.** Data attachments are not synchronised, and vanilla
 entities have no spare synched data slots, so `WorkerStatePacket` pushes the hat and cargo to
 tracking clients.
+
+**The worker in the Ponder scene is a puppet.** A ponder level reports itself as client-side, so
+nothing in the chain above runs in there — no brain, no `serverAiStep`, nothing that would move the
+villager. `WalkInstruction` sets its position every tick instead, which is also why Ponder needed a
+new instruction: it has none for walking an entity across a scene.
 
 ## Roadmap
 
