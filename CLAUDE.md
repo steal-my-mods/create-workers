@@ -174,6 +174,11 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   things resolution does hold back are not range filters and not silent: a point whose chunk it
   cannot read is deferred and retried, and a programme past `maxTargets` is truncated with a warning
   in the log.)
+- **The `hireChildren` gate belongs on hiring, never on the job goal.** `WorkerEvents` gives the goal
+  to every villager as it spawns, and `Workers.isOldEnoughToWork` is checked only where a hat changes
+  hands. Move the check up into `onEntityJoinLevel` and a villager born as a child is one that can
+  never work, because the goal is added at spawn and growing up adds nothing
+  (`childVillagersAreNotHired` hires the same villager before and after).
 - **Villagers use the brain, not goals.** Never choose a destination for their navigator directly —
   the only thing ever set on it by hand is the speed of a path the sink already started.
   `WalkLocomotion` pins the `WALK_TARGET` memory every tick and lets `MoveToTargetSink` (villager

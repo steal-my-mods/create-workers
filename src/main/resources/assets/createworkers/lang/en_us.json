@@ -7,6 +7,7 @@
   "createworkers.hard_hat.assign_hint": "Right-click a villager or enderman to put them to work",
   "createworkers.message.hat_not_programmed": "Assign some Arm-compatible blocks to the hard hat first",
   "createworkers.message.already_employed": "They are already on the clock",
+  "createworkers.message.too_young": "Far too young for a job — come back when they have grown up",
   "createworkers.message.hired": "Clocked in with %1$s assigned inventories",
   "createworkers.message.retired": "Clocked out",
   "createworkers.message.selection_cleared": "All inventories cleared",

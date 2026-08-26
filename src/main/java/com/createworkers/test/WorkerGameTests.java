@@ -26,6 +26,7 @@ import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint.Mo
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -41,6 +42,7 @@ import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.CraftingInput;
@@ -48,10 +50,13 @@ import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.EventHooks;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import net.neoforged.neoforge.items.IItemHandler;
@@ -567,6 +572,38 @@ public class WorkerGameTests {
 		WorkerProgram tight = WorkerProgram.of(List.of(near, far));
 		helper.assertTrue(!tight.exceedsSpread(64), "two depots a few blocks apart are well within the spread");
 		helper.assertTrue(tight.exceedsSpread(4), "the same pair should breach a spread of 4");
+		helper.succeed();
+	}
+
+	/**
+	 * Children are turned away at the hiring desk, and only there. The hat comes back unspent, and
+	 * the very same villager grown up is hired with it — which is the whole reason the age is checked
+	 * where a hat changes hands rather than where the job goal is handed out. A goal withheld from a
+	 * child would still be missing the day it grew up, and that villager would never work again.
+	 *
+	 * <p>Driven through the interact event itself, because a check that is not on the path a
+	 * right-click takes is not a check.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void childVillagersAreNotHired(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.assertTrue(!CWConfig.HIRE_CHILDREN.get(), "child labour should be off by default");
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		villager.setBaby(true);
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		ItemStack hat = programmedHat(helper);
+		player.setItemInHand(InteractionHand.MAIN_HAND, hat);
+
+		offerHat(player, villager);
+		helper.assertTrue(!Workers.isEmployed(villager), "a child villager should not be put to work");
+		helper.assertTrue(hat.getCount() == 1, "a refused hat should stay in the hand that offered it");
+
+		villager.setBaby(false);
+		offerHat(player, villager);
+		helper.assertTrue(Workers.isEmployed(villager), "the same villager grown up should be hired");
+		helper.assertTrue(hat.isEmpty(), "hiring should take the hat");
 		helper.succeed();
 	}
 
@@ -1112,6 +1149,21 @@ public class WorkerGameTests {
 		if (target == null)
 			throw new IllegalStateException("no worker target at " + relative);
 		return target;
+	}
+
+	/** A hat carrying the work site's own programme, as clicking the two depots would have built it. */
+	private static ItemStack programmedHat(GameTestHelper helper) {
+		WorkerTarget in = target(helper, SOURCE);
+		in.cycleMode(); // targets start as DEPOSIT; one cycle makes this the input
+
+		ItemStack hat = new ItemStack(CWItems.HARD_HAT.get());
+		HardHatItem.setProgram(hat, WorkerProgram.of(List.of(in, target(helper, TARGET))));
+		return hat;
+	}
+
+	/** The right-click, posted the way vanilla posts it rather than called on the handler behind it. */
+	private static void offerHat(Player player, Mob target) {
+		NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(player, InteractionHand.MAIN_HAND, target));
 	}
 
 	private static WorkerData employ(GameTestHelper helper, Mob mob) {

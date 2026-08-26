@@ -17,6 +17,8 @@ public class CWConfig {
 
 	public static final ModConfigSpec SPEC;
 
+	/** Whether a child villager may be given a hard hat. */
+	public static final ModConfigSpec.BooleanValue HIRE_CHILDREN;
 	/** How far apart two of a hat's programmed targets may be. */
 	public static final ModConfigSpec.IntValue MAX_TARGET_SPREAD;
 	/** How many inventories one hat may be programmed with. */
@@ -44,6 +46,12 @@ public class CWConfig {
 		ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
 
 		builder.comment("Create: Workers").push("workers");
+
+		HIRE_CHILDREN = builder
+			.comment("Whether a child villager may be put to work.",
+				"Off by default. Nothing is lost by refusing one: children grow up, and a child turned",
+				"away today can be handed the same hat the day it does.")
+			.define("hireChildren", false);
 
 		MAX_TARGET_SPREAD = builder
 			.comment("How far apart the furthest two inventories on one hard hat may be — the width of",

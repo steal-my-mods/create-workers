@@ -88,6 +88,13 @@ public class WorkerEvents {
 			return;
 		}
 
+		// Before getOrCreate, so a mob that cannot be hired is not left carrying an attachment.
+		if (!Workers.isOldEnoughToWork(target)) {
+			player.displayClientMessage(Component.translatable("createworkers.message.too_young")
+				.withStyle(ChatFormatting.RED), true);
+			return;
+		}
+
 		WorkerData data = Workers.getOrCreate(target);
 		if (data.isEmployed()) {
 			player.displayClientMessage(Component.translatable("createworkers.message.already_employed")

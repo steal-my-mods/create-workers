@@ -2,6 +2,7 @@ package com.createworkers.worker;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.createworkers.CWConfig;
 import com.createworkers.registry.CWAttachments;
 
 import java.util.ArrayList;
@@ -11,6 +12,7 @@ import com.createworkers.worker.target.WorkerTarget;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.npc.Villager;
@@ -41,6 +43,21 @@ public class Workers {
 	/** @return whether this kind of mob can be given a hard hat at all. */
 	public static boolean canBeEmployed(Entity entity) {
 		return entity instanceof Villager || entity instanceof EnderMan;
+	}
+
+	/**
+	 * Whether a mob is old enough to be handed a hard hat, which is a question about hiring and only
+	 * about hiring. Children grow up, so one turned away today can be hired the day it does — and
+	 * because {@code WorkerEvents} gives the job goal to every villager as it spawns, employed or
+	 * not, growing up needs no bookkeeping of its own. Gating the goal on age instead would leave a
+	 * villager that grew up unable to work for the rest of its life.
+	 *
+	 * <p>Endermen have no young, so this is a villager rule in generic clothes.
+	 */
+	public static boolean isOldEnoughToWork(Entity entity) {
+		if (CWConfig.HIRE_CHILDREN.get())
+			return true;
+		return !(entity instanceof LivingEntity living) || !living.isBaby();
 	}
 
 	/**

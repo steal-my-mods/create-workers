@@ -42,6 +42,9 @@ missing.
 **3. Hire someone.** Right-click a villager or an enderman with the programmed hat. They put it on
 and get to work. Sneak + empty-hand right-click to retire them and get the hat (and any cargo) back.
 
+Child villagers are turned away — the hat comes straight back, and the same villager takes it once
+it has grown up. Set `hireChildren` if you would rather they didn't.
+
 **4. Wear it yourself.** It is a real helmet — two points of armour, the same as an iron one, and
 rather more durable — and it renders as the same 3D hat the workers wear rather than as a texture
 painted on your head.
@@ -156,6 +159,7 @@ endermen stop being hostile — they are on the clock.
 
 | Option | Default | Meaning |
 |---|---|---|
+| `hireChildren` | `false` | Whether a child villager may be put to work. Off by default; a child refused now can be hired once it grows up |
 | `maxTargetSpread` | 48 | How far apart the furthest two blocks on one hat may be — the width of a worker's beat |
 | `maxTargets` | 24 | How many blocks one hat may be programmed with. The cost of a worker with nothing to do grows with inputs times outputs, so this is the ceiling on what an idle one costs a server |
 | `transferCooldown` | 10 | Ticks paused after moving an item |
