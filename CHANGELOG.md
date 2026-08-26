@@ -8,6 +8,53 @@ Notable changes to Create: Workers, newest first. The format follows
 CurseForge and GitHub — so write entries for a player reading a download page, not for someone
 reading the diff.
 
+## [0.3.0] — 2026-08-26
+
+Mostly a performance release. Four things a worker did had no upper bound on them, and each one is
+cheap in a test world and expensive on a server that has been running a while — so this is the one
+to take before you put workers on a shared world.
+
+### Added
+
+- **A limit on how many blocks one hat may be programmed with**, `maxTargets` in the server
+  config, default 24. Past it the hat refuses the click and says so. It is a performance setting
+  rather than a taste one: a worker with nothing to do prices every input slot against every
+  output, so what an idle worker costs grows with the size of its programme.
+- **`hireChildren`**, off by default. Right-clicking a baby villager with a programmed hat now
+  turns it away and leaves the hat in your hand. Nothing is lost by the refusal — hand the same
+  villager the same hat once it has grown up and it takes the job.
+
+### Changed
+
+- A hat carrying more than `maxTargets` blocks — only reachable from creative mode or a world made
+  before this version — still works, but only the first 24 blocks on it are used, with a line in
+  the server log saying so. Raise `maxTargets` to keep using the rest.
+
+### Fixed
+
+- **A worker given a block it can never reach no longer asks the game for a route to it forever.**
+  A funnel on a wall, a belt across a gap — anything usable from arm's length but impossible to
+  stand beside — had the worker path to it, walk as far as it could, arrive nowhere and
+  immediately path again, several times a second, out of a mob that looks like it is standing
+  still. Every walk now gives up after a while and sets that block aside for a spell before trying
+  it again. Only the haul used to do this; the idle rounds, which is the default idle behaviour,
+  and the walk back from a wander did not.
+- **A target outside the loaded world no longer drags its chunk in and drops it again about once a
+  second**, generating that chunk first if nobody had ever been there. A worker held in place by a
+  chunk loader, with a target a few chunks outside the loaded area, did it for as long as the
+  world existed, with nothing to show why the server was busy. An unloaded target is now skipped
+  until its chunk is back.
+- **A target broken and put back is picked up again.** It used to stay missing for the rest of
+  that worker's life.
+- **Programming a hat away from its beat no longer quietly shortens it.** Blocks whose chunk had
+  left view were forgotten, so walking off and clicking one more inventory pushed back a programme
+  with the earlier blocks dropped from it.
+- A busy worker no longer sets off on its idle rounds between every item it moves.
+- An idle enderman no longer works through its own programme writing off every inventory on it.
+- Workers no longer walk at a block they can already use but could never be said to have reached.
+- Employed endermen cost less per tick, and their long hops do far less work choosing where to
+  land — each hop still has to close the distance, as before.
+
 ## [0.2.0] — 2026-08-24
 
 ### Added
