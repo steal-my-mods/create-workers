@@ -104,7 +104,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `program/WorkerProgram` | The hat's inventory list. Data component; **absolute** positions (anchor `BlockPos.ZERO`) because workers move. Also owns the geometry: `centre()` (job site) and `firstTooFar`/`exceedsSpread` (the diameter rule) |
 | `worker/target/WorkerTarget` | What a worker can use — a thin wrapper over Create's `ArmInteractionPoint`, holding the host so it stays out of upstream signatures |
 | `worker/WorkerData` | Per-entity state (NeoForge attachment). Holds the port of `ArmBlockEntity`'s transfer algorithm |
-| `worker/WorkerJobGoal` | Phase machine: search input → travel → collect → search output → travel → deposit |
+| `worker/WorkerJobGoal` | Phase machine: search input → travel → collect → search output → travel → deposit. Also owns the stall clocks that stop a hopeless walk costing a pathfind a tick |
 | `worker/WalkLocomotion` | Villagers. Also owns `returnTo`, the wander leash |
 | `worker/TeleportLocomotion` | Endermen. Holds the teleport cooldown, so locomotion instances are **per-worker**, not shared |
 | `worker/WorkerEvents` | Hiring, retiring, drops, client sync, cleanup, and the vetoes that stop vanilla's own enderman AI from undoing the job |
@@ -120,13 +120,60 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 
 ## Things that will bite you
 
+- **Never read a block for a target without checking that its chunk is loaded.** Create's
+  `ArmInteractionPoint.isValid` refreshes its cached state with a plain `Level.getBlockState`, and on
+  a server that *loads* — generating, if nobody has ever been there — whatever chunk the position is
+  in. A worker rescans its whole programme once a second, so one target outside the loaded area is a
+  chunk dragged in and dropped again for as long as the worker ticks; a worker in a force-loaded
+  chunk with a target three chunks out does it forever, with nothing in the world to show why the
+  server is busy. `WorkerTarget.isValid` therefore checks `isLoaded` first and reports unloaded as
+  invalid, and `WorkerData.resolve` refuses to deserialize a point it cannot read. `isLoaded` is a
+  separate method because the client needs the other answer: `HatSelectionHandler` must not forget a
+  selection just because the chunk went out of view, or walking away and clicking a block would
+  quietly shorten the programme it pushes back. `resolvingNeverLoadsAChunk` covers it, and was
+  mutation-checked by dropping the guard — which generates the chunk 6000 blocks away.
+- **Resolution retries only what failed.** A point that would not resolve — chunk not loaded, block
+  broken since — goes on `pending` and is tried again every `RESOLVE_RETRY_TICKS`; the ones that
+  worked are never rebuilt, because rebuilding throws away a live `BlockCapabilityCache` per target.
+  Without the retry a target missing at load time would be missing for the rest of the worker's life
+  (`unresolvedTargetsAreRetried`).
+- **Anything that pins a villager's `WALK_TARGET` has to be on a clock.** This is the mod's most
+  expensive failure mode by a wide margin. `MoveToTargetSink` asks the navigation for a *fresh path*
+  every time it is not already following one, and `PathNavigation.createPath` snapshots a
+  `PathNavigationRegion` as wide as the mob's follow range (48 for a villager) and runs an A* over it.
+  A destination that is pinned every tick and never arrived at cycles path → walk → done → path,
+  which is a search every few ticks, forever, out of one mob that looks idle — a walled-off stop or a
+  funnel nothing can stand beside is enough. So every walk in `WorkerJobGoal` — the haul, the idle
+  rounds, the leash home — carries a `Progress` clock, and expiring sets the target aside
+  (`SET_ASIDE_TICKS`) or stands the leash down (`LEASH_REST_TICKS`). `Progress` measures *being
+  stuck*, not the length of the trip: it resets on any progress at all, because an amble across a
+  forty-block beat outlasts any timeout worth having and writing that off would take a good
+  inventory out of the scan.
+- **Endermen do not make rounds** (`WorkerLocomotion.makesRounds`). Their `patrolTo` is a no-op, so a
+  stop one was given is a stop it never arrives at — and the rounds give up on those by setting the
+  target aside, so an idle enderman would work through its own programme writing off every inventory
+  on it (`idleEndermenAreNotSentOnRounds`, mutation-checked).
+- **The rounds' arrival radius must never be tighter than the working reach.** A stop a worker can
+  *use* but can never be said to have *arrived* at would be walked at until the clock expired, and
+  the write-off would then take a working target out of the scan. Hence `arrivedDistance()`.
+- **Programme size is bounded in four places, and all four are load-bearing.** `maxTargets` in the
+  config; the client refusing the click; the server refusing the packet; and `WorkerData.resolve`
+  capping what it will resolve, because a creative-mode client can set an item component directly
+  without going anywhere near `ConfigureHatPacket`. `WorkerProgram.MAX_BYTES` caps the NBT during
+  *decode*, which is the only check that costs nothing. The order in `ConfigureHatPacket.handle`
+  matters: the spread test is pairwise, so the length has to be vouched for before it runs, or a
+  programme that fits inside the codec's own limit is hundreds of millions of comparisons on the
+  server thread.
 - **Range is a property of the programme, not of a position.** `maxTargetSpread` is a *diameter*:
   every pair of a hat's targets must be within it, checked in `HatSelectionHandler` as you click and
   re-checked server-side in `ConfigureHatPacket` (never trust the client). The **job site** is
   `WorkerProgram.centre()`, the middle of the target box — not where the player stood at hire time.
   It is derived, never persisted, and recomputed on deserialize. `resolvePoints` therefore filters
-  nothing: a target on the hat is a target. Don't reintroduce a silent range filter — the point of
-  this shape is that a target is either refused as you assign it or honoured.
+  nothing *by distance*: a target on the hat is a target. Don't reintroduce a silent range filter —
+  the point of this shape is that a target is either refused as you assign it or honoured. (The two
+  things resolution does hold back are not range filters and not silent: a point whose chunk it
+  cannot read is deferred and retried, and a programme past `maxTargets` is truncated with a warning
+  in the log.)
 - **Villagers use the brain, not goals.** Never choose a destination for their navigator directly —
   the only thing ever set on it by hand is the speed of a path the sink already started.
   `WalkLocomotion` pins the `WALK_TARGET` memory every tick and lets `MoveToTargetSink` (villager
@@ -263,6 +310,8 @@ thinking changes — the point is that the analysis is not redone from scratch.
 
 - `docs/working-hours.md` — night shifts, designating a bed on the hat, and why the whole idea may be
   an annoyance
+- `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,
+  and the things a shared server still wants that this mod deliberately does not do
 
 ## Conventions
 

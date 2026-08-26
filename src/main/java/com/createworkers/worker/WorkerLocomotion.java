@@ -44,6 +44,18 @@ public interface WorkerLocomotion {
 	default void patrolTo(Mob mob, BlockPos destination) {
 	}
 
+	/**
+	 * Whether this kind of worker walks an idle beat at all.
+	 *
+	 * <p>An enderman does not: it blinks where the job sends it and stands still the rest of the time.
+	 * Sending one on the rounds is not merely pointless, it is harmful — the rounds give up on a stop
+	 * they cannot reach, and a worker that never walks anywhere would work its way through its own
+	 * programme setting every target aside.
+	 */
+	default boolean makesRounds() {
+		return false;
+	}
+
 	/** Per-tick upkeep while employed, whether or not there is work to do. */
 	default void tickEmployed(Mob mob) {
 	}

@@ -32,6 +32,8 @@ public final class WorkerTarget {
 	private final ArmInteractionPoint point;
 	@Nullable
 	private ArmBlockEntity host;
+	/** Game time until which a worker that could not get here should not try again. */
+	private long unreachableUntil;
 
 	private WorkerTarget(ArmInteractionPoint point) {
 		this.point = point;
@@ -89,8 +91,45 @@ public final class WorkerTarget {
 		point.cycleMode();
 	}
 
+	/** Whether this side can read the block here without pulling its chunk in. */
+	public boolean isLoaded() {
+		Level level = point.getLevel();
+		return level != null && level.isLoaded(point.getPos());
+	}
+
+	/**
+	 * Whether this is still an inventory a worker can use.
+	 *
+	 * <p>The loaded check comes first, and it is not a nicety. Create's {@code isValid} refreshes its
+	 * cached block state with a plain {@code Level.getBlockState}, and that on a server <em>loads</em>
+	 * the chunk the position is in — generating it, if nobody has ever been there. A worker rescans
+	 * its whole programme once a second, so a target in an unloaded chunk would have that chunk
+	 * dragged in and dropped again for as long as the worker ticks. A worker in a force-loaded chunk
+	 * with a target three chunks out is enough to do it forever, with nothing in the world to show
+	 * why the server is busy.
+	 *
+	 * <p>Reporting a target in an unloaded chunk as invalid rather than dropping it costs nothing:
+	 * the point stays on the hat and in the worker's list, and starts working again the moment the
+	 * chunk is back.
+	 */
 	public boolean isValid() {
-		return point.isValid();
+		return isLoaded() && point.isValid();
+	}
+
+	/**
+	 * Whether a worker has recently failed to get here.
+	 *
+	 * <p>Set aside targets are skipped before anything reads a block for them, which is the point:
+	 * pinning a villager's walk target at somewhere it never arrives costs a fresh pathfind every few
+	 * ticks, for as long as it goes on.
+	 */
+	public boolean isUnreachable(long gameTime) {
+		return gameTime < unreachableUntil;
+	}
+
+	/** Sets this target aside until {@code gameTime}. */
+	public void markUnreachable(long gameTime) {
+		this.unreachableUntil = gameTime;
 	}
 
 	public int getSlotCount() {

@@ -14,6 +14,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -35,8 +36,22 @@ public record WorkerProgram(CompoundTag tag) {
 	public static final Codec<WorkerProgram> CODEC =
 		CompoundTag.CODEC.xmap(WorkerProgram::new, WorkerProgram::tag);
 
+	/**
+	 * How much NBT a programme may arrive as, enforced while it is still being decoded.
+	 *
+	 * <p>The stock {@code COMPOUND_TAG} codec allows two megabytes, which is a limit on what the
+	 * protocol will carry rather than on what a programme could sensibly be: a full-sized one is a
+	 * couple of kilobytes. Everything downstream is priced off the number of points -- the pairwise
+	 * spread check, the tooltip, the resolve, the copy sent back out to every client that can see the
+	 * hat -- so the cheapest place to refuse an absurd one is before it has been decoded at all. This
+	 * codec is used for both the item component and the configure packet, which between them are
+	 * every way a programme can arrive from a client.
+	 */
+	public static final int MAX_BYTES = 64 * 1024;
+
 	public static final StreamCodec<ByteBuf, WorkerProgram> STREAM_CODEC =
-		ByteBufCodecs.COMPOUND_TAG.map(WorkerProgram::new, WorkerProgram::tag);
+		ByteBufCodecs.compoundTagCodec(() -> NbtAccounter.create(MAX_BYTES))
+			.map(WorkerProgram::new, WorkerProgram::tag);
 
 	/** Anchor used for (de)serialization. The origin keeps stored positions absolute. */
 	public static final BlockPos ANCHOR = BlockPos.ZERO;
@@ -131,6 +146,21 @@ public record WorkerProgram(CompoundTag tag) {
 			if (!pos.closerThan(candidate, maxSpread))
 				return pos;
 		return null;
+	}
+
+	/**
+	 * Whether every stored position is within {@code radius} of {@code pos}.
+	 *
+	 * <p>Programmes are assembled a click at a time, and a click is on a block the player is standing
+	 * next to, so a programme always arrives from somewhere inside the beat it describes. Nothing in
+	 * the wire format says so, though: a client is free to name any coordinates in the world, and
+	 * they are what a worker later reads blocks at.
+	 */
+	public boolean within(BlockPos pos, int radius) {
+		for (BlockPos target : positions())
+			if (!target.closerThan(pos, radius))
+				return false;
+		return true;
 	}
 
 	/** @return true if any two targets are further apart than {@code maxSpread}. */

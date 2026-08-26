@@ -19,6 +19,8 @@ public class CWConfig {
 
 	/** How far apart two of a hat's programmed targets may be. */
 	public static final ModConfigSpec.IntValue MAX_TARGET_SPREAD;
+	/** How many inventories one hat may be programmed with. */
+	public static final ModConfigSpec.IntValue MAX_TARGETS;
 	/** Ticks a worker waits after completing a transfer before looking for more work. */
 	public static final ModConfigSpec.IntValue TRANSFER_COOLDOWN;
 	/** Movement speed modifier applied to walking workers. */
@@ -48,6 +50,15 @@ public class CWConfig {
 				"a single worker's beat, checked as you assign them. Half of it is how far any target",
 				"can sit from the job site, which is what the hiring and wander checks measure against.")
 			.defineInRange("maxTargetSpread", 48, 8, 256);
+
+		MAX_TARGETS = builder
+			.comment("How many inventories one hard hat may be programmed with.",
+				"Not a taste setting -- it is the bound on what a worker costs a server. Every scan",
+				"that finds nothing to do walks the whole programme and prices each input slot",
+				"against every output, so the work an idle worker does grows with inputs times",
+				"outputs; the wander check walks the list every tick; and the programme itself is",
+				"stored on the item, saved, and sent to every client that can see the hat.")
+			.defineInRange("maxTargets", 24, 1, 256);
 
 		TRANSFER_COOLDOWN = builder
 			.comment("Ticks a worker pauses after moving an item.")

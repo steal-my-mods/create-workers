@@ -23,6 +23,12 @@ public record ConfigureHatPacket(WorkerProgram program) implements CustomPacketP
 
 	public static final Type<ConfigureHatPacket> TYPE = new Type<>(CreateWorkers.asResource("configure_hat"));
 
+	/**
+	 * How much further than the beat itself a programme may sit from the player who sent it. A click
+	 * lands on a block within arm's reach, and every other point is within the spread of that one.
+	 */
+	private static final int SENDER_SLACK = 8;
+
 	public static final StreamCodec<ByteBuf, ConfigureHatPacket> STREAM_CODEC =
 		WorkerProgram.STREAM_CODEC.map(ConfigureHatPacket::new, ConfigureHatPacket::program);
 
@@ -36,15 +42,26 @@ public record ConfigureHatPacket(WorkerProgram program) implements CustomPacketP
 			Player player = context.player();
 			if (player == null)
 				return;
+
 			// The client refuses these as you click, but it is the client, so check again here.
-			if (packet.program()
-				.exceedsSpread(CWConfig.MAX_TARGET_SPREAD.get()))
+			//
+			// In this order, deliberately. The spread check is pairwise, so handing it a list whose
+			// length nobody has vouched for is a way to spend the server's tick on arithmetic: a
+			// programme that fits inside the codec's own size limit holds tens of thousands of
+			// points, and the pairs in it run to hundreds of millions.
+			WorkerProgram program = packet.program();
+			int maxSpread = CWConfig.MAX_TARGET_SPREAD.get();
+			if (program.size() > CWConfig.MAX_TARGETS.get())
+				return;
+			if (program.exceedsSpread(maxSpread))
+				return;
+			if (!program.within(player.blockPosition(), maxSpread + SENDER_SLACK))
 				return;
 			for (InteractionHand hand : InteractionHand.values()) {
 				ItemStack stack = player.getItemInHand(hand);
 				if (!stack.is(CWItems.HARD_HAT.get()))
 					continue;
-				HardHatItem.setProgram(stack, packet.program());
+				HardHatItem.setProgram(stack, program);
 				return;
 			}
 		});

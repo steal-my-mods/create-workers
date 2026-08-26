@@ -33,10 +33,11 @@ Crafting a programmed hat on its own blanks it, the way a Create filter clears. 
 back, keeping its damage and its enchantments, rather than a factory-fresh one.
 
 One worker walks between everything on its hat, so a hat only covers so much ground: no two assigned
-blocks may be more than `maxTargetSpread` apart. That is a *diameter*, not a chain of short links — a
-block sixty from its nearest neighbour but a hundred from the far end of the run is refused, because
-one worker would have to walk that hundred. You are told as you click, rather than discovering later
-that a target quietly went missing.
+blocks may be more than `maxTargetSpread` apart, and there are at most `maxTargets` of them. The
+spread is a *diameter*, not a chain of short links — a block sixty from its nearest neighbour but a
+hundred from the far end of the run is refused, because one worker would have to walk that hundred.
+Both limits tell you as you click, rather than letting you discover later that a target quietly went
+missing.
 
 **3. Hire someone.** Right-click a villager or an enderman with the programmed hat. They put it on
 and get to work. Sneak + empty-hand right-click to retire them and get the hat (and any cargo) back.
@@ -129,6 +130,15 @@ A worker that has somehow strayed further than `wanderRadius` from its job site 
 programmed blocks count as posts too, so one at the far end of a long run is at work rather than
 wandering. A villager fleeing a mob is never pinned or dragged back.
 
+Everywhere a worker is sent, it is allowed `pathTimeout` ticks of getting no nearer before it gives
+up: on a target, which is set aside for half a minute before it is tried again; on a stop on its
+rounds, which drops off them for the same; or on the walk home, after which it stands where it is
+rather than keeping at it. That matters more than it sounds. A villager is steered by pinning a
+destination in its brain every tick, and vanilla answers a destination it is not already walking to
+by pathfinding afresh — so a worker sent somewhere it can never arrive, a funnel on a wall or a belt
+across a gap, is not a worker standing idle. It is a pathfind every few ticks for as long as it
+lives.
+
 `idleBehaviour` picks between three:
 
 | | Behaviour |
@@ -147,6 +157,7 @@ endermen stop being hostile — they are on the clock.
 | Option | Default | Meaning |
 |---|---|---|
 | `maxTargetSpread` | 48 | How far apart the furthest two blocks on one hat may be — the width of a worker's beat |
+| `maxTargets` | 24 | How many blocks one hat may be programmed with. The cost of a worker with nothing to do grows with inputs times outputs, so this is the ceiling on what an idle one costs a server |
 | `transferCooldown` | 10 | Ticks paused after moving an item |
 | `walkSpeed` | 0.6 | Movement speed modifier for walking workers |
 | `idleSpeedFactor` | 0.85 | Pace of a worker on its idle rounds, as a fraction of `walkSpeed` |
@@ -223,7 +234,7 @@ no-op.
 ./gradlew runGameTestServer
 ```
 
-Twenty-three in-world GameTests, headless, under a minute, non-zero exit on failure. They cover
+Twenty-nine in-world GameTests, headless, under a minute, non-zero exit on failure. They cover
 target parity with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm
 on its own, program serialization round-tripping, the clearing recipe, round-robin wrap-around, the
 job site and the spread rule being derived from the programme (and an over-spread programme refused),
@@ -233,6 +244,12 @@ under it, the wander limit and its panic exemption (mid-haul included), holding 
 patrol stops along with the pace a worker ambles and then walks at, address-based package routing
 (including that an undeliverable package is left alone), and both a villager and an enderman moving a
 stack between two depots end to end.
+
+The rest are the guards a shared server depends on: that a programme past `maxTargets` is not
+honoured in full and that one must arrive from inside the beat it describes, that resolving a
+programme never loads a chunk to read a block in it and retries the targets it could not read, that a
+target the worker failed to reach is set aside rather than walked at again immediately, and that an
+idle enderman is not sent on rounds it has no way to walk.
 
 Run these after any change to worker behaviour, targets or serialization.
 

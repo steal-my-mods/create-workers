@@ -90,14 +90,24 @@ public class TeleportLocomotion implements WorkerLocomotion {
 		return mob.distanceToSqr(Vec3.atCenterOf(target.getPos())) <= reach * reach;
 	}
 
+	/**
+	 * A worker on the clock is not interested in picking fights.
+	 *
+	 * <p>Only when there is actually something to drop. {@code Mob.setTarget} fires
+	 * {@code LivingChangeTargetEvent} whether or not the target changes, and this runs every tick for
+	 * every employed enderman on the server — clearing a target that is already null would put that
+	 * event, and every listener any other mod has on it, on the tick loop for nothing.
+	 */
 	@Override
 	public void tickEmployed(Mob mob) {
-		// A worker on the clock is not interested in picking fights.
-		if (mob instanceof EnderMan enderman) {
+		if (!(mob instanceof EnderMan enderman))
+			return;
+		if (enderman.getTarget() != null)
 			enderman.setTarget(null);
+		if (enderman.getRemainingPersistentAngerTime() > 0)
 			enderman.setRemainingPersistentAngerTime(0);
+		if (enderman.getPersistentAngerTarget() != null)
 			enderman.setPersistentAngerTarget(null);
-		}
 	}
 
 	/**
@@ -150,17 +160,21 @@ public class TeleportLocomotion implements WorkerLocomotion {
 		double bestDistance = mob.blockPosition()
 			.distSqr(targetPos);
 
+		// Scored before it is inspected. The box is a thousand-odd candidates and the footing check
+		// reads up to four blocks apiece, while the score is arithmetic on three ints -- and a
+		// candidate no closer to the target than the best so far cannot win however good it looks.
+		BlockPos.MutableBlockPos candidate = new BlockPos.MutableBlockPos();
 		for (int dx = -WAYPOINT_SEARCH_RADIUS; dx <= WAYPOINT_SEARCH_RADIUS; dx++) {
 			for (int dz = -WAYPOINT_SEARCH_RADIUS; dz <= WAYPOINT_SEARCH_RADIUS; dz++) {
 				for (int dy = -WAYPOINT_VERTICAL_SLACK; dy <= WAYPOINT_VERTICAL_SLACK; dy++) {
-					BlockPos candidate = waypoint.offset(dx, dy, dz);
+					candidate.setWithOffset(waypoint, dx, dy, dz);
+					double distance = candidate.distSqr(targetPos);
+					if (distance >= bestDistance)
+						continue;
 					if (!isSafeStandingSpot(mob, level, candidate))
 						continue;
-					double distance = candidate.distSqr(targetPos);
-					if (distance < bestDistance) {
-						bestDistance = distance;
-						best = candidate.immutable();
-					}
+					bestDistance = distance;
+					best = candidate.immutable();
 				}
 			}
 		}
@@ -177,17 +191,19 @@ public class TeleportLocomotion implements WorkerLocomotion {
 		BlockPos best = null;
 		double bestDistance = Double.MAX_VALUE;
 
+		// Scored before it is inspected, as above.
+		BlockPos.MutableBlockPos candidate = new BlockPos.MutableBlockPos();
 		for (int dx = -radius; dx <= radius; dx++) {
 			for (int dz = -radius; dz <= radius; dz++) {
 				for (int dy = -VERTICAL_SLACK; dy <= VERTICAL_SLACK; dy++) {
-					BlockPos candidate = center.offset(dx, dy, dz);
+					candidate.setWithOffset(center, dx, dy, dz);
+					double distance = candidate.distSqr(center);
+					if (distance >= bestDistance)
+						continue;
 					if (!isSafeStandingSpot(mob, level, candidate))
 						continue;
-					double distance = candidate.distSqr(center);
-					if (distance < bestDistance) {
-						bestDistance = distance;
-						best = candidate.immutable();
-					}
+					bestDistance = distance;
+					best = candidate.immutable();
 				}
 			}
 		}

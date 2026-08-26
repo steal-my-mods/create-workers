@@ -69,9 +69,20 @@ public class HatSelectionHandler {
 			if (point == null)
 				return;
 
-			// One worker walks between all of these, so the whole programme has to stay inside a
-			// beat it can actually serve. Refused here rather than dropped later, so nothing is ever
+			// One worker has to work all of these, so the whole programme has to stay inside what
+			// one worker can serve -- a beat it can walk, and a list it can rescan without costing
+			// the server a fortune. Refused here rather than dropped later, so nothing is ever
 			// quietly missing from a hat.
+			int maxTargets = CWConfig.MAX_TARGETS.get();
+			if (selection.size() >= maxTargets) {
+				player.displayClientMessage(Component.translatable("createworkers.message.too_many_targets",
+					maxTargets)
+					.withStyle(ChatFormatting.RED), true);
+				event.setCanceled(true);
+				event.setCancellationResult(InteractionResult.SUCCESS);
+				return;
+			}
+
 			int maxSpread = CWConfig.MAX_TARGET_SPREAD.get();
 			BlockPos tooFar = WorkerProgram.firstTooFar(selectedPositions(), pos, maxSpread);
 			if (tooFar != null) {
@@ -147,9 +158,12 @@ public class HatSelectionHandler {
 	private static void loadFrom(ItemStack stack, Level level) {
 		selection.clear();
 		WorkerProgram program = HardHatItem.getProgram(stack);
+		int maxTargets = CWConfig.MAX_TARGETS.get();
 		for (Tag entry : program.points()) {
 			if (!(entry instanceof CompoundTag compound))
 				continue;
+			if (selection.size() >= maxTargets)
+				break; // a hat from a command, or from a config that used to allow more
 			WorkerTarget target = WorkerTarget.deserialize(compound, level);
 			if (target != null)
 				selection.add(target);
@@ -175,9 +189,20 @@ public class HatSelectionHandler {
 				.withStyle(ChatFormatting.GRAY), true);
 	}
 
+	/**
+	 * Outlines every selection, and drops the ones that are no longer inventories.
+	 *
+	 * <p>Only the ones it can actually see are dropped. A position whose chunk the client has
+	 * unloaded reads as "no longer an inventory" — the block there is air as far as this side is
+	 * concerned — and forgetting it here would quietly shorten the programme the next click pushes
+	 * back to the server. Walking away from a hat's beat and clicking a block elsewhere is enough to
+	 * do it, which is a strange way to lose a programmed hat.
+	 */
 	private static void drawOutlines() {
 		for (Iterator<WorkerTarget> iterator = selection.iterator(); iterator.hasNext();) {
 			WorkerTarget point = iterator.next();
+			if (!point.isLoaded())
+				continue; // out of view: still on the hat, just nothing to draw
 			if (!point.isValid()) {
 				iterator.remove();
 				continue;

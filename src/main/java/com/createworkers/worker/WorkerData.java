@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.program.WorkerProgram;
 import com.simibubi.create.AllBlockEntityTypes;
@@ -16,6 +17,7 @@ import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint.Mo
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -49,8 +51,14 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 
 	// --- runtime only, rebuilt on demand -------------------------------------------------
 
+	/** How long to leave a target that would not resolve before trying it again. */
+	private static final int RESOLVE_RETRY_TICKS = 100;
+
 	private final List<WorkerTarget> inputs = new ArrayList<>();
 	private final List<WorkerTarget> outputs = new ArrayList<>();
+	/** Stored points that could not be turned into targets yet — see {@link #retryPending}. */
+	private final List<CompoundTag> pending = new ArrayList<>();
+	private long retryAfter;
 	private boolean resolved;
 	@Nullable
 	private ArmBlockEntity host;
@@ -157,6 +165,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		resolved = false;
 		inputs.clear();
 		outputs.clear();
+		pending.clear();
 	}
 
 	/**
@@ -195,26 +204,94 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	}
 
 	public void resolvePoints(LivingEntity worker) {
-		if (resolved)
+		if (resolved) {
+			retryPending(worker);
 			return;
+		}
 		resolved = true;
 		inputs.clear();
 		outputs.clear();
+		pending.clear();
 
 		Level level = worker.level();
 		ArmBlockEntity host = host(level, worker.blockPosition());
+		int limit = CWConfig.MAX_TARGETS.get();
+		int read = 0;
 		for (Tag entry : program.points()) {
 			if (!(entry instanceof CompoundTag compound))
 				continue;
-			WorkerTarget target = WorkerTarget.deserialize(compound, level);
-			if (target == null)
-				continue;
-			target.bind(host);
-			if (target.getMode() == Mode.DEPOSIT)
-				outputs.add(target);
-			else
-				inputs.add(target);
+			if (++read > limit) {
+				// Only reachable through a hat that was not programmed by clicking -- a command, or a
+				// config that used to allow more. Refusing the surplus keeps the cost of a scan bounded
+				// by something an operator chose.
+				CreateWorkers.LOGGER.warn("A hard hat carries {} targets but the limit is {}; ignoring the rest",
+					program.size(), limit);
+				break;
+			}
+			if (!resolve(compound, level, host))
+				pending.add(compound);
 		}
+		retryAfter = level.getGameTime() + RESOLVE_RETRY_TICKS;
+	}
+
+	/**
+	 * Tries again on the points that would not resolve.
+	 *
+	 * <p>Resolution is one-shot per load, which leaves two ways for a target to go missing for the
+	 * rest of a worker's life: its chunk was not loaded at the time — deliberately not waited for,
+	 * because reading a block there would pull the chunk in — or its block was gone and has since been
+	 * rebuilt. Neither should be permanent, and neither is worth re-resolving a whole programme over,
+	 * so only the ones that failed are retried, and the ones that worked are never rebuilt.
+	 */
+	private void retryPending(LivingEntity worker) {
+		if (pending.isEmpty())
+			return;
+
+		Level level = worker.level();
+		long now = level.getGameTime();
+		if (now < retryAfter)
+			return;
+		retryAfter = now + RESOLVE_RETRY_TICKS;
+
+		ArmBlockEntity host = host(level, worker.blockPosition());
+		pending.removeIf(compound -> resolve(compound, level, host));
+	}
+
+	/**
+	 * Turns one stored point into a live target.
+	 *
+	 * @return whether it worked. A false here is always worth retrying later.
+	 */
+	private boolean resolve(CompoundTag compound, Level level, @Nullable ArmBlockEntity host) {
+		BlockPos pos = NbtUtils.readBlockPos(compound, "Pos")
+			.orElse(null);
+		// Never read a block in a chunk nobody has loaded: that is what loads it.
+		if (pos == null || !level.isLoaded(pos))
+			return false;
+
+		WorkerTarget target = WorkerTarget.deserialize(compound, level);
+		if (target == null)
+			return false;
+
+		target.bind(host);
+		if (target.getMode() == Mode.DEPOSIT)
+			outputs.add(target);
+		else
+			inputs.add(target);
+		return true;
+	}
+
+	/** Sets aside every resolved target at {@code pos} — for work and for the idle rounds alike. */
+	public void markUnreachable(BlockPos pos, long gameTime) {
+		markUnreachable(inputs, pos, gameTime);
+		markUnreachable(outputs, pos, gameTime);
+	}
+
+	private static void markUnreachable(List<WorkerTarget> targets, BlockPos pos, long gameTime) {
+		for (WorkerTarget target : targets)
+			if (target.getPos()
+				.equals(pos))
+				target.markUnreachable(gameTime);
 	}
 
 	public List<WorkerTarget> getInputs() {
@@ -250,15 +327,16 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	 * ticks continuously; a worker that did that would idle for a whole rescan delay every time it
 	 * used the last input in its list.
 	 */
-	public int searchForItem() {
+	public int searchForItem(long gameTime) {
 		int count = inputs.size();
 		for (int offset = 0; offset < count; offset++) {
 			int i = Math.floorMod(lastInputIndex + 1 + offset, count);
 			WorkerTarget point = inputs.get(i);
-			if (!point.isValid())
+			// Set-aside first: it is a comparison, where the validity check is a block read.
+			if (point.isUnreachable(gameTime) || !point.isValid())
 				continue;
 			for (int slot = 0; slot < point.getSlotCount(); slot++) {
-				if (getDistributableAmount(point, slot) == 0)
+				if (getDistributableAmount(point, slot, gameTime) == 0)
 					continue;
 				lastInputIndex = i;
 				return i;
@@ -269,12 +347,12 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	}
 
 	/** @return the index of an output that will accept the held stack, or -1. Wraps, as above. */
-	public int searchForDestination() {
+	public int searchForDestination(long gameTime) {
 		int count = outputs.size();
 		for (int offset = 0; offset < count; offset++) {
 			int i = Math.floorMod(lastOutputIndex + 1 + offset, count);
 			WorkerTarget point = outputs.get(i);
-			if (!point.isValid())
+			if (point.isUnreachable(gameTime) || !point.isValid())
 				continue;
 			ItemStack remainder = point.insert(held.copy(), true);
 			if (ItemStack.matches(remainder, held))
@@ -290,19 +368,20 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	 * How much of a slot could be taken and actually placed somewhere. Mirrors the arm so a
 	 * worker never picks up items it has nowhere to put.
 	 */
-	public int getDistributableAmount(WorkerTarget point, int slot) {
+	public int getDistributableAmount(WorkerTarget point, int slot, long gameTime) {
 		ItemStack stack = point.extract(slot, true);
 		if (stack.isEmpty())
 			return 0;
-		ItemStack remainder = simulateInsertion(stack);
+		ItemStack remainder = simulateInsertion(stack, gameTime);
 		if (ItemStack.isSameItem(stack, remainder))
 			return stack.getCount() - remainder.getCount();
 		return stack.getCount();
 	}
 
-	private ItemStack simulateInsertion(ItemStack stack) {
+	/** Somewhere a worker cannot get to is not somewhere it can put things, so it does not count. */
+	private ItemStack simulateInsertion(ItemStack stack, long gameTime) {
 		for (WorkerTarget point : outputs) {
-			if (point.isValid())
+			if (!point.isUnreachable(gameTime) && point.isValid())
 				stack = point.insert(stack, true);
 			if (stack.isEmpty())
 				break;
@@ -311,10 +390,10 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	}
 
 	/** @return true if something was picked up. */
-	public boolean collectFrom(WorkerTarget point) {
+	public boolean collectFrom(WorkerTarget point, long gameTime) {
 		if (point.isValid()) {
 			for (int slot = 0; slot < point.getSlotCount(); slot++) {
-				int amount = getDistributableAmount(point, slot);
+				int amount = getDistributableAmount(point, slot, gameTime);
 				if (amount == 0)
 					continue;
 				held = point.extract(slot, amount, false);

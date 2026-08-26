@@ -1,5 +1,6 @@
 package com.createworkers.test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import com.createworkers.CWConfig;
@@ -26,6 +27,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -82,6 +86,12 @@ public class WorkerGameTests {
 	/** Ticks to let the funnels latch onto the chests beneath them. */
 	private static final int FUNNEL_WARMUP = 10;
 
+	/** Comfortably longer than WorkerData's retry interval for targets that would not resolve. */
+	private static final int RESOLVE_RETRY_WAIT = 110;
+
+	/** Longer than the idle grace plus the stall timeout, so the rounds would have written a stop off. */
+	private static final int ROUNDS_WOULD_HAVE_GIVEN_UP = 320;
+
 	/** Workers must accept exactly what an arm accepts — Create blocks yes, plain inventories no. */
 	@GameTest(template = "work_site", timeoutTicks = 200)
 	public static void targetsMatchTheMechanicalArm(GameTestHelper helper) {
@@ -123,9 +133,9 @@ public class WorkerGameTests {
 			.size() == 1, "expected exactly one output, got " + data.getOutputs()
 				.size());
 
-		helper.assertTrue(data.searchForItem() == 0, "should have found the stocked input depot");
+		helper.assertTrue(data.searchForItem(now(helper)) == 0, "should have found the stocked input depot");
 		helper.assertTrue(data.collectFrom(data.getInputs()
-			.get(0)), "should have collected from the source depot");
+			.get(0), now(helper)), "should have collected from the source depot");
 		helper.assertTrue(!data.getHeld()
 			.isEmpty(), "worker should be carrying something after collecting");
 		helper.assertTrue(data.depositTo(data.getOutputs()
@@ -235,9 +245,9 @@ public class WorkerGameTests {
 			.size() == 2, "expected two inputs");
 
 		// Three scans in a row must all find work: 0, 1, then wrap back to 0.
-		helper.assertTrue(data.searchForItem() == 0, "first scan should pick input 0");
-		helper.assertTrue(data.searchForItem() == 1, "second scan should advance to input 1");
-		helper.assertTrue(data.searchForItem() == 0, "third scan should wrap back to input 0");
+		helper.assertTrue(data.searchForItem(now(helper)) == 0, "first scan should pick input 0");
+		helper.assertTrue(data.searchForItem(now(helper)) == 1, "second scan should advance to input 1");
+		helper.assertTrue(data.searchForItem(now(helper)) == 0, "third scan should wrap back to input 0");
 		helper.succeed();
 	}
 
@@ -475,12 +485,12 @@ public class WorkerGameTests {
 				"the Smelting funnel should refuse a package addressed to Storage");
 
 			// And now the worker, choosing for itself.
-			helper.assertTrue(data.searchForItem() == 0, "should have found the package on the depot");
+			helper.assertTrue(data.searchForItem(now(helper)) == 0, "should have found the package on the depot");
 			helper.assertTrue(data.collectFrom(data.getInputs()
-				.get(0)), "should have collected the package");
+				.get(0), now(helper)), "should have collected the package");
 			helper.assertTrue(PackageItem.isPackage(data.getHeld()), "should be carrying a package");
 
-			int chosen = data.searchForDestination();
+			int chosen = data.searchForDestination(now(helper));
 			helper.assertTrue(chosen >= 0, "should have found a funnel willing to take a Storage package");
 			WorkerTarget destination = data.getOutputs()
 				.get(chosen);
@@ -514,7 +524,7 @@ public class WorkerGameTests {
 			helper.assertTrue(accepts(outputAt(data, helper, STORAGE_FUNNEL), addressedPackage("Storage")),
 				"the rig is broken if the Storage funnel will not even take a Storage package");
 
-			helper.assertTrue(data.searchForItem() == -1,
+			helper.assertTrue(data.searchForItem(now(helper)) == -1,
 				"a package no funnel will accept should be left on the depot");
 			helper.assertTrue(data.getHeld()
 				.isEmpty(), "the worker should not have picked anything up");
@@ -610,7 +620,7 @@ public class WorkerGameTests {
 		WorkerData data = employ(helper, villager);
 		data.resolvePoints(villager);
 
-		List<BlockPos> stops = Workers.patrolStops(data);
+		List<BlockPos> stops = Workers.patrolStops(data, now(helper));
 		helper.assertTrue(stops.size() == 2, "both assigned depots should be stops, got " + stops.size());
 		helper.assertTrue(stops.contains(helper.absolutePos(SOURCE)), "the input depot should be a stop");
 		helper.assertTrue(stops.contains(helper.absolutePos(TARGET)), "the output depot should be a stop");
@@ -771,6 +781,189 @@ public class WorkerGameTests {
 		});
 	}
 
+	/**
+	 * A programme longer than the limit is not honoured in full.
+	 *
+	 * <p>Clicking cannot build one — the selection handler refuses past the limit and the server
+	 * refuses the packet — but a hat from a command can carry any number of points, and the cost of a
+	 * scan that finds nothing is inputs times outputs times the slots in them. The limit is the only
+	 * thing standing between a server and a hat with a thousand depots on it.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void oversizedProgrammesAreCapped(GameTestHelper helper) {
+		prepareWorkSite(helper);
+
+		int limit = CWConfig.MAX_TARGETS.get();
+		List<WorkerTarget> surplus = new ArrayList<>();
+		for (int i = 0; i < limit + 5; i++)
+			surplus.add(target(helper, TARGET));
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = Workers.getOrCreate(villager);
+		data.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.of(surplus));
+		data.resolvePoints(villager);
+
+		int resolved = data.getInputs()
+			.size()
+			+ data.getOutputs()
+				.size();
+		helper.assertTrue(resolved == limit,
+			"a programme of " + (limit + 5) + " targets should resolve to " + limit + ", got " + resolved);
+		helper.succeed();
+	}
+
+	/** A programme has to have come from inside the beat it describes. */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void programmesMustArriveFromInsideTheirOwnBeat(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		WorkerProgram program = WorkerProgram.of(List.of(target(helper, SOURCE), target(helper, TARGET)));
+		BlockPos site = helper.absolutePos(SPAWN);
+
+		helper.assertTrue(program.within(site, SITE_SIZE), "the work site is inside its own programme");
+		helper.assertTrue(!program.within(site.offset(1000, 0, 0), SITE_SIZE),
+			"a programme naming blocks a thousand away from the sender is not one a click could have built");
+		helper.succeed();
+	}
+
+	/**
+	 * A target the worker could not get to is left out of the scan and off the idle rounds until the
+	 * set-aside runs out.
+	 *
+	 * <p>Not politeness — it is the only thing bounding what an unreachable target costs. A walk
+	 * target that is pinned every tick and never arrived at has MoveToTargetSink asking the navigation
+	 * for a fresh path every few ticks, and each of those is an A* over a region as wide as the
+	 * villager's follow range. Picking the same target again as soon as the round-robin comes back to
+	 * it means that never stops.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void unreachableTargetsAreSetAside(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = employ(helper, villager);
+		data.resolvePoints(villager);
+
+		long now = now(helper);
+		helper.assertTrue(data.searchForItem(now) == 0, "the stocked input should be found to begin with");
+		helper.assertTrue(Workers.patrolStops(data, now)
+			.size() == 2, "both targets should be on the rounds to begin with");
+
+		data.markUnreachable(helper.absolutePos(SOURCE), now + 100);
+
+		helper.assertTrue(data.searchForItem(now) == -1, "a set-aside input must not be chosen");
+		List<BlockPos> stops = Workers.patrolStops(data, now);
+		helper.assertTrue(stops.size() == 1 && stops.contains(helper.absolutePos(TARGET)),
+			"a set-aside target must be off the rounds, got " + stops);
+
+		// Set aside, not written off.
+		helper.assertTrue(data.searchForItem(now + 100) == 0, "the input should be back once the set-aside expires");
+		helper.succeed();
+	}
+
+	/**
+	 * Resolving a programme must never pull in a chunk.
+	 *
+	 * <p>Create's points read their block state with a plain {@code Level.getBlockState}, and that on a
+	 * server loads — generating, if nobody has ever been there — whatever chunk the position is in. A
+	 * worker resolves on load and rescans once a second, so a target outside the loaded area would have
+	 * its chunk dragged in and dropped again for as long as the worker ticks.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void resolvingNeverLoadsAChunk(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		ServerLevel level = helper.getLevel();
+
+		// A real depot's point, filed under coordinates a long way from anything loaded.
+		CompoundTag point = target(helper, SOURCE).serialize();
+		BlockPos far = helper.absolutePos(SOURCE)
+			.offset(6000, 0, 6000);
+		point.put("Pos", NbtUtils.writeBlockPos(far));
+		helper.assertTrue(!level.isLoaded(far), "the test needs somewhere that is not loaded to aim at");
+
+		ListTag points = new ListTag();
+		points.add(point);
+		CompoundTag programTag = new CompoundTag();
+		programTag.put(WorkerProgram.POINTS_KEY, points);
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = Workers.getOrCreate(villager);
+		data.employ(new ItemStack(CWItems.HARD_HAT.get()), new WorkerProgram(programTag));
+		data.resolvePoints(villager);
+
+		helper.assertTrue(!level.isLoaded(far), "resolving a far-off target must not have loaded its chunk");
+		helper.assertTrue(!data.hasWork(), "a target nobody can read is not work");
+		helper.succeed();
+	}
+
+	/**
+	 * A target that would not resolve is tried again — and only that one.
+	 *
+	 * <p>Resolution runs once per load, so without a retry a target whose chunk was unloaded at the
+	 * time, or whose block had been broken and has since been rebuilt, would be missing for the rest of
+	 * the worker's life. Re-resolving the whole programme instead would throw away the capability
+	 * caches of every target that was working perfectly well.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 400)
+	public static void unresolvedTargetsAreRetried(GameTestHelper helper) {
+		prepareWorkSite(helper);
+
+		WorkerTarget in = target(helper, SOURCE);
+		WorkerTarget out = target(helper, TARGET);
+		in.cycleMode();
+		WorkerProgram program = WorkerProgram.of(List.of(in, out));
+
+		// The output goes missing before the worker ever gets to resolve it.
+		helper.setBlock(TARGET, Blocks.AIR);
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = Workers.getOrCreate(villager);
+		data.employ(new ItemStack(CWItems.HARD_HAT.get()), program);
+		data.resolvePoints(villager);
+
+		helper.assertTrue(data.getOutputs()
+			.isEmpty(), "a missing block should not have resolved to a target");
+		helper.assertTrue(data.getInputs()
+			.size() == 1, "the input should have resolved");
+		WorkerTarget kept = data.getInputs()
+			.get(0);
+
+		helper.setBlock(TARGET, AllBlocks.DEPOT.getDefaultState());
+		helper.runAfterDelay(RESOLVE_RETRY_WAIT, () -> {
+			data.resolvePoints(villager);
+			helper.assertTrue(data.getOutputs()
+				.size() == 1, "the rebuilt depot should have been picked up on a retry");
+			helper.assertTrue(data.getInputs()
+				.size() == 1 && data.getInputs()
+					.get(0) == kept, "the target that already worked should not have been rebuilt");
+			helper.succeed();
+		});
+	}
+
+	/**
+	 * An idle enderman must not be sent on the rounds.
+	 *
+	 * <p>It has no way to walk one — its locomotion only blinks where the job sends it — so a round it
+	 * was given would be a stop it never arrived at, and the rounds give up on those by setting the
+	 * target aside. An enderman left idling long enough would work through its own programme writing
+	 * off every inventory on it, and then stand there with nothing it was willing to use.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 500)
+	public static void idleEndermenAreNotSentOnRounds(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, AllBlocks.DEPOT.getDefaultState());
+		helper.setBlock(TARGET, AllBlocks.DEPOT.getDefaultState());
+		// Deliberately unstocked: the worker has a programme and nothing to do with it.
+
+		EnderMan enderman = helper.spawn(EntityType.ENDERMAN, SPAWN);
+		WorkerData data = employ(helper, enderman);
+
+		helper.runAfterDelay(ROUNDS_WOULD_HAVE_GIVEN_UP, () -> {
+			List<BlockPos> stops = Workers.patrolStops(data, now(helper));
+			helper.assertTrue(stops.size() == 2,
+				"an idle enderman should not have set its own targets aside, " + stops.size() + " of 2 left");
+			helper.succeed();
+		});
+	}
+
 	// --- helpers ---
 
 	/**
@@ -871,6 +1064,12 @@ public class WorkerGameTests {
 	}
 
 	/** The speed the mob's move control is actually being driven at. */
+	/** The level's clock, which is what target set-asides and resolve retries are measured against. */
+	private static long now(GameTestHelper helper) {
+		return helper.getLevel()
+			.getGameTime();
+	}
+
 	private static double travelSpeed(Mob mob) {
 		return mob.getMoveControl()
 			.getSpeedModifier();

@@ -10,6 +10,7 @@
   "createworkers.message.hired": "Clocked in with %1$s assigned inventories",
   "createworkers.message.retired": "Clocked out",
   "createworkers.message.selection_cleared": "All inventories cleared",
+  "createworkers.message.too_many_targets": "That is one inventory too many — a hard hat holds %1$s",
   "createworkers.message.target_too_far": "Too far from another assigned block (%1$s blocks apart, limit %2$s)",
   "createworkers.message.too_far_from_job": "Too far from the job site at %1$s, %2$s, %3$s — hire them nearer the work",
 

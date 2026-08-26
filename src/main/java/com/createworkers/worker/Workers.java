@@ -82,16 +82,26 @@ public class Workers {
 	 * the worker already walks to in order to do its job, so a worker that can work its beat can
 	 * always walk its beat, and it can never idle its way somewhere it cannot get back from.
 	 */
-	public static List<BlockPos> patrolStops(WorkerData data) {
+	public static List<BlockPos> patrolStops(WorkerData data, long gameTime) {
 		List<BlockPos> stops = new ArrayList<>(data.getInputs()
 			.size()
 			+ data.getOutputs()
 				.size());
-		for (WorkerTarget target : data.getInputs())
-			stops.add(target.getPos());
-		for (WorkerTarget target : data.getOutputs())
-			stops.add(target.getPos());
+		addStops(stops, data.getInputs(), gameTime);
+		addStops(stops, data.getOutputs(), gameTime);
 		return stops;
+	}
+
+	/**
+	 * Targets the worker has lately failed to reach are left off the rounds. Without that, a stop it
+	 * can never arrive at is picked again every few rounds and walked at until the worker is
+	 * interrupted — and each of those attempts is the villager brain pathfinding once every few ticks
+	 * for as long as it lasts.
+	 */
+	private static void addStops(List<BlockPos> stops, List<WorkerTarget> targets, long gameTime) {
+		for (WorkerTarget target : targets)
+			if (!target.isUnreachable(gameTime))
+				stops.add(target.getPos());
 	}
 
 	/**

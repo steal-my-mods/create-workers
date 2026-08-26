@@ -110,6 +110,11 @@ public class WalkLocomotion implements WorkerLocomotion {
 	}
 
 	@Override
+	public boolean makesRounds() {
+		return true;
+	}
+
+	@Override
 	public void stop(Mob mob) {
 		Brain<?> brain = mob.getBrain();
 		brain.eraseMemory(MemoryModuleType.WALK_TARGET);
