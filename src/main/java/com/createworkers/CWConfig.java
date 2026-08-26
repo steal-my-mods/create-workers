@@ -55,8 +55,8 @@ public class CWConfig {
 
 		MAX_TARGET_SPREAD = builder
 			.comment("How far apart the furthest two inventories on one hard hat may be — the width of",
-				"a single worker's beat, checked as you assign them. Half of it is how far any target",
-				"can sit from the job site, which is what the hiring and wander checks measure against.")
+				"a single worker's beat, checked as you assign them. The job site is the centre of the",
+				"box the targets span; hiring measures this full distance from it.")
 			.defineInRange("maxTargetSpread", 48, 8, 256);
 
 		MAX_TARGETS = builder
