@@ -150,6 +150,64 @@ public class WorkerGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * A worker never picks up what it has nowhere to put, exactly as an arm does not.
+	 *
+	 * <p>The outputs a scan prices a stack against are gathered once for the whole scan rather than
+	 * re-checked per slot, which is the difference between two dozen block reads and a few thousand.
+	 * This is the rule that gathering has to preserve: an output the worker has lately failed to
+	 * reach is not somewhere it can deliver, so a stack that fits only there does not count as
+	 * distributable and the input holding it is not worth walking to.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void nothingIsCollectedWithNowhereToPutIt(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = employ(helper, villager);
+		data.resolvePoints(villager);
+
+		long now = now(helper);
+		helper.assertTrue(data.searchForItem(now) == 0, "the stocked input should be found while the output is usable");
+
+		// The only place the stock could go, set aside.
+		data.markUnreachable(helper.absolutePos(TARGET), now + 100);
+
+		helper.assertTrue(data.searchForItem(now) == -1,
+			"an input must not be chosen when the only output is one the worker cannot reach");
+		helper.assertTrue(!data.collectFrom(data.getInputs()
+			.get(0), now), "nothing should be collected with nowhere to deliver it");
+		helper.assertTrue(data.getHeld()
+			.isEmpty(), "the worker should be carrying nothing");
+
+		// Set aside, not written off.
+		helper.assertTrue(data.searchForItem(now + 100) == 0, "the input should be back once the set-aside expires");
+		helper.succeed();
+	}
+
+	/**
+	 * Collecting works with no scan in front of it.
+	 *
+	 * <p>{@code collectFrom} tries the slot the scan settled on before walking the inventory, to
+	 * avoid pricing every earlier slot against every output twice for one pickup. The hint is an
+	 * optimisation and never a precondition: there may not be one — the worker may have been sent to
+	 * a target some other way, or the slot may have emptied while it walked — and the full walk has
+	 * to remain the thing that actually decides.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void collectingWorksWithoutAScanToHintAt(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = employ(helper, villager);
+		data.resolvePoints(villager);
+
+		// Deliberately no searchForItem first, so there is no hint to lean on.
+		helper.assertTrue(data.collectFrom(data.getInputs()
+			.get(0), now(helper)), "should have collected from the source depot with no scan beforehand");
+		helper.assertTrue(!data.getHeld()
+			.isEmpty(), "worker should be carrying something after collecting");
+		helper.succeed();
+	}
+
 	/** A programmed hat has to survive being written to NBT and read back. */
 	@GameTest(template = "work_site", timeoutTicks = 200)
 	public static void programSurvivesRoundTrip(GameTestHelper helper) {

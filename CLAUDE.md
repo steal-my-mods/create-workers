@@ -21,8 +21,11 @@ JDK 21 required. `gradle/gradle-daemon-jvm.properties` pins the daemon to it, so
 without setting `JAVA_HOME` even when the default `java` is newer — don't delete that file, or
 `./gradlew build` dies with "Could not create task ':test' ... Type T not present" on a newer JVM.
 There is no unit-test suite;
-correctness is covered by GameTests in `com.createworkers.test.WorkerGameTests`. Run them after any
-change to worker behaviour, targets or serialization.
+correctness is covered by GameTests in `com.createworkers.test.WorkerGameTests`, and cost by
+`com.createworkers.test.WorkerCostGameTests`. Run them after any change to worker behaviour, targets
+or serialization — and after anything that touches what a search does per target, which the cost
+tests bound. Both run under `runGameTestServer`; the cost ones log what they measured, so
+`grep '\[cost\]'` over a run reads as a report.
 
 ## Build quirk worth knowing
 
@@ -132,6 +135,29 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   selection just because the chunk went out of view, or walking away and clicking a block would
   quietly shorten the programme it pushes back. `resolvingNeverLoadsAChunk` covers it, and was
   mutation-checked by dropping the guard — which generates the chunk 6000 blocks away.
+- **A scan prices its outputs once, not once per input slot.** `WorkerData.usableOutputs` gathers the
+  outputs a scan may deliver into, and `simulateInsertion` trusts that list rather than re-checking
+  each point. Move the check back inside the loop and a block read — `ArmInteractionPoint.isValid`
+  does a plain `Level.getBlockState`, and a belt point reads a second one above itself — lands on
+  inputs × slots × outputs to learn an answer that only varies per output. The walk that costs this
+  is not a rare one: an empty input is nearly free and a deliverable one returns on its first slot,
+  so the full walk is exactly what a *backed-up* line pays, every rescan, for as long as it stays
+  backed up. Gathering is safe only because nothing moves during a scan — every insertion priced
+  against the list is simulated. `nothingIsCollectedWithNowhereToPutIt` guards the rule the gathering
+  has to preserve, and was mutation-checked by dropping the set-aside clock from the filter.
+- **`collectFrom`'s slot hint is an optimisation, never a precondition.** `searchForItem` finds an
+  input *and* a slot; handing only the index back made `collectFrom` re-walk from slot zero,
+  re-pricing every slot it passed against every output for one pickup. The slot now travels as a
+  hint — but the worker walks between the two calls, so the amount is always re-checked and the full
+  walk has to stay the thing that decides (`collectingWorksWithoutAScanToHintAt`, mutation-checked by
+  deleting the fallback).
+- **`WorkerStatePacket` must not carry the programme.** The hat's programme is a
+  `networkSynchronized` component, so sending the hat stack whole put the entire point list — a
+  couple of kilobytes on a full hat — on a packet that goes to every tracking client on every item
+  moved, twice a second per worker. Nothing on that side reads it: the gear layer asks only whether
+  the worker is employed, the cargo layer only what it is holding. `withoutProgram` strips it. Send
+  the hat unstripped again and a base full of workers is a few hundred kilobytes a second of NBT the
+  client already has on the item.
 - **Resolution retries only what failed.** A point that would not resolve — chunk not loaded, block
   broken since — goes on `pending` and is tried again every `RESOLVE_RETRY_TICKS`; the ones that
   worked are never rebuilt, because rebuilding throws away a live `BlockCapabilityCache` per target.
@@ -306,6 +332,15 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 - **Don't assert behaviour with wall-clock thresholds.** A "not delivered within 25 ticks" check for
   the teleport cooldown passed happily with the cooldown set to 1. `teleportsRespectTheirCooldown`
   asserts the mechanism instead, and was mutation-checked by deleting the gate.
+- **Performance is asserted as a count, never as a duration.** `WorkerData` tallies what each search
+  cost — `validityChecks()`, `slotProbes()`, `deliveryProbes()`, reset at the top of every search —
+  and `WorkerCostGameTests` asserts bounds *derived from the size of the programme*, so they hold at
+  any size and on any machine. A timing threshold cannot: loose enough for a loaded CI runner is
+  loose enough to miss a tenfold regression. Keep the tally per instance, never static — a worker is
+  owned by one entity on one thread, so there is nothing to synchronise and no flag to switch on —
+  and count only simulated probes, since the one real extract or insert that ends a search is the
+  work rather than the looking. Mutation-check every cost test: one that passes against the code it
+  was written to condemn reads like cover. See `docs/multiplayer-performance.md` for the numbers.
 
 ## Design notes
 

@@ -19,7 +19,7 @@ and `tickRunningGoals(false)`.
 |---|---|
 | Unemployed villager or enderman | One `canUse`: an attachment lookup that returns null. Measured in tens of nanoseconds; a thousand-villager trading hall is well under a tenth of a percent of a tick. |
 | Employed, hauling | `locomotion.tickEmployed`, the wander check (one `closerThan` per target, short-circuiting on the job site), one `isValid` (one block state read), one reach test, one memory write. |
-| Employed, idle, scanning | Once every `IDLE_RESCAN_TICKS`: inputs × slots × outputs simulated insertions, plus one block read per target. This is the term that grows, and it is why `maxTargets` exists. |
+| Employed, idle, scanning | Once every `IDLE_RESCAN_TICKS`, and only when the inputs hold something the outputs will not take: inputs × slots × outputs simulated insertions, plus one block read per *output*. This is the term that grows, and it is why `maxTargets` exists. An empty input costs nothing past the extract that comes back empty, and a deliverable one returns on the first slot. |
 | Employed, idle, holding station | A `WalkTarget` allocation and a memory write. The sink sees "already arrived", erases it, and pathfinds nothing. |
 | Employed enderman, hopping | One landing scan per hop: a box of candidates, each scored before it is inspected. |
 
@@ -60,6 +60,110 @@ fires `LivingChangeTargetEvent` whether or not anything changed — that is a bu
 enderman, and other mods listen on it. The landing scans inspected up to two thousand candidate
 blocks per hop, reading up to four blocks apiece, when most candidates could be ruled out by
 arithmetic first.
+
+## The second pass
+
+A later audit went over the same ground looking for constant factors rather than structure. The
+shape above held up — no global state, no entity sweeps, every block read chunk-guarded — but three
+things inside the dominant term were doing the same work repeatedly, and one packet was much larger
+than the thing it was telling clients.
+
+**The scan re-validated every output once per input slot.** `simulateInsertion` walked the outputs
+asking `isUnreachable` and `isValid` of each, and it was called once per slot of every input. That
+put a block read — `ArmInteractionPoint.isValid` refreshes its cached state with a plain
+`Level.getBlockState`, and a belt point reads a second one above itself — on inputs × slots ×
+outputs, to learn an answer that only varies per output. Twelve basins in and twelve out is a few
+thousand block reads per scan where two dozen do. The usable outputs are now gathered once per scan
+(`WorkerData.usableOutputs`), which is safe because nothing moves during a scan: every insertion
+priced against that list is simulated.
+
+Worth being exact about when this was being paid, because the table above used to overstate it. An
+input whose slots are empty costs almost nothing — the simulated extract comes back empty and the
+insertion is never priced. An input with something deliverable returns on the first slot it finds.
+The full inputs × slots × outputs walk happens when the inputs hold items and the outputs will not
+take them, which is not a rare worst case: it is the steady state of a backed-up line, repeated
+every rescan for as long as it stays backed up. It also runs on the *transfer* cooldown rather than
+the idle one whenever a pickup is attempted and fails, so it can come round twice as often as
+`IDLE_RESCAN_TICKS` suggests.
+
+**The winning slot was found twice per pickup.** `searchForItem` located an input *and a slot*, then
+returned only the input index; `collectFrom` re-walked from slot zero, re-pricing every slot it
+passed over against every output. It now carries the slot across as a hint and tries it first. A
+hint is never a precondition — the worker travels between the two calls, so the amount is re-checked
+and a slot that has emptied falls through to the full walk. `collectingWorksWithoutAScanToHintAt`
+covers that, and was mutation-checked by deleting the fallback.
+
+**`getSlotCount()` was the loop condition** in both walks, so a capability lookup ran once per
+iteration instead of once per inventory. Hoisted.
+
+**Every item moved re-broadcast the whole programme.** `WorkerStatePacket` carried the hat as a full
+`ItemStack`, and the programme is a `networkSynchronized` data component on it, so each packet was
+the entire point list — a couple of kilobytes of type names and coordinates for a full hat. It goes
+to every client tracking the worker on every transfer, which is twice a second apiece, and no
+receiver ever read it: the gear layer asks only whether the worker is employed and the cargo layer
+only what it is holding. Twenty workers with four players in range was a few hundred kilobytes a
+second of NBT the client already had on the item. The synced hat is now stripped of that one
+component, which takes the packet from kilobytes to about ten bytes and makes splitting hat state
+out of the per-transfer packet unnecessary.
+
+Three findings from the same pass were left, being small and each a trade rather than a plain win:
+identical stacks in adjacent slots are still re-simulated from scratch (a per-scan memo by item
+would collapse a full inventory of one thing to a single probe); `isSafeStandingSpot` allocates a
+`BlockPos` per floor and headroom check from an argument that is already mutable; and
+`findLandingSpot` scores candidates against its centre but iterates from the far corner, so it can
+never return on the first safe spot the way a distance-ordered offset table would let it.
+
+## How the cost is tested
+
+`WorkerCostGameTests` holds the performance tests. None of them measures a duration, and that is the
+whole design: a threshold loose enough to pass on a loaded CI runner is loose enough to sleep through
+a tenfold regression, and one tight enough to catch that regression fails on somebody's laptop. What
+a worker costs a server is a *count* — block reads, slots looked into, deliveries priced, bytes on
+the wire — so the tests count those and assert bounds **derived from the size of the programme**
+rather than numbers somebody once measured. The bounds then say the same thing at any size and on any
+hardware, and they are assertions about the shape of the work rather than about speed: "each output
+is checked once per search" fails the moment a check drifts back inside a loop, which is the
+regression that is easy to write and impossible to notice in play.
+
+`WorkerData` keeps the tally itself — `validityChecks()`, `slotProbes()`, `deliveryProbes()`, reset
+at the top of each search. Per instance rather than static, so there is no flag to turn on and
+nothing to synchronise: a worker is owned by one entity on one thread. The cost is an int increment
+beside operations that each already do a block read or a capability lookup. Only simulated probes are
+counted; the one real extract or insert that ends a search is the work, not the looking.
+
+Each test also logs what it measured, pass or fail, so a run reads as a report:
+
+```
+[cost] hopeless search over 3 inputs / 3 outputs (27 slots, 3 stocked): 6 validity checks,
+       27 slot probes, 9 delivery probes -- checking validity per slot instead would be 12
+[cost] setting one of 3 outputs aside: validity checks 6 -> 5, delivery probes 9 -> 6
+[cost] collecting from slot 3 of a 18-slot basin: 1 slot probe -- walking the inventory again would be 4
+[cost] render packet: 2 targets -> 10 bytes, 6 targets -> 10 bytes
+```
+
+All four were mutation-checked, which for a cost test is not optional — one that passes against the
+code it was written to condemn is worse than none, because it reads like cover. Restoring the
+per-slot validity check takes the first from 6 to 15; dropping the set-aside clock out of the
+gathering takes the second from 5 to 6; deleting the slot hint takes the third from 1 probe to 4; and
+sending the hat unstripped takes the packet from a flat 10 bytes to 144 at two targets and 378 at
+six, which is the ~65 bytes a target the audit predicted from the NBT shape.
+
+Two things the counters turned up that nobody had noticed. **A Create depot exposes nine slots** —
+one for the item on it, eight for processing results — so a programme of depots pays nine slot probes
+per input per search to find the one that matters, not one. It is cheap (an empty slot costs a probe
+and no pricing) but it means "slots" in the cost model is not "targets" and never was. And **an empty
+input is nearly free**: the simulated extract comes back empty before anything is priced against the
+outputs, which is why the expensive search is specifically the one over inputs that *do* hold
+something.
+
+The obvious test still missing is a **pathfind rate**, which the section above calls the mod's most
+expensive failure mode and which nothing currently bounds by cost — only `unreachableTargetsAreSetAside`
+bounds it by mechanism. `MoveToTargetSink` writes each fresh `Path` into the `PATH` memory, so
+counting how many distinct paths appear there over a fixed window of ticks is an observable proxy for
+`createPath` calls, needing no instrumentation at all. A worker walled off from its target should
+show a handful over 600 ticks where an unclocked one shows one every few ticks — an order of
+magnitude apart, so a generous bound would be robust, and per-tick rather than per-second so it stays
+hardware-independent.
 
 ## Considered and not done
 

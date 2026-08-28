@@ -1,6 +1,7 @@
 package com.createworkers.net;
 
 import com.createworkers.CreateWorkers;
+import com.createworkers.registry.CWComponents;
 import com.createworkers.worker.WorkerData;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -34,7 +35,29 @@ public record WorkerStatePacket(int entityId, ItemStack hat, ItemStack held) imp
 	}
 
 	public static WorkerStatePacket of(Entity entity, WorkerData data) {
-		return new WorkerStatePacket(entity.getId(), data.getHat(), data.getHeld());
+		return new WorkerStatePacket(entity.getId(), withoutProgram(data.getHat()), data.getHeld());
+	}
+
+	/**
+	 * The hat as a viewer needs it, which is the hat without its programme.
+	 *
+	 * <p>Nothing on the receiving side ever reads the programme off a worker: the gear layer asks
+	 * only whether it is employed, and the cargo layer only what it is holding. Left on, it is the
+	 * whole point list — a full hat is a couple of kilobytes of type names and coordinates — and
+	 * this packet goes to every client tracking the worker on every item it moves, which is twice a
+	 * second apiece. A base full of workers is then a few hundred kilobytes a second of NBT that the
+	 * client already has on the item and would not look at here anyway.
+	 *
+	 * <p>Stripping rather than sending a bare flag keeps {@code isEmployed} meaning the same thing on
+	 * both sides, and leaves anything a renderer might legitimately want off the hat — damage, a
+	 * name, an enchantment glint — where it can still reach it.
+	 */
+	private static ItemStack withoutProgram(ItemStack hat) {
+		if (hat.isEmpty() || !hat.has(CWComponents.PROGRAM.get()))
+			return hat;
+		ItemStack stripped = hat.copy();
+		stripped.remove(CWComponents.PROGRAM.get());
+		return stripped;
 	}
 
 	/** Pushes the current look of a worker to everyone who can see it. */
