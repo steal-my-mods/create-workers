@@ -8,6 +8,47 @@ Notable changes to Create: Workers, newest first. The format follows
 CurseForge and GitHub — so write entries for a player reading a download page, not for someone
 reading the diff.
 
+## [0.4.0] — 2026-09-07
+
+Workers turn up in uniform in mods that replace villagers, and taking the hat is now a real change
+of job: a hired villager hands its workstation back to the village and wears the hi-vis instead of
+its old profession, then goes back to that profession — trades and all — when you take the hat off it.
+
+### Added
+
+- **A hired villager becomes a Worker.** It hands the workstation it was using back to the village,
+  so another villager can take the composter or the lectern it was sitting on, and wears hi-vis trim
+  on its sleeves and hem in place of its old profession's clothes. Nothing is lost by hiring the
+  wrong villager: retire it and the job it had comes back exactly as it was, trades included.
+- **Workers carry their cargo in their hand** when the mod drawing them gives villagers proper arms.
+  Vanilla villagers have no hands to hold anything in, so theirs is still carried against the chest,
+  as before.
+
+### Changed
+
+- A worker bitten by a zombie, or struck by lightning, now drops its hat where it stood and goes
+  back to its old profession on the way out. Both used to vanish with it — a converted villager is
+  replaced rather than killed, so nothing dropped — and a cured one came back stuck in a job it
+  could not do.
+- Hired villagers sit at trade level 2 while they work, which shows as a slightly different badge.
+  It is not a real promotion: without it the game takes a worker for an unemployed villager whose
+  workstation was destroyed and clears its job out from under it.
+
+### Fixed
+
+- **The hard hat and hi-vis vest now appear on villagers from mods that replace them**, such as
+  Villagers Reborn ([#1](https://github.com/steal-my-mods/create-workers/issues/1)). Those mods add
+  villagers of their own, and the gear was only ever fitted to vanilla's, so the workers hauled
+  perfectly well and turned up in plain clothes. The gear is now measured against whichever model a
+  villager is actually drawn with, which fits mods this one has never heard of — including the ones
+  that draw the same villager two different ways depending on their own settings.
+- A farmer's straw hat no longer draws through the crown of the hard hat.
+
+### Note
+
+Villagers already at work when you update keep their old profession until you retire and hire them
+again. Their workstation stays theirs until then.
+
 ## [0.3.0] — 2026-08-26
 
 Mostly a performance release. Four things a worker did had no upper bound on them, and each one is
