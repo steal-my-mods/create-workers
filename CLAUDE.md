@@ -15,6 +15,7 @@ endermen haul items between inventories the way a Mechanical Arm does.
 python3 tools/generate_logo.py         # the in-jar badge at 256
 python3 tools/generate_logo.py branding/icon-512.png --size 512   # ...and the 512 CurseForge wants
 python3 tools/generate_ponder_structure.py   # the Ponder scene's structure NBT
+python3 tools/generate_worker_profession.py  # the worker profession's clothing, both variants
 ```
 
 JDK 21 required. `gradle/gradle-daemon-jvm.properties` pins the daemon to it, so the commands work
@@ -110,7 +111,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `worker/WorkerJobGoal` | Phase machine: search input → travel → collect → search output → travel → deposit. Also owns the stall clocks that stop a hopeless walk costing a pathfind a tick |
 | `worker/WalkLocomotion` | Villagers. Also owns `returnTo`, the wander leash |
 | `worker/TeleportLocomotion` | Endermen. Holds the teleport cooldown, so locomotion instances are **per-worker**, not shared |
-| `worker/WorkerEvents` | Hiring, retiring, drops, client sync, cleanup, and the vetoes that stop vanilla's own enderman AI from undoing the job |
+| `worker/WorkerEvents` | Hiring, retiring, drops, conversion, client sync, cleanup, and the vetoes that stop vanilla's own enderman AI from undoing the job |
 | `client/HatSelectionHandler` | Client-side programming UX (mirrors `ArmInteractionPointHandler`) |
 | `client/WorkerGearLayer` | Hard hat + hi-vis vest render layer |
 | `client/model/WorkerGearModels` | Builds that gear **fitted to the model that will wear it** — `fitTo` measures a head and torso and is what makes the gear work on a modded villager |
@@ -120,6 +121,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/ponder/CWPonderPlugin` | Hands the scenes to Ponder. A scene is filed under an **item id**, which is what the "hold W" prompt keys off |
 | `client/ponder/HardHatScene` | The hat's scene: programme, hire, haul, clock off |
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
+| `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own |
 | `recipe/ClearProgramRecipe` | Crafting a hat by itself blanks its program, the way a Create filter clears |
 
 ## Things that will bite you
@@ -302,6 +304,17 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 - Vanilla renders villager professions as *texture overlays re-rendered over the same mesh*
   (`VillagerProfessionLayer` → `renderColoredCutoutModel`), not as extra geometry — worth knowing if
   the vest ever needs to hug the robe rather than sit over it.
+- **Hiring takes the villager's village job, and the order of the two steps is load-bearing.**
+  `Workers.clearVillageJob` releases the workstation *before* changing the profession, because
+  `Villager.releasePoi` gates the release on `Villager.POI_MEMORIES`, whose `JOB_SITE` predicate is
+  the villager's **current** profession's `heldJobSite`. Change the profession first and that
+  predicate matches nothing, the release silently does nothing, and the composter stays ticketed to a
+  worker that can never use it for the rest of the world's life, with nothing in the world to show
+  why (`hiringHandsTheWorkstationBack`, mutation-checked by swapping the two). `releasePoi` also does
+  not erase the memory — that is done by hand, since `WorkAtPoi` asks only that the villager be
+  within 1.73 blocks of the site, not that it be allowed to walk there. Restoring reverses the
+  order for the mirror-image reason: `setVillagerData` nulls the trade list whenever the profession
+  changes, so the offers go back *after* the profession or they are lost on the way in.
 - **Where the cargo is drawn is a question about the model, not about the mob.** A vanilla villager's
   arms are one merged part in a fixed pose with no hands in it, so its cargo is held against the
   chest; a model that is an `ArmedModel` gets it in the hand through the same sequence vanilla's
@@ -314,12 +327,60 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   model's own third-person transform, not from a figure chosen here: a block in hand is 0.375 of a
   block against the 0.5 vanilla's `CarriedBlockLayer` gives an enderman, and against the 0.1875 the
   chest carry works out at.
+- **A profession needs a clothing overlay for every renderer that looks one up.** Vanilla ships a
+  full set under both `villager/profession/` and `zombie_villager/profession/`, so a modded
+  profession that ships only the first renders as missing texture the moment a worker is bitten — a
+  converted villager keeps its `VillagerData`. `tools/generate_worker_profession.py` writes both; the
+  two layouts share the robe's texels and differ only in the sleeve's height (8 against 12). The hat
+  region is left transparent on purpose: a profession texture is what draws a farmer's straw hat, and
+  a worker wears a hard hat. The **name** comes from a key with our namespace inside it —
+  `entity.minecraft.villager.createworkers.worker` — because NeoForge patches `Villager.getTypeName`
+  to insert the profession's namespace for anything outside `minecraft`. The obvious
+  `entity.minecraft.villager.worker` is never looked up and renders as the raw key.
 - **The hat's clearance goes on the crown and nowhere else.** The crown is the only box sunk into the
   head, so it is the only one with anything to clear — and growing the others pushes the peak into
   the rim, which share a plane at `z = -5`. Two overlapping coplanar faces of one render type
   stipple against each other, which is a worse artefact than the hairline z-fighting being fixed.
   `FitCheck` asserts no two boxes of the hat overlap while sharing a face plane, and that was
   mutation-checked by putting the clearance back on the rim and the peak.
+- **Changing a villager's profession without `refreshBrain` leaves the old job's brain behind, and
+  a custom profession has to dodge `ResetProfession`.** Two separate traps, both in
+  `Workers.clearVillageJob`, both mutation-checked. `Villager.registerBrainGoals` bakes
+  `AcquirePoi(profession.acquirableJobSite(), …)` into the CORE package once, so a villager whose
+  profession changed underneath it keeps hunting the workstations of the job it no longer has — it
+  re-tickets the composter that was just handed back, within a few tens of ticks, and pathfinds over
+  its follow range looking for more. Vanilla pairs every profession change with `refreshBrain`
+  (`ResetProfession` and `AssignProfessionFromJobSite` both do); so must we, on hiring *and* on
+  retiring, or a retired villager keeps the worker's match-nothing predicate and can never find a
+  workstation again. Separately, `ResetProfession` (CORE, priority 10) wipes any profession but
+  `NONE` and `NITWIT` — named literally — off a villager with no job site that has never traded and
+  is still level 1, which is every worker by design; it would reset ours to `NONE` within a tick or
+  two. Occupying `JOB_SITE` cannot save it, because `ValidateNearbyPoi` at priority 0 erases a job
+  site the profession does not claim before `ResetProfession` reads it in the same tick. What is
+  left is the trade level, held at 2 while employed and restored from the stash on retirement.
+  **A test that asserts on the tick of the hire sees none of this** — both hire tests idle 100 ticks
+  and re-assert.
+- **Conversion is not death, and a worker has to clock off for it.** A villager bitten by a zombie
+  or hit by lightning is replaced by `Mob.convertTo`, which discards the original — no
+  `LivingDeathEvent`, no `LivingDropsEvent`, so the hat would simply cease to exist. And the
+  profession outlives the attachment where the hat does not: `Zombie.killedEntity` copies
+  `VillagerData` onto the zombie villager and curing copies it back, so a bitten-and-cured worker
+  would come back holding a profession with no employment behind it and no way to ever take a
+  village job. `WorkerEvents.onLivingConversion` retires it on `LivingConversionEvent.Pre`, which is
+  fired from the conversion's own check *before* the replacement is built — the only point where the
+  villager is still whole enough to drop its hat and have its village job put back
+  (`aBittenWorkerClocksOffFirst`, mutation-checked by dropping the handler and by dropping the
+  restore). The event is not cancelled; becoming a zombie is the villager's business.
+- **Never clear a worker's profession to `NONE`.** It looks equivalent to the worker profession and
+  is strictly worse than doing nothing: `NONE` is registered with `ALL_ACQUIRABLE_JOBS`, and
+  `AcquirePoi` takes a workstation's ticket the moment a path to it merely *exists* — arriving is not
+  required, and a worker never arrives anywhere its programme did not send it, because the job goal
+  pins `WALK_TARGET` every tick. `CWProfessions.WORKER` matches nothing with either predicate, which
+  is what `workersNeverClaimAWorkstation` asserts. `docs/professions.md` has the rest, including why
+  a profession of our own rather than vanilla's `NITWIT` (an unknown profession id is parsed
+  leniently and degrades to an unemployed villager if the mod is removed; a nitwit stays a nitwit
+  forever) and why it is named for the role rather than for hauling (a profession id is permanent
+  save state, so a rename strands every worker in every world).
 - **Idle rounds must only visit programmed targets** (`Workers.patrolStops`). That is the entire
   safety argument for `PATROL`: those positions are ones the worker already paths to while working,
   so idling cannot strand it anywhere it could not already get back from. Never widen the stop list
@@ -404,6 +465,8 @@ thinking changes — the point is that the analysis is not redone from scratch.
 
 - `docs/working-hours.md` — night shifts, designating a bed on the hat, and why the whole idea may be
   an annoyance
+- `docs/professions.md` — what hiring does to a villager's village job, and the several ways of
+  doing it that look equivalent and are not
 - `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,
   and the things a shared server still wants that this mod deliberately does not do
 

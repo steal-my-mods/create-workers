@@ -4,6 +4,7 @@ import com.createworkers.net.CWNetwork;
 import com.createworkers.registry.CWAttachments;
 import com.createworkers.registry.CWComponents;
 import com.createworkers.registry.CWItems;
+import com.createworkers.registry.CWProfessions;
 import com.createworkers.registry.CWRecipes;
 
 import net.minecraft.resources.ResourceLocation;
@@ -32,6 +33,7 @@ public class CreateWorkers {
 		CWItems.ARMOR_MATERIALS.register(modBus);
 		CWItems.ITEMS.register(modBus);
 		CWItems.TABS.register(modBus);
+		CWProfessions.REGISTER.register(modBus);
 		CWRecipes.REGISTER.register(modBus);
 
 		modBus.addListener(CWNetwork::register);

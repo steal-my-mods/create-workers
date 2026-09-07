@@ -27,6 +27,7 @@ import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityMobGriefingEvent;
 import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
+import net.neoforged.neoforge.event.entity.living.LivingConversionEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -118,8 +119,10 @@ public class WorkerEvents {
 		if (!player.getAbilities().instabuild)
 			stack.shrink(1);
 
-		if (target instanceof Mob mob)
+		if (target instanceof Mob mob) {
+			Workers.clearVillageJob(mob, data);
 			Workers.updateCargoAppearance(mob, data.getHeld());
+		}
 
 		WorkerStatePacket.sync(target, data);
 		player.displayClientMessage(Component.translatable("createworkers.message.hired", program.size())
@@ -143,6 +146,7 @@ public class WorkerEvents {
 				player.drop(drop, false);
 
 		if (target instanceof Mob mob) {
+			Workers.restoreVillageJob(mob, data);
 			Workers.updateCargoAppearance(mob, ItemStack.EMPTY);
 			WorkerLocomotion locomotion = Workers.locomotionFor(mob);
 			if (locomotion != null)
@@ -226,6 +230,48 @@ public class WorkerEvents {
 			event.getDrops()
 				.add(item);
 		}
+	}
+
+	/**
+	 * A worker that is about to stop being a villager clocks off first.
+	 *
+	 * <p>A villager bitten by a zombie, or struck by lightning, is <em>replaced</em> rather than
+	 * killed: {@code Mob.convertTo} spawns the new mob and discards the old one, so no death and no
+	 * drops event ever fires and the hat simply ceases to exist. Worse, the profession outlives the
+	 * worker where the attachment does not — {@code Zombie} copies the villager's {@code
+	 * VillagerData} onto the zombie villager, and curing it copies that back — so a worker that was
+	 * bitten and cured would come back holding a profession with no employment behind it, unable to
+	 * take a village job ever again because a worker's job-site predicates match nothing.
+	 *
+	 * <p>Retiring it here fixes both: the hat and the cargo drop where the villager stood, and the
+	 * village job goes back on before anything copies it. {@code LivingConversionEvent.Pre} is the
+	 * one hook that runs while the villager is still whole — it is fired from the conversion's own
+	 * check ({@code Zombie.doHurtTarget}, {@code Villager.thunderHit}) before the replacement is
+	 * built. The event is not cancelled: becoming a zombie is the villager's business, and a worker
+	 * is not owed protection from it.
+	 */
+	@SubscribeEvent
+	public static void onLivingConversion(LivingConversionEvent.Pre event) {
+		LivingEntity entity = event.getEntity();
+		if (entity.level()
+			.isClientSide())
+			return;
+
+		WorkerData data = Workers.get(entity);
+		if (data == null || !data.isEmployed())
+			return;
+
+		if (entity instanceof Mob mob) {
+			// Before dismiss, for the same reason onLivingDeath does it: a block cargo an enderman is
+			// holding is loot of its own.
+			Workers.updateCargoAppearance(mob, ItemStack.EMPTY);
+			Workers.restoreVillageJob(mob, data);
+		}
+
+		for (ItemStack drop : data.dismiss())
+			entity.spawnAtLocation(drop);
+
+		WorkerStatePacket.sync(entity, data);
 	}
 
 	/** New viewers need to be told what a worker looks like. */

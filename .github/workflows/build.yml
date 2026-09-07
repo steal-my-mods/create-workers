@@ -43,6 +43,7 @@ jobs:
           python3 tools/generate_logo.py
           python3 tools/generate_logo.py branding/icon-512.png --size 512
           python3 tools/generate_ponder_structure.py
+          python3 tools/generate_worker_profession.py
           # Staged, not a bare diff: a generator that starts emitting a new file nobody committed
           # leaves it untracked, and `git diff` says nothing about untracked files.
           git add -A
