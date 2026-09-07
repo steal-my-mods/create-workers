@@ -113,9 +113,10 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `worker/WorkerEvents` | Hiring, retiring, drops, client sync, cleanup, and the vetoes that stop vanilla's own enderman AI from undoing the job |
 | `client/HatSelectionHandler` | Client-side programming UX (mirrors `ArmInteractionPointHandler`) |
 | `client/WorkerGearLayer` | Hard hat + hi-vis vest render layer |
+| `client/model/WorkerGearModels` | Builds that gear **fitted to the model that will wear it** — `fitTo` measures a head and torso and is what makes the gear work on a modded villager |
 | `client/model/HardHatArmorModel` | The same hat geometry as a `HumanoidModel`, for the hat worn by a player |
 | `client/HardHatClientExtensions` | Feeds that model to the armour renderer; re-baked on resource reload |
-| `client/WorkerCargoLayer` | Visible cargo |
+| `client/WorkerCargoLayer` | Visible cargo — in the hand when the model has one, against the chest when it does not |
 | `client/ponder/CWPonderPlugin` | Hands the scenes to Ponder. A scene is filed under an **item id**, which is what the "hold W" prompt keys off |
 | `client/ponder/HardHatScene` | The hat's scene: programme, hire, haul, clock off |
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
@@ -259,13 +260,66 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   and it draws a solid cube over the whole skull regardless of what `head` contains — so
   `createLayer` replaces it with an empty `CubeListBuilder`. Its texture sheet therefore uses the
   gear UV layout at 128x64, *not* the 64x32 humanoid armour layout.
-- **Gear geometry has to clear what is already drawn underneath.** Villagers wear a `jacket` overlay
-  (body inflated 0.5), so a vest inflated by that same 0.5 lands exactly on it and z-fights. The
-  villager vest uses 1.0; the enderman, which has no overlay, uses 0.5. Declare boxes at whole-number
-  sizes and grow them with `CubeDeformation` so UVs stay on exact texels.
+- **The gear goes on by renderer, never by entity type.** A worker is any `Villager` or `EnderMan`,
+  and a mod that re-skins villagers does it by registering *its own entity type* with its own
+  renderer: Villagers Reborn replaces every villager in the world with a `Villager` subclass of its
+  own, so hiring, hauling and retiring all work — every functional check in the mod is an
+  `instanceof` — while the hat and vest silently never appear, because `AddLayers` was attaching them
+  to the renderer for `EntityType.VILLAGER` and nothing was using it (issue #1). `CWClient` therefore
+  offers the gear to *every* `LivingEntityRenderer` and lets `WorkerGearModels.fitTo` decide, which
+  costs nothing on the rest: both layers bail out on their first line for an entity with no worker
+  state, and only villagers and endermen are ever given any. What this cannot reach is a renderer
+  that is not a `LivingEntityRenderer` — GeckoLib's is not, and draws bones rather than a
+  `ModelPart` tree — so a mod rendering its villagers through one would need separate support.
+- **Gear geometry has to clear what is already drawn underneath, and is fitted rather than
+  hand-written.** Villagers wear a `jacket` overlay (body inflated 0.5), so a vest inflated by that
+  same 0.5 lands exactly on it and z-fights. `fitTo` reads three things off the model that will wear
+  the gear — where the top of the head is, how wide and deep the torso is, and whether anything is
+  already drawn over either — and reproduces the villager's hand-written 1.0 and the enderman's 0.5
+  exactly. Declare boxes at whole-number sizes and grow them with `CubeDeformation` so UVs stay on
+  exact texels; that is also what makes fitting possible, since a deformation moves geometry without
+  touching a UV.
+- **An overlay can be detected but never measured, and it is detected by its footprint.** The
+  thickness of a `jacket` or a hair layer is a `CubeDeformation`, which is baked into the cube's
+  *vertices* — `ModelPart.Cube`'s own `minX..maxZ` are the nominal box and read the same whatever the
+  inflation, and nothing public hands the deformation back. So `fitTo` looks for an x/z footprint
+  drawn twice and then assumes vanilla's 0.5 outer layer. It must be the footprint and not the whole
+  box: a villager's jacket is a 20-unit robe over a 12-unit torso, so comparing boxes misses it and
+  dresses every villager in a vest half a unit too small (which is exactly what the first draft
+  did). The corollary is that a model carrying its bulk in a deformation rather than in its boxes is
+  fitted to the boxes.
+- **The vest's declared depth is the one measurement the texture has an opinion about.** A box's UV
+  footprint is a function of its size, so an arbitrary torso depth cannot be declared directly: the
+  vest is declared at whichever of the sheet's two vest regions (6 deep at 0,28 and 4 at 32,28) is
+  nearer the measured torso and deformed the rest of the way, which keeps both vanilla shapes on
+  their own exact texels. Add a region and it has to be drawn on `worker_gear.png` first.
+- **A fit change wants checking against baked vertices, not against `Cube`'s extents.** There is no
+  client-side test suite — GameTests run on a dedicated server, where these classes do not load — but
+  the model builders are pure data and run in a plain JVM off the mod's own runtime classpath, so a
+  throwaway `main` can bake vanilla's `VillagerModel`/`EndermanModel`, run `fitTo` over them and
+  compare. Compare *vertex positions* (reflect into `Cube.polygons`) or the check is blind to
+  deformation and will happily pass a vest that is half a unit out.
 - Vanilla renders villager professions as *texture overlays re-rendered over the same mesh*
   (`VillagerProfessionLayer` → `renderColoredCutoutModel`), not as extra geometry — worth knowing if
   the vest ever needs to hug the robe rather than sit over it.
+- **Where the cargo is drawn is a question about the model, not about the mob.** A vanilla villager's
+  arms are one merged part in a fixed pose with no hands in it, so its cargo is held against the
+  chest; a model that is an `ArmedModel` gets it in the hand through the same sequence vanilla's
+  `ItemInHandLayer` uses, which is how a mod that draws villagers as humanoids gets hands without
+  this mod having heard of it. `ArmedModel` alone is not the test, though: `EndermanModel` is one
+  too, and its arms are thirty units long against a twelve-unit body, so its hands hang by its
+  ankles and an item in one reads as dropped. `WorkerGearModels.handsOf` therefore measures — the
+  hand may fall no more than half a torso below the torso — and returns the typed model or null, so
+  the decision is made once rather than tested again at the call site. The size comes from the item
+  model's own third-person transform, not from a figure chosen here: a block in hand is 0.375 of a
+  block against the 0.5 vanilla's `CarriedBlockLayer` gives an enderman, and against the 0.1875 the
+  chest carry works out at.
+- **The hat's clearance goes on the crown and nowhere else.** The crown is the only box sunk into the
+  head, so it is the only one with anything to clear — and growing the others pushes the peak into
+  the rim, which share a plane at `z = -5`. Two overlapping coplanar faces of one render type
+  stipple against each other, which is a worse artefact than the hairline z-fighting being fixed.
+  `FitCheck` asserts no two boxes of the hat overlap while sharing a face plane, and that was
+  mutation-checked by putting the clearance back on the rim and the peak.
 - **Idle rounds must only visit programmed targets** (`Workers.patrolStops`). That is the entire
   safety argument for `PATROL`: those positions are ones the worker already paths to while working,
   so idling cannot strand it anywhere it could not already get back from. Never widen the stop list

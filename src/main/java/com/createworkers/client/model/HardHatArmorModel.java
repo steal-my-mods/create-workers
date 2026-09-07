@@ -33,6 +33,12 @@ public class HardHatArmorModel extends HumanoidModel<LivingEntity> {
 	/** A humanoid head box spans y -8..0, the same as an enderman's. */
 	private static final float HEAD_TOP_Y = -8.0F;
 
+	/**
+	 * A player's hair is a sibling part rather than a box inside the head, and this model empties
+	 * the one the armour layer would have shown, so there is nothing on the skull to grow clear of.
+	 */
+	private static final float NO_CLEARANCE = 0.0F;
+
 	public HardHatArmorModel(ModelPart root) {
 		super(root);
 	}
@@ -42,7 +48,7 @@ public class HardHatArmorModel extends HumanoidModel<LivingEntity> {
 		PartDefinition root = mesh.getRoot();
 
 		// The hat stands in for the head box outright.
-		root.addOrReplaceChild("head", WorkerGearModels.hatCubes(HEAD_TOP_Y), PartPose.ZERO);
+		root.addOrReplaceChild("head", WorkerGearModels.hatCubes(HEAD_TOP_Y, NO_CLEARANCE), PartPose.ZERO);
 		// And the overlay box it would otherwise be buried under goes away.
 		root.addOrReplaceChild("hat", CubeListBuilder.create(), PartPose.ZERO);
 

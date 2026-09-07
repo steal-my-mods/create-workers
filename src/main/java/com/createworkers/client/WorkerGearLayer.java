@@ -1,7 +1,5 @@
 package com.createworkers.client;
 
-import org.jetbrains.annotations.Nullable;
-
 import com.createworkers.CreateWorkers;
 import com.createworkers.client.model.WorkerGearModels;
 import com.createworkers.worker.WorkerData;
@@ -10,11 +8,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
 import net.minecraft.client.model.EntityModel;
-import net.minecraft.client.model.HeadedModel;
-import net.minecraft.client.model.HierarchicalModel;
-import net.minecraft.client.model.HumanoidModel;
-import net.minecraft.client.model.geom.EntityModelSet;
-import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -32,11 +25,15 @@ public class WorkerGearLayer<T extends LivingEntity, M extends EntityModel<T>> e
 	private final ModelPart hat;
 	private final ModelPart vest;
 
-	public WorkerGearLayer(RenderLayerParent<T, M> parent, EntityModelSet models, ModelLayerLocation gear) {
+	/**
+	 * @param gear a gear root already fitted to the parent's model by
+	 *			   {@link WorkerGearModels#fitTo}, which is also what vouched for the parent having
+	 *			   a head and a torso to hang it on
+	 */
+	public WorkerGearLayer(RenderLayerParent<T, M> parent, ModelPart gear) {
 		super(parent);
-		ModelPart root = models.bakeLayer(gear);
-		this.hat = root.getChild(WorkerGearModels.HAT);
-		this.vest = root.getChild(WorkerGearModels.VEST);
+		this.hat = gear.getChild(WorkerGearModels.HAT);
+		this.vest = gear.getChild(WorkerGearModels.VEST);
 	}
 
 	@Override
@@ -52,7 +49,9 @@ public class WorkerGearLayer<T extends LivingEntity, M extends EntityModel<T>> e
 
 		VertexConsumer consumer = bufferSource.getBuffer(RenderType.entityCutoutNoCull(TEXTURE));
 
-		ModelPart head = findHead();
+		// Looked up per render rather than held: a renderer is free to hand back a different model
+		// than the one the gear was fitted to, and gear a shade out of place beats a crash.
+		ModelPart head = WorkerGearModels.headOf(getParentModel());
 		if (head != null) {
 			poseStack.pushPose();
 			head.translateAndRotate(poseStack);
@@ -60,33 +59,12 @@ public class WorkerGearLayer<T extends LivingEntity, M extends EntityModel<T>> e
 			poseStack.popPose();
 		}
 
-		ModelPart body = findBody();
+		ModelPart body = WorkerGearModels.bodyOf(getParentModel());
 		if (body != null) {
 			poseStack.pushPose();
 			body.translateAndRotate(poseStack);
 			vest.render(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY);
 			poseStack.popPose();
 		}
-	}
-
-	@Nullable
-	private ModelPart findHead() {
-		M model = getParentModel();
-		if (model instanceof HeadedModel headed)
-			return headed.getHead();
-		return null;
-	}
-
-	@Nullable
-	private ModelPart findBody() {
-		M model = getParentModel();
-		if (model instanceof HumanoidModel<?> humanoid)
-			return humanoid.body;
-		if (model instanceof HierarchicalModel<?> hierarchical) {
-			ModelPart root = hierarchical.root();
-			if (root.hasChild("body"))
-				return root.getChild("body");
-		}
-		return null;
 	}
 }
