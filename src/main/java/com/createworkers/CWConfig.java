@@ -140,10 +140,9 @@ public class CWConfig {
 		CLOCK_ON = builder
 			.comment("The time of day a worker starts again, in ticks. The default is first light.",
 				"Setting this later than clockOff inverts the two, which is how a night shift is made --",
-				"but a night shift rests standing rather than sleeping. A villager cannot sleep by day:",
-				"vanilla stands up any villager in a bed outside the village's own resting hours, every",
-				"tick, and that is not a fight worth picking. Off-shift workers walk to their bed and",
-				"wait beside it whenever the hours they keep are not the village's.")
+				"and it moves every worker on the server, not one of them. Note that a shift whose off",
+				"hours are daylight rests standing rather than sleeping: workers may only lie down during",
+				"the village's own resting hours, so they walk to their bed and wait beside it instead.")
 			.defineInRange("clockOn", 0, 0, 23999);
 
 		BED_SEARCH_RADIUS = builder

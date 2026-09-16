@@ -415,7 +415,10 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   `clockOn` in the config — decides only when the *work* stops, and `WorkerShift.isBedtime` — the
   villager's own schedule — decides when it may lie down. Collapse them into one and a `clockOff`
   earlier than 12000 is a worker lying down and being stood up again, every tick, until the village
-  turns in. A worker that has clocked off but may not sleep yet stands at the bedside.
+  turns in. A worker that has clocked off but may not sleep yet stands at the bedside. That is a
+  consequence of sharing the *village's* schedule, not a law: `Brain.setSchedule` is public and a
+  worker could be handed a schedule whose `REST` window is its own off-shift window, at which point
+  `WakeUp` agrees by construction. See `docs/shift-rotation.md`, which needs exactly that.
 - **A sleeping worker still has to be pinned.** `LivingEntity.isImmobile` is `isDeadOrDying()` for
   everything but a player, so goals, the brain and the navigation all keep running on a sleeping
   villager — and `Villager.startSleeping` *erases* `WALK_TARGET`, which is exactly the memory the
@@ -539,6 +542,9 @@ if the thinking changes — the point is that the analysis is not redone from sc
   it ever needs undoing)
 - `docs/professions.md` — what hiring does to a villager's village job, and the several ways of
   doing it that look equivalent and are not
+- `docs/shift-rotation.md` — two crews on one programme, so a line runs round the clock. Not built.
+  Holds the correction to the one thing `working-hours.md` got wrong: a worker **can** be given its
+  own `Schedule`, so a shift whose off-hours are daylight can sleep after all
 - `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,
   and the things a shared server still wants that this mod deliberately does not do
 

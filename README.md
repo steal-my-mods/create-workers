@@ -165,7 +165,8 @@ endermen stop being hostile — they are on the clock.
 At the end of the day a villager worker downs tools, walks to a bed and sleeps until morning. It
 clocks back on at first light and carries on where it left off. `workingHours` turns the whole thing
 off, and `clockOff` / `clockOn` move the hours — including past each other, which gives you a night
-shift.
+shift. All three are server-wide: every worker on the world keeps the same hours, whenever you hired
+them.
 
 **Endermen are exempt.** They have no bed and no schedule, and they are creatures of the night
 everywhere else in the game, so a line staffed by endermen runs around the clock. That is the reason
@@ -195,10 +196,10 @@ Two details you might otherwise read as bugs:
   village's business, not the factory's: villagers get up when their own schedule says morning, so a
   worker that lay down before the village's bedtime would simply be stood up again. Set `clockOff`
   before 12000 and you get a worker waiting to turn in, which is what it looks like anyway.
-- **A night shift rests standing, and never sleeps at all.** Its off-shift hours are daylight, and no
-  villager can sleep through those — so a worker on inverted hours walks to its bed each morning and
-  waits beside it. The bed is still worth assigning: it is where the worker spends the day, rather
-  than standing in the middle of the factory floor.
+- **A night shift rests standing rather than sleeping.** Its off-shift hours are daylight, and a
+  villager may only lie down during the village's own resting hours — so a worker on inverted hours
+  walks to its bed each morning and waits beside it. The bed is still worth assigning: it is where the
+  worker spends the day, rather than standing in the middle of the factory floor.
 
 ## Configuration
 

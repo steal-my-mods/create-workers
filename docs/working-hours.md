@@ -132,14 +132,20 @@ commute. At dawn it resumes and walks the worker back from the bed by itself.
    later than the `clockOff` is a night shift with no further machinery. What a player will actually
    feel is the default, which is the village's own hours.
 
-   **A night shift never sleeps, and cannot be made to.** Its off-shift window is daylight, and the
-   two-clock rule above says a worker may only lie down when the village is resting — so an inverted
-   worker walks to its bed each morning and stands beside it until evening. That is a vanilla
-   constraint rather than a choice: `WakeUp` is in the villager's CORE package at priority 0 and
-   stands up any daytime sleeper on the tick it finds one. Lifting it would mean taking the villager
-   schedule apart, which is a much larger thing than a night shift is worth. The bed still earns its
-   place — it is where the worker spends the day instead of standing on the factory floor — and the
-   config comment says so where someone inverting the hours will read it.
+   **A night shift does not sleep today.** Its off-shift window is daylight, and the two-clock rule
+   above says a worker may only lie down when the village is resting — so an inverted worker walks to
+   its bed each morning and stands beside it until evening. The bed still earns its place, as the spot
+   the worker spends the day rather than the middle of the factory floor, and the config comment says
+   what happens where someone inverting the hours will read it.
+
+   **The first draft of this section said that could never be fixed. That was wrong**, and the
+   correction is worth more than the mistake cost: the schedule is not something to be fought or
+   replaced wholesale, it is a field on the brain with a public setter. `Brain.setSchedule` is public,
+   `ScheduleBuilder` is public, and `Schedule` declares no constructor and so has an implicit public
+   one — meaning a worker can be handed a two-state schedule of its own whose `REST` window *is* its
+   off-shift window, at which point `WakeUp` agrees with us by construction rather than by
+   coincidence. [shift-rotation.md](shift-rotation.md) needs the same machinery and works it through
+   in full, including the part where the schedule is not persisted and has to be re-applied on load.
 4. **Interaction with `idleBehaviour`.** Off-shift is not a third idle state: it is its own branch,
    and it suppresses idling entirely. The rounds do not run at night, and a worker with nowhere to
    sleep holds station whatever `idleBehaviour` says. `PATROL` at 2am would be a worker walking its
