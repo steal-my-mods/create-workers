@@ -451,6 +451,23 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   that will never find it. Unpaced that is a pathfind per sleepless worker per tick for the length of
   a night; `aWorkerWithNowhereToSleepDoesNotHuntForABedEveryTick` bounds it as a rate and was
   mutation-checked by removing the interval, which measured exactly 400 hunts in 400 ticks.
+- **The leash always retried; what it never did was say so.** `walkHome` counts `leashRest` down and
+  tries again, indefinitely — a worker that *can* get home does, unaided, and nothing here ever gave
+  up permanently. The two things it lacked are now in: the rest **grows** with consecutive failures
+  (`restAfter`, capped, so a permanently walled-in worker settles at a few per cent of a tick rather
+  than pathfinding for 200 ticks out of every 800 for the rest of the world's life), and a worker past
+  `LEASH_LOST_AFTER` **broadcasts vanilla's unhappy-villager particles** on a slow clock, which is the
+  only symptom a stuck worker has ever had. `recallStuckWorkers` teleports one home and is off by
+  default, because a villager appearing out of thin air is not something this mod does anywhere else.
+  **The count lives on `WorkerData`, not on the goal**, because it is a fact about the villager and
+  the only externally visible sign that one is lost.
+- **A worker with something to do never looks lost, and that is deliberate.** `keepNearPost` clears
+  the leash the moment `getTargetPoint()` is non-null, so the failure count only accumulates while a
+  worker is genuinely idle *and* off station. A worker sealed in a box with a stocked depot spends its
+  time failing to reach the depot instead, which is the target set-aside clock's business, not the
+  leash's — it only starts counting once every target has been set aside too. Worth knowing before
+  building anything else on the count: **a test that stocks the site is testing the wrong clock**, and
+  anything wanting "has this worker been useless lately" needs more than `leashFailures()` alone.
 - **The wander leash does not run off shift.** A bed is inside the programme's spread but need not be
   inside `wanderRadius` of anything, so leaving the leash on would have it hauling the worker back off
   its own commute. Nothing is needed to undo that at dawn — the leash resumes and walks the worker

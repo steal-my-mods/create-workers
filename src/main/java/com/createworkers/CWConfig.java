@@ -49,6 +49,8 @@ public class CWConfig {
 	public static final ModConfigSpec.IntValue CLOCK_ON;
 	/** How far from the job site a worker may look for a bed nobody gave it. */
 	public static final ModConfigSpec.IntValue BED_SEARCH_RADIUS;
+	/** Whether a worker that cannot walk home is put back by hand. */
+	public static final ModConfigSpec.BooleanValue RECALL_STUCK_WORKERS;
 
 	static {
 		ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -151,6 +153,14 @@ public class CWConfig {
 				"search rather than a promise about the walk. 0 turns the search off entirely: a worker",
 				"then sleeps only in a bed assigned on its hat, and stands its ground all night without.")
 			.defineInRange("bedSearchRadius", 16, 0, 64);
+
+		RECALL_STUCK_WORKERS = builder
+			.comment("Whether a worker that has repeatedly failed to walk back to its work is teleported",
+				"there. Off by default, because a worker appearing out of thin air is not something this",
+				"mod does anywhere else -- but a worker at the bottom of a hole is a line quietly running",
+				"short with nothing to say which villager to go and find, and some servers would rather",
+				"have the teleport than the puzzle. Workers that can walk home always walk.")
+			.define("recallStuckWorkers", false);
 
 		builder.pop();
 		SPEC = builder.build();

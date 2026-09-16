@@ -140,6 +140,12 @@ A worker that has somehow strayed further than `wanderRadius` from its job site 
 programmed blocks count as posts too, so one at the far end of a long run is at work rather than
 wandering. A villager fleeing a mob is never pinned or dragged back.
 
+If it *cannot* get back — walled in, or at the bottom of a hole — it keeps trying, but waits longer
+between attempts each time, and after a few failures it starts giving off the same unhappy particles
+a villager shows when you break its workstation. That is the only way to spot the difference between
+a line running slow and a line running one worker short. Turn on `recallStuckWorkers` if you would
+rather have it teleported back than go looking.
+
 Everywhere a worker is sent, it is allowed `pathTimeout` ticks of getting no nearer before it gives
 up: on a target, which is set aside for half a minute before it is tried again; on a stop on its
 rounds, which drops off them for the same; or on the walk home, after which it stands where it is
@@ -223,6 +229,7 @@ Two details you might otherwise read as bugs:
 | `clockOff` | 12000 | Time of day the tools go down: 0 is dawn, 6000 noon, 12000 dusk. The default is when the village itself turns in |
 | `clockOn` | 0 | Time of day work starts again. Later than `clockOff` inverts the two, which is how you get a night shift |
 | `bedSearchRadius` | 16 | How far from the job site a worker may look for a bed of its own. 0 means it sleeps only in a bed assigned on its hat |
+| `recallStuckWorkers` | `false` | Whether a worker that has repeatedly failed to walk back to its work is teleported there. Workers that can walk home always walk; this is only for the one at the bottom of a hole |
 
 ## Development
 

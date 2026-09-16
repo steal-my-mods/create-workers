@@ -134,6 +134,11 @@ public class WalkLocomotion implements WorkerLocomotion {
 	}
 
 	@Override
+	public boolean needsLeash() {
+		return true;
+	}
+
+	@Override
 	public void stop(Mob mob) {
 		Brain<?> brain = mob.getBrain();
 		brain.eraseMemory(MemoryModuleType.WALK_TARGET);

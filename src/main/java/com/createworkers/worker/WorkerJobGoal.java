@@ -42,8 +42,16 @@ public class WorkerJobGoal extends Goal {
 	private static final int SET_ASIDE_TICKS = 600;
 	/** How long a worker must have had nothing to do before it starts making its rounds. */
 	private static final int IDLE_GRACE_TICKS = 60;
-	/** How long the leash stands down after failing to get a worker home. */
+	/** How long the leash stands down after failing to get a worker home, once. */
 	private static final int LEASH_REST_TICKS = 600;
+	/** The longest it will ever stand down, however many times it has failed. */
+	private static final int LEASH_REST_MAX = 6000;
+	/** How many failures in a row before a worker is treated as lost rather than delayed. */
+	private static final int LEASH_LOST_AFTER = 3;
+	/** How often a lost worker says so. */
+	private static final int LOST_SIGNAL_TICKS = 100;
+	/** Vanilla's "this villager is unhappy" entity event, which is what the signal borrows. */
+	private static final byte ANGRY_PARTICLES = 13;
 	/** How long a worker keeps trying to hand over what is already in its hands after the whistle. */
 	private static final int KNOCK_OFF_GRACE_TICKS = 200;
 	/** How long between bed hunts for a worker that has nowhere to sleep. */
@@ -86,6 +94,8 @@ public class WorkerJobGoal extends Goal {
 	private int idleTicks;
 	/** Ticks left before the leash tries again, after it could not get the worker home. */
 	private int leashRest;
+	/** Ticks until a lost worker next says so. */
+	private int lostSignal;
 
 	public WorkerJobGoal(Mob mob, WorkerLocomotion locomotion) {
 		this.mob = mob;
@@ -202,7 +212,7 @@ public class WorkerJobGoal extends Goal {
 		// while holdAt was standing down, would hold wherever it ended up and never walk back -- and
 		// the wander leash, which would normally catch that, is deliberately off for the night.
 		forgetRounds();
-		forgetLeash();
+		forgetLeash(data);
 		goToBed(data);
 		return true;
 	}
@@ -317,18 +327,22 @@ public class WorkerJobGoal extends Goal {
 	private void keepNearPost(WorkerData data, long gameTime) {
 		if (data.getTargetPoint() != null) {
 			forgetIdling();
-			forgetLeash();
+			forgetLeash(data);
 			return; // already headed somewhere, and that takes priority
 		}
 
 		idleTicks++;
 
-		// Strayed off the patch entirely: walk back to the middle of the job.
-		if (Workers.isOffStation(mob.blockPosition(), data, CWConfig.WANDER_RADIUS.get())) {
+		// Strayed off the patch entirely: walk back to the middle of the job. Only for workers that
+		// can stray in the first place -- an enderman only ever moves where the job sends it, so
+		// leashing one is bookkeeping with nothing behind it, and a distress signal from one would be
+		// a false alarm.
+		if (locomotion.needsLeash()
+			&& Workers.isOffStation(mob.blockPosition(), data, CWConfig.WANDER_RADIUS.get())) {
 			walkHome(data);
 			return;
 		}
-		forgetLeash();
+		forgetLeash(data);
 
 		switch (CWConfig.IDLE_BEHAVIOUR.get()) {
 			case WANDER -> forgetIdling(); // vanilla's problem now; the leash above is the backstop
@@ -352,6 +366,8 @@ public class WorkerJobGoal extends Goal {
 	 * drifting any further, which is most of what the leash was for.
 	 */
 	private void walkHome(WorkerData data) {
+		signalIfLost(data);
+
 		if (leashRest > 0) {
 			leashRest--;
 			holdStation(); // given up for now, but not letting it wander further
@@ -366,8 +382,71 @@ public class WorkerJobGoal extends Goal {
 		}
 
 		homeward.reset();
-		leashRest = LEASH_REST_TICKS;
+		data.recordLeashFailure();
+		leashRest = restAfter(data.leashFailures());
+
+		if (data.leashFailures() >= LEASH_LOST_AFTER && CWConfig.RECALL_STUCK_WORKERS.get()
+			&& recall(data, home))
+			return;
+
 		holdStation();
+	}
+
+	/**
+	 * How long the leash waits before trying again, after {@code failures} attempts in a row.
+	 *
+	 * <p>Growing, because a worker that has failed three times is not going to succeed on the fourth
+	 * for any reason the fourth attempt can discover. Each attempt is {@code pathTimeout} ticks of
+	 * pinning a walk target the sink re-paths for whenever it is not already following one, which is
+	 * the most expensive thing this mod does; at a flat rest that is a quarter of every worker-tick
+	 * spent pathfinding somewhere unreachable, forever. Capped so the leash never stops trying
+	 * altogether: a door somebody opens at midnight should still be noticed.
+	 *
+	 * <p>Pure and static so it can be reasoned about without a world — the growth is the point, and it
+	 * is easier to read as arithmetic than to infer from a worker's behaviour over ten thousand ticks.
+	 */
+	public static int restAfter(int failures) {
+		return Math.min(LEASH_REST_TICKS * Math.max(1, failures), LEASH_REST_MAX);
+	}
+
+	/**
+	 * Says, to anyone near enough to see, that this worker is not coming back on its own.
+	 *
+	 * <p>The one thing the leash never did. It has always retried — a worker that can get home does,
+	 * unaided — but a worker that cannot has no symptom at all: the line quietly runs short and
+	 * nothing says which villager to go and look for. Vanilla's own unhappy-villager particles are the
+	 * cheapest possible answer, on a slow clock, and they cost nothing at all when nobody is close
+	 * enough to be sent them.
+	 */
+	private void signalIfLost(WorkerData data) {
+		if (data.leashFailures() < LEASH_LOST_AFTER)
+			return;
+		if (lostSignal-- > 0)
+			return;
+
+		lostSignal = LOST_SIGNAL_TICKS;
+		if (mob.level() instanceof ServerLevel level)
+			level.broadcastEntityEvent(mob, ANGRY_PARTICLES);
+	}
+
+	/**
+	 * The last resort, and off unless an operator asked for it: put a worker that cannot walk home
+	 * back where it works.
+	 *
+	 * <p>Deliberately not the default. A villager appearing out of thin air is not something this mod
+	 * does anywhere else, and a worker stuck somewhere is a fact about the base worth discovering. But
+	 * the alternative is a line running short forever over one villager in a hole, and some servers
+	 * would rather have the teleport than the puzzle.
+	 *
+	 * @return whether it worked; a refused teleport falls through to holding station as before.
+	 */
+	private boolean recall(WorkerData data, BlockPos home) {
+		if (!mob.randomTeleport(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D, true))
+			return false;
+
+		forgetLeash(data);
+		forgetIdling();
+		return true;
 	}
 
 	/**
@@ -477,9 +556,11 @@ public class WorkerJobGoal extends Goal {
 	}
 
 	/** Gives the leash a clean slate: whatever it was doing, the worker has moved on from it. */
-	private void forgetLeash() {
+	private void forgetLeash(WorkerData data) {
 		homeward.reset();
 		leashRest = 0;
+		lostSignal = 0;
+		data.clearLeashFailures();
 	}
 
 	/**

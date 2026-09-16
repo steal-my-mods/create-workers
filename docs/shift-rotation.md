@@ -252,7 +252,7 @@ factory becomes a village on its own terms. `VillageBoundRandomStroll` then has 
 and outside the village it pulls *toward* the nearest village section, which is the bunkhouse. The
 leash and the stroll end up pointing the same way instead of fighting.
 
-## The leash is not broken — it is silent
+## The leash is not broken — it is silent *(built)*
 
 An earlier draft said the leash "tries for `pathTimeout`, stands down for `LEASH_REST_TICKS`, then
 holds station **forever**", and proposed making it escalate rather than give up. **Reading the code
@@ -272,6 +272,9 @@ So the real picture is milder in one way and worse in another:
   bottom of a hole, and there is no signal of any kind.
 
 Which makes the work smaller and differently shaped than the earlier draft claimed:
+
+**All three are now built** — `restAfter`, the particle signal, and `recallStuckWorkers`. What follows
+is the reasoning they came from.
 
 1. **Report it.** The important one. A worker that has failed to get home for several minutes should
    stop being invisible — the angry-villager particle on a slow clock costs nothing, and the name

@@ -10,6 +10,7 @@ import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWItems;
 import com.createworkers.worker.WorkerData;
+import com.createworkers.worker.WorkerJobGoal;
 import com.createworkers.worker.WorkerShift;
 import com.createworkers.worker.Workers;
 import com.createworkers.worker.target.WorkerTarget;
@@ -94,9 +95,18 @@ public class WorkerShiftGameTests {
 
 	/** What the batch that turns working hours off found the setting at, to put it back. */
 	private static boolean workingHoursWere = true;
+	private static boolean recallWas = false;
+	private static int wanderRadiusWas = 12;
 	/** ...and the same for the batch that inverts the hours onto a night shift. */
 	private static int clockOnWas = 0;
 	private static int clockOffWas = 12000;
+
+	/** A sealed box in the far corner, for a worker that genuinely cannot walk anywhere. */
+	private static final BlockPos CELL = new BlockPos(9, 1, 1);
+	/** Small enough that the cell is off station, which an 11-block site cannot manage at the default. */
+	private static final int TIGHT_WANDER_RADIUS = 4;
+	/** Three failures at a growing rest, plus the attempts between them, with room to spare. */
+	private static final int LONG_ENOUGH_TO_GIVE_UP_THRICE = 3000;
 
 	/** A night shift: on at dusk, off at dawn-ish, so its off-hours are broad daylight. */
 	private static final int NIGHT_SHIFT_ON = 12000;
@@ -164,7 +174,52 @@ public class WorkerShiftGameTests {
 		level.setDayTime(WORKING_HOURS_TIME);
 	}
 
+	/**
+	 * A world that teleports workers it cannot get home, and a wander radius tight enough that the
+	 * test site can put one outside it.
+	 */
+	@BeforeBatch(batch = "recall")
+	public static void allowRecalls(ServerLevel level) {
+		recallWas = CWConfig.RECALL_STUCK_WORKERS.get();
+		wanderRadiusWas = CWConfig.WANDER_RADIUS.get();
+		CWConfig.RECALL_STUCK_WORKERS.set(true);
+		CWConfig.WANDER_RADIUS.set(TIGHT_WANDER_RADIUS);
+	}
+
+	@AfterBatch(batch = "recall")
+	public static void restoreRecalls(ServerLevel level) {
+		CWConfig.RECALL_STUCK_WORKERS.set(recallWas);
+		CWConfig.WANDER_RADIUS.set(wanderRadiusWas);
+	}
+
 	// --- the clock ---------------------------------------------------------------------------
+
+	/**
+	 * The leash waits longer each time it fails to get a worker home.
+	 *
+	 * <p>Asserted as arithmetic rather than by watching a worker for ten thousand ticks, which is what
+	 * the growth is for: each attempt is {@code pathTimeout} ticks of pinning a walk target that the
+	 * sink re-paths for whenever it is not already following one, and at a flat rest that is a quarter
+	 * of every tick of a stuck worker's life spent pathfinding somewhere it cannot reach.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void theLeashWaitsLongerEachTimeItFails(GameTestHelper helper) {
+		int first = WorkerJobGoal.restAfter(1);
+		helper.assertTrue(first > 0, "a first failure should still rest");
+		helper.assertTrue(WorkerJobGoal.restAfter(2) > first, "a second failure should wait longer than the first");
+		helper.assertTrue(WorkerJobGoal.restAfter(3) > WorkerJobGoal.restAfter(2), "and a third longer again");
+
+		// Capped, so the leash never stops trying altogether -- a door opened at midnight should
+		// still be noticed before morning.
+		int capped = WorkerJobGoal.restAfter(1000);
+		helper.assertTrue(capped == WorkerJobGoal.restAfter(10000), "the wait should be capped, not unbounded");
+		helper.assertTrue(capped < WorkerShift.DAY_LENGTH, "and the cap should be well under a day");
+
+		// Never negative or zero however it is asked, since a rest of nothing is the busy loop this
+		// whole mechanism exists to avoid.
+		helper.assertTrue(WorkerJobGoal.restAfter(0) > 0, "even an uncounted failure should rest");
+		helper.succeed();
+	}
 
 	/**
 	 * A worker's schedule is its own hours, not the village's.
@@ -736,6 +791,45 @@ public class WorkerShiftGameTests {
 	}
 
 	/**
+	 * A worker that genuinely cannot walk home gives up in stages, and is fetched if the server asked
+	 * for that.
+	 *
+	 * <p>Sealed into a box it cannot path out of, so the leash can never succeed. What is asserted is
+	 * the count climbing — which is the signal a stuck worker now carries, and what the growing rest
+	 * and the distress particles are both computed from — and then the recall putting it back.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 4000, batch = "recall")
+	public static void aStuckWorkerIsCountedAndThenFetched(GameTestHelper helper) {
+		// Deliberately nothing to haul. A worker with work keeps a target selected, and a worker
+		// headed somewhere is not a worker the leash has any business dragging home -- so a stocked
+		// site would be testing the target set-aside clock instead of this one.
+		layFloor(helper);
+		helper.setBlock(SOURCE, AllBlocks.DEPOT.getDefaultState());
+		helper.setBlock(TARGET, AllBlocks.DEPOT.getDefaultState());
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		hire(helper, villager, null);
+		WorkerData data = Workers.getOrCreate(villager);
+		BlockPos jobSite = data.getJobSite();
+
+		sealIn(helper, villager, CELL);
+		helper.assertTrue(Workers.isOffStation(villager.blockPosition(), data, CWConfig.WANDER_RADIUS.get()),
+			"precondition: the cell should be off station, or the leash never runs at all");
+
+		helper.startSequence()
+			.thenIdle(LONG_ENOUGH_TO_GIVE_UP_THRICE / 2)
+			.thenExecute(() -> helper.assertTrue(data.leashFailures() > 0,
+				"a walled-in worker should be counting its failures, and has counted "
+					+ data.leashFailures()))
+			.thenIdle(LONG_ENOUGH_TO_GIVE_UP_THRICE / 2)
+			.thenExecute(() -> helper.assertTrue(villager.blockPosition()
+				.closerThan(jobSite, 3.0D),
+				"a server that asked for recalls should have had this one fetched, and it is at "
+					+ villager.blockPosition() + " with " + data.leashFailures() + " failures counted"))
+			.thenSucceed();
+	}
+
+	/**
 	 * Morning. A batch of one, because this is the only test that moves the clock itself — and it
 	 * puts the world back to working hours on the way out, for whatever runs next.
 	 */
@@ -821,6 +915,23 @@ public class WorkerShiftGameTests {
 				CWConfig.BED_SEARCH_RADIUS.get(), PoiManager.Occupancy.ANY)
 			.findAny()
 			.isPresent();
+	}
+
+	/**
+	 * Walls a worker into a one-block cell it cannot path out of: four sides at head and foot height,
+	 * and a lid. A hole would not do — a villager steps up one block and climbs straight out.
+	 */
+	private static void sealIn(GameTestHelper helper, Villager villager, BlockPos cell) {
+		for (int y = 1; y <= 2; y++) {
+			helper.setBlock(cell.offset(1, y - 1, 0), Blocks.POLISHED_ANDESITE);
+			helper.setBlock(cell.offset(-1, y - 1, 0), Blocks.POLISHED_ANDESITE);
+			helper.setBlock(cell.offset(0, y - 1, 1), Blocks.POLISHED_ANDESITE);
+			helper.setBlock(cell.offset(0, y - 1, -1), Blocks.POLISHED_ANDESITE);
+		}
+		helper.setBlock(cell.above(2), Blocks.POLISHED_ANDESITE);
+
+		BlockPos inside = helper.absolutePos(cell);
+		villager.moveTo(inside.getX() + 0.5D, inside.getY(), inside.getZ() + 0.5D, 0, 0);
 	}
 
 	private static void layFloor(GameTestHelper helper) {

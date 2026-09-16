@@ -85,6 +85,20 @@ public interface WorkerLocomotion {
 	}
 
 	/**
+	 * Whether this kind of worker can drift off its patch under its own steam, and so has to be
+	 * walked back.
+	 *
+	 * <p>A separate question from {@link #makesRounds} even though the answer is the same today. That
+	 * one asks whether a worker fills its idle time by walking a beat; this asks whether it can end up
+	 * somewhere nobody sent it. An enderman answers no to both for the same underlying reason — it only
+	 * ever moves where the job sends it — but they are not the same reason stated twice, and a worker
+	 * that drifted without patrolling would need them apart.
+	 */
+	default boolean needsLeash() {
+		return false;
+	}
+
+	/**
 	 * Whether this kind of worker keeps hours at all — knocks off at the end of the day, walks to a
 	 * bed and sleeps until morning.
 	 *

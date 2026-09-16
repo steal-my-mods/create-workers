@@ -69,6 +69,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	private int slotProbes;
 	private int deliveryProbes;
 	private int bedSearches;
+	private int leashFailures;
 	@Nullable
 	private ArmBlockEntity host;
 
@@ -414,6 +415,27 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 
 	void countBedSearch() {
 		bedSearches++;
+	}
+
+	/**
+	 * How many times in a row this worker has failed to walk back to its work.
+	 *
+	 * <p>Worker state rather than goal state, for the same reason the cost tallies are: it is a fact
+	 * about this villager, it is what the leash's back-off and its distress signal are both computed
+	 * from, and it is the only externally visible sign that a worker is stuck rather than merely slow.
+	 * Runtime only, never serialized — a worker that comes back from disk deserves a fresh start, and
+	 * one that was genuinely walled in will re-earn the count within a couple of minutes.
+	 */
+	public int leashFailures() {
+		return leashFailures;
+	}
+
+	public void recordLeashFailure() {
+		leashFailures++;
+	}
+
+	public void clearLeashFailures() {
+		leashFailures = 0;
 	}
 
 	private void resetCostAccount() {
