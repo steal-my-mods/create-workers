@@ -67,16 +67,15 @@ public final class WorkerShift {
 	private static final int WOKEN_COOLDOWN_TICKS = 100;
 
 	/**
-	 * The schedule a worker on the current hours keeps, rebuilt when those hours change.
+	 * The schedule each crew keeps on the current hours, rebuilt when those hours change.
 	 *
-	 * <p>One object serves every worker on the server, because the hours are one server-wide pair of
-	 * settings. Cached rather than rebuilt per worker: a {@code Schedule} is immutable once built, and
-	 * handing the same one to a thousand brains is a thousand field writes rather than a thousand
-	 * allocations. Rebuilt only when the config it was built from has moved under it, which a config
-	 * reload can do at any time.
+	 * <p>Three objects serve every worker on the server, because the hours are one server-wide pair of
+	 * settings and a shift is only an offset into them. Cached rather than rebuilt per worker: a
+	 * {@code Schedule} is immutable once built, and handing the same one to a thousand brains is a
+	 * thousand field writes rather than a thousand allocations. Rebuilt only when the config they were
+	 * built from has moved under them, which a config reload can do at any time.
 	 */
-	@Nullable
-	private static Schedule cachedSchedule;
+	private static final Schedule[] cachedSchedules = new Schedule[Shift.VALUES.length];
 	private static int cachedClockOn = -1;
 	private static int cachedClockOff = -1;
 
@@ -99,6 +98,12 @@ public final class WorkerShift {
 	 * <p>Nothing to undo on retirement: {@code refreshBrain} puts the village's own schedule back.
 	 */
 	public static void applySchedule(Mob mob) {
+		WorkerData data = Workers.get(mob);
+		applySchedule(mob, data == null ? Shift.DAY : data.getShift());
+	}
+
+	/** The same, for a crew named rather than read off the worker. */
+	public static void applySchedule(Mob mob, Shift shift) {
 		if (!(mob instanceof Villager villager))
 			return;
 		// With hours switched off a worker never clocks off, so it should keep the village's schedule
@@ -106,10 +111,30 @@ public final class WorkerShift {
 		if (!CWConfig.WORKING_HOURS.get())
 			return;
 
-		Schedule schedule = workerSchedule(CWConfig.CLOCK_ON.get(), CWConfig.CLOCK_OFF.get());
+		Schedule schedule = scheduleFor(shift);
 		if (schedule != null)
 			villager.getBrain()
 				.setSchedule(schedule);
+	}
+
+	/**
+	 * This crew's schedule on the current hours, built once and handed to every worker on it.
+	 *
+	 * <p>All three are thrown away together when the hours move, because they are all derived from the
+	 * same pair of settings — there is no state in which one of them is stale and another is not.
+	 */
+	@Nullable
+	public static Schedule scheduleFor(Shift shift) {
+		int clockOn = CWConfig.CLOCK_ON.get();
+		int clockOff = CWConfig.CLOCK_OFF.get();
+		if (cachedClockOn != clockOn || cachedClockOff != clockOff) {
+			java.util.Arrays.fill(cachedSchedules, null);
+			cachedClockOn = clockOn;
+			cachedClockOff = clockOff;
+		}
+		if (cachedSchedules[shift.ordinal()] == null)
+			cachedSchedules[shift.ordinal()] = workerSchedule(shift.clockOn(), shift.clockOff());
+		return cachedSchedules[shift.ordinal()];
 	}
 
 	/**
@@ -129,14 +154,9 @@ public final class WorkerShift {
 		if (Math.floorMod(clockOff - clockOn, DAY_LENGTH) == 0)
 			return null;
 
-		if (cachedSchedule == null || cachedClockOn != clockOn || cachedClockOff != clockOff) {
-			cachedSchedule = new ScheduleBuilder(new Schedule()).changeActivityAt(clockOn, Activity.IDLE)
-				.changeActivityAt(clockOff, Activity.REST)
-				.build();
-			cachedClockOn = clockOn;
-			cachedClockOff = clockOff;
-		}
-		return cachedSchedule;
+		return new ScheduleBuilder(new Schedule()).changeActivityAt(clockOn, Activity.IDLE)
+			.changeActivityAt(clockOff, Activity.REST)
+			.build();
 	}
 
 	/**
@@ -148,11 +168,11 @@ public final class WorkerShift {
 	 * that is a curiosity; for something wired into a factory it is the exact failure this feature was
 	 * warned about, a line that stops for reasons invisible from the machine. So it does not stop.
 	 */
-	public static boolean isOffShift(Level level) {
+	public static boolean isOffShift(Level level, Shift shift) {
 		if (level.dimensionType()
 			.hasFixedTime())
 			return false;
-		return isOffShift(level.getDayTime());
+		return isOffShift(level.getDayTime(), shift.clockOn(), shift.clockOff());
 	}
 
 	/**
@@ -164,8 +184,8 @@ public final class WorkerShift {
 	 * moment it begins; read as a day that never ends rather than one that never starts, because
 	 * that is the reading in which a misconfigured clock still moves items.
 	 */
-	public static boolean isOffShift(long dayTime) {
-		return isOffShift(dayTime, CWConfig.CLOCK_ON.get(), CWConfig.CLOCK_OFF.get());
+	public static boolean isOffShift(long dayTime, Shift shift) {
+		return isOffShift(dayTime, shift.clockOn(), shift.clockOff());
 	}
 
 	/** The same, with the two ends of the shift named rather than read from the config. */

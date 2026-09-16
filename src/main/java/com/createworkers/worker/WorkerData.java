@@ -56,6 +56,15 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	 */
 	@Nullable
 	private GlobalPos station;
+	/**
+	 * Which crew this worker belongs to, and so which hours it keeps.
+	 *
+	 * <p>Lives on the worker rather than on the hat. A station's slot says which shifts a job
+	 * <em>runs</em>; this says which of them this particular villager was hired onto, and it is what
+	 * {@code WorkerShift} reads to decide when the tools go down. A hand-hired enderman keeps the day
+	 * crew's hours and never consults them, having no schedule at all.
+	 */
+	private Shift shift = Shift.DAY;
 	private int targetIndex = -1;
 	private int lastInputIndex = -1;
 	private int lastOutputIndex = -1;
@@ -161,6 +170,15 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		this.station = null;
 	}
 
+	/** @return the crew this worker is on, and so the hours it keeps. */
+	public Shift getShift() {
+		return shift;
+	}
+
+	public void setShift(Shift shift) {
+		this.shift = shift;
+	}
+
 	/** Puts the entity to work with the given hat. */
 	public void employ(ItemStack hatStack, WorkerProgram program) {
 		this.hat = hatStack.copyWithCount(1);
@@ -172,6 +190,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		this.lastOutputIndex = -1;
 		this.cooldown = 0;
 		this.station = null;
+		this.shift = Shift.DAY;
 		invalidatePoints();
 	}
 
@@ -194,6 +213,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		phase = Phase.SEARCH_INPUTS;
 		targetIndex = -1;
 		station = null;
+		shift = Shift.DAY;
 		releasePoints();
 		return drops;
 	}
@@ -670,6 +690,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		tag.putInt("LastInput", lastInputIndex);
 		tag.putInt("LastOutput", lastOutputIndex);
 		tag.putInt("Cooldown", cooldown);
+		tag.putString("Shift", shift.getSerializedName());
 		if (station != null)
 			GlobalPos.CODEC.encodeStart(NbtOps.INSTANCE, station)
 				.resultOrPartial(CreateWorkers.LOGGER::error)
@@ -688,6 +709,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		lastInputIndex = tag.getInt("LastInput");
 		lastOutputIndex = tag.getInt("LastOutput");
 		cooldown = tag.getInt("Cooldown");
+		shift = Shift.byName(tag.getString("Shift"), Shift.DAY);
 		station = null;
 		if (tag.contains("Station"))
 			GlobalPos.CODEC.parse(NbtOps.INSTANCE, tag.get("Station"))

@@ -13,6 +13,7 @@ import com.createworkers.registry.CWPoiTypes;
 import com.createworkers.registry.CWProfessions;
 import com.createworkers.worker.TeleportLocomotion;
 import com.createworkers.worker.WalkLocomotion;
+import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.Workers;
 import com.createworkers.worker.target.WorkerTarget;
@@ -1317,7 +1318,7 @@ public class WorkerGameTests {
 			NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(player, InteractionHand.MAIN_HAND, mob));
 		} else {
 			ItemStack hat = programmedHat(helper);
-			Workers.employ(mob, hat, HardHatItem.getProgram(hat), null);
+			Workers.employ(mob, hat, HardHatItem.getProgram(hat), null, Shift.DAY);
 		}
 		helper.assertTrue(Workers.isEmployed(mob), "the mob should have been hired");
 	}

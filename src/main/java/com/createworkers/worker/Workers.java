@@ -3,6 +3,7 @@ package com.createworkers.worker;
 import org.jetbrains.annotations.Nullable;
 
 import com.createworkers.CWConfig;
+import com.createworkers.block.WorkerStationBlockEntity;
 import com.createworkers.net.WorkerStatePacket;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWAttachments;
@@ -124,13 +125,15 @@ public class Workers {
 	 * be deleted rather than maintained — see {@code docs/professions.md} for what used to be here and
 	 * why none of it is needed once hiring goes through a workstation like every other job.
 	 */
-	public static void employ(Mob mob, ItemStack hat, WorkerProgram programme, @Nullable GlobalPos station) {
+	public static void employ(Mob mob, ItemStack hat, WorkerProgram programme, @Nullable GlobalPos station,
+		Shift shift) {
 		WorkerData data = getOrCreate(mob);
 		data.employ(hat, programme);
+		data.setShift(shift);
 		if (station != null)
 			data.rememberStation(station);
 
-		WorkerShift.applySchedule(mob);
+		WorkerShift.applySchedule(mob, shift);
 		data.markAtWork(mob.level()
 			.getGameTime());
 		updateCargoAppearance(mob, data.getHeld());
@@ -161,6 +164,48 @@ public class Workers {
 
 		WorkerStatePacket.sync(mob, data);
 		return drops;
+	}
+
+	/**
+	 * Checks that a worker's station still has it down as one of its own, and sacks it if not.
+	 *
+	 * <p>The roster is the authority on who works for a station, and this is the other half of that:
+	 * a station that cannot see a worker has to guess whether it is unloaded or gone, and when it
+	 * guesses gone it hires a replacement. A worker that then turns out to have been merely unloaded
+	 * would come back doing a job somebody else now has, invisible to the block that is supposed to
+	 * know about it. So every worker asks, on every load, whether it is still on the books.
+	 *
+	 * <p>A station whose chunk is away answers nothing and the worker is left alone — it will ask
+	 * again next time. Only a station that is there and says no counts as a no.
+	 */
+	public static void verifyEmployment(Mob mob) {
+		WorkerData data = get(mob);
+		if (data == null || !data.isEmployed())
+			return;
+
+		GlobalPos station = data.getStation();
+		if (station == null || station.dimension() != mob.level()
+			.dimension())
+			return;
+		if (!mob.level()
+			.isLoaded(station.pos()))
+			return;
+
+		if (!(mob.level()
+			.getBlockEntity(station.pos()) instanceof WorkerStationBlockEntity rack)) {
+			// The block is gone without having sacked anybody, which breaking it does -- so something
+			// removed it out from under the world. Nothing is left to employ this worker and nothing
+			// could ever fire it, and the hat it is wearing is no longer a copy of one in a rack, so
+			// it drops with the rest rather than ceasing to exist.
+			data.forgetStation();
+			for (ItemStack drop : dismiss(mob))
+				mob.spawnAtLocation(drop);
+			return;
+		}
+
+		if (!rack.employs(mob.getUUID()))
+			for (ItemStack drop : dismiss(mob))
+				mob.spawnAtLocation(drop);
 	}
 
 	/**

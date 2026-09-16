@@ -119,6 +119,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `worker/WorkerData` | Per-entity state (NeoForge attachment). Holds the port of `ArmBlockEntity`'s transfer algorithm |
 | `worker/WorkerJobGoal` | Phase machine: search input → travel → collect → search output → travel → deposit. Also owns the stall clocks that stop a hopeless walk costing a pathfind a tick, and the night: `clockOff` → `goToBed` → `turnIn` → `clockOn` |
 | `worker/WorkerShift` | Working hours. Both clocks (the operator's and the village's), the bed hunt, and what makes a bed usable |
+| `worker/Shift` | Which crew a worker is on. **An offset into the configured working day, not a pair of times** — one third of a day per crew, so the span stays the operator's single choice |
 | `worker/WalkLocomotion` | Villagers. Also owns `returnTo`, the wander leash |
 | `worker/TeleportLocomotion` | Endermen. Holds the teleport cooldown, so locomotion instances are **per-worker**, not shared |
 | `worker/WorkerEvents` | Hiring, retiring, drops, conversion, client sync, cleanup, and the vetoes that stop vanilla's own enderman AI from undoing the job |
@@ -134,8 +135,8 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
 | `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own. Its job-site predicates match the worker station **and nothing else** |
 | `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over |
-| `block/WorkerStationBlockEntity` | Holds one programmed hat and notices when a villager has claimed the block |
-| `registry/CWPoiTypes` | The station as a village workstation — one ticket, so vanilla enforces one worker per station |
+| `block/WorkerStationBlockEntity` | A line's roster: an ordered rack of hats, the shifts each runs on, who is wearing them, and the point-of-interest tickets it holds back |
+| `registry/CWPoiTypes` | The station as a village workstation. `maxTickets` is the largest roster the mod allows, because it belongs to the *type*; the block holds back the difference |
 | `recipe/ClearProgramRecipe` | Crafting a hat by itself blanks its program, the way a Create filter clears |
 
 ## Things that will bite you
@@ -616,6 +617,57 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   and count only simulated probes, since the one real extract or insert that ends a search is the
   work rather than the looking. Mutation-check every cost test: one that passes against the code it
   was written to condemn reads like cover. See `docs/multiplayer-performance.md` for the numbers.
+- **`maxTickets` belongs to the point-of-interest *type*, so a station holds back its own surplus.**
+  Every station is registered with room for the largest roster the mod allows (`MAX_SLOTS × 3`, which
+  is why `MAX_SLOTS` is a constant and the config can only cap *below* it). Left alone, a station with
+  one job would have three dozen villagers cross the village to be turned away — each of them made a
+  Worker by `AssignProfessionFromJobSite` on arrival and un-made by `ResetProfession` a tick later.
+  `reconcileTickets` therefore aims at one invariant, **free tickets equal vacancies**, taking tickets
+  in the station's own name and releasing them as openings appear. That makes "free tickets" mean
+  "openings", after which vanilla's `AcquirePoi` does the enforcing exactly as it does for one
+  librarian per lectern. Aiming at an invariant rather than reacting to events is what makes it repair
+  itself after a load, a config change or a death the station was not loaded to see. `reserved` is
+  persisted because the tickets are — a `PoiRecord` saves its free count with the chunk section — and
+  reset to zero the moment a rack goes from empty to occupied, because an empty station is not a job
+  site at all and the record it is about to get starts full. `aStationAdvertisesOnlyTheOpeningsItHas`
+  bounds it, mutation-checked by dropping the reconciliation, which advertised 36 openings for 4 jobs.
+- **`HAS_JOB` must mean "has a hat", never "has a vacancy".** It is the property the point of interest
+  is registered over, so a state change that leaves the set destroys the `PoiRecord` — which releases
+  every ticket the station's *living* workers hold and then has `ValidateNearbyPoi` erase their
+  `JOB_SITE` memories, after which `ResetProfession` clears the profession off a whole crew. A fully
+  staffed station dropping out of the POI set is therefore the one thing that must not happen, and the
+  vacancy count is expressed in tickets precisely so that it never has to touch the block state.
+- **A station cannot tell an unloaded worker from a dead one, and the ticket count only answers in
+  aggregate.** `getEntity(uuid)` finds loaded entities only, so a station that read "not found" as
+  "gone" would hire a second villager onto a job somebody is already doing. Tickets are the honest
+  signal — released by `Villager.die` (which zombie conversion goes through) and by `thunderHit`, never
+  on unloading — but a `PoiRecord` is a counter, so it can say *how many* of the workers we cannot see
+  have gone and never *which*. `auditRoster` strikes off the unaccounted-for from the bottom of the
+  fill order, and the other half of the deal is `Workers.verifyEmployment`: **every worker asks its
+  station, on every load, whether it is still on the books**, and sacks itself if not. Without that a
+  worker that was only unloaded comes back doing a job the station has given to somebody else, with
+  nothing anywhere that knows. A station whose chunk is away answers nothing and the worker is left
+  alone; only a station that is there and says no counts as a no.
+  (`aWorkerStruckOffTheRosterSacksItselfWhenItLoads`, mutation-checked by dropping the call.)
+- **Fill order is shift-major, slot-minor, and that is the whole reason a station holds a line rather
+  than a job.** Workers in a factory are a chain: take one out and the one before it fills a depot that
+  never drains and then stops entirely, so a shift missing a worker usually produces *nothing* rather
+  than less. Concentrating a short crew on one shift is therefore a correctness rule, not a
+  preference — and a rule about several jobs at once has to live somewhere that can see several jobs at
+  once. One station with N slots loops over its own roster; N single-slot stations could only
+  coordinate by talking to each other, which is a distributed problem invented to avoid a list. Slot
+  order breaks ties within a shift, which is what makes the order of the rack the player's priority
+  lever. (`shortCrewsFillWholeShiftsBeforeDeepOnes`, mutation-checked by swapping the loops.)
+- **Never build a game test on two villagers finding the same station by themselves.** `AcquirePoi`
+  scans 48 blocks, which on the test grid reaches several other tests' stations, and a claim it loses
+  puts that position on a backoff that grows to 400 ticks — so whether the second villager is hired
+  inside any particular window is a coin toss, and a test written that way fails under mutations it
+  has nothing to do with. The single-villager tests cover the wiring into vanilla; anything about the
+  *rack* uses `claimant()`, which sets `JOB_SITE`, takes the ticket and assigns the profession by hand,
+  exactly as vanilla leaves a villager that has arrived. It also sets `setNoAi` — an unemployed
+  villager strolls, and one that strolls out of `HIRING_RANGE` between two of the station's twenty-tick
+  looks is a test failing on the villager's legs. A real claimant cannot do that: it is hired within a
+  tick or two of arriving, because arriving is what made it a Worker.
 
 ## Design notes
 
@@ -631,13 +683,16 @@ if the thinking changes — the point is that the analysis is not redone from sc
 - `docs/professions.md` — what hiring does to a villager's village job, and the several ways of
   doing it that look equivalent and are not
 - `docs/shift-rotation.md` — shifts, food and leisure as one feature, because `GoToWantedItem` needs
-  `WALK_TARGET` absent and so a pinned worker can never feed itself. Not built. Holds the correction
+  `WALK_TARGET` absent and so a pinned worker can never feed itself. **Shifts are built**; food and
+  leisure are not. Holds what a shift turned out to be (an offset, on the worker, set by the slot) and
+  the correction
   to the one thing `working-hours.md` got wrong (a worker **can** be given its own `Schedule`), the
   canteen block nothing in vanilla provides, and the revised case *for* giving workers trades
 - `docs/worker-station.md` — the block that hires workers: a rack of programmed hats for one
   production *line*, filled through the vanilla point-of-interest route, so a lost worker's job
-  refills itself. Not built. Holds the argument that a part-staffed shift produces nothing rather
-  than less, and the two pieces of existing complexity the block would let us delete
+  refills itself. **Built, except the screen.** Holds the argument that a part-staffed shift produces
+  nothing rather than less, why single-slot stations were rejected, and how a block advertises fewer
+  openings than its point-of-interest type allows
 - `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,
   and the things a shared server still wants that this mod deliberately does not do
 

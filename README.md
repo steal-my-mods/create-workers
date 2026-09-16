@@ -53,14 +53,22 @@ P A P      H = Hard Hat, programmed
            A = Andesite Alloy
 ```
 
+A station holds up to twelve hats, and each one is a job on its own line. It fills them **one shift at
+a time** — every job's day crew, then every job's evening crew, then every job's night crew — because
+a factory's workers are a chain, and a shift missing one of them usually produces nothing rather than
+less. When the village is short of villagers, the order of the rack is how you say which jobs matter
+most.
+
 The hat stays in the station and the worker wears a copy, so **if that worker dies the job is still
 there** and the next villager along picks it up. And if one stops turning up — walled in by a build,
 fallen somewhere it cannot climb out of — the station gives the job away after `absenteeTimeout` and
 hires a replacement, so a line never quietly runs short over one lost villager. A factory built on
 stations repairs its own workforce.
 
-To end the job, take the hat back out with an empty hand or break the block; either one hands the hat
-back and puts the villager out of work.
+To end a job, take its hat back out with an empty hand or break the block; either one hands the hat
+back and puts that job's workers out of work, leaving the rest of the rack running. (An empty hand
+currently takes the *last* hat out. Choosing which one, rearranging the rack and setting each job's
+shifts need the station screen, which is not built yet.)
 
 Two things a station will not do. A villager that already has a job of its own will never take one —
 break its workstation first, the same way vanilla makes you — and children are never hired, because a
@@ -190,9 +198,12 @@ endermen stop being hostile — they are on the clock.
 
 At the end of the day a villager worker downs tools, walks to a bed and sleeps until morning. It
 clocks back on at first light and carries on where it left off. `workingHours` turns the whole thing
-off, and `clockOff` / `clockOn` move the hours — including past each other, which gives you a night
-shift. All three are server-wide: every worker on the world keeps the same hours, whenever you hired
-them.
+off, and `clockOff` / `clockOn` move the working day — including past each other, which inverts it.
+
+Those two set **one** working day, and the three crews each start a third of a day later than the last:
+a job set to run all three shifts is staffed round the clock by three villagers keeping the same hours
+at different times. Make the day longer than eight thousand ticks and two crews overlap at each
+hand-over, which is usually what you want; shorter and the factory stands idle between them.
 
 **Endermen are exempt.** They have no bed and no schedule, and they are creatures of the night
 everywhere else in the game, so a line staffed by endermen runs around the clock. That is the reason
@@ -249,6 +260,7 @@ Two details you might otherwise read as bugs:
 | `clockOn` | 0 | Time of day work starts again. Later than `clockOff` inverts the two, which is how you get a night shift |
 | `bedSearchRadius` | 16 | How far from the job site a worker may look for a bed of its own. 0 means it sleeps only in a bed assigned on its hat |
 | `recallStuckWorkers` | `false` | Whether a worker that has repeatedly failed to walk back to its work is teleported there. Workers that can walk home always walk; this is only for the one at the bottom of a hole |
+| `stationSlots` | 12 | How many jobs one Worker Station may hold. Each may run three shifts, so this is really a cap on villagers — twelve jobs is up to thirty-six of them. 12 is the ceiling and cannot be raised |
 | `absenteeTimeout` | 6000 | How long a worker may go without being anywhere near its own work before its station gives the job to somebody else. 0 never gives up on anyone |
 
 ## Development

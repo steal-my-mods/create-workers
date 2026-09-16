@@ -1,8 +1,9 @@
 # The Worker Station
 
-**Status: not built.** The block that hires workers, and the thing
-[shift rotation](shift-rotation.md) should probably wait for, because it is where a crew gets
-defined.
+**Status: built, except the screen.** The block hires, holds a rack of up to twelve jobs, runs each
+of them on any of the three shifts, replaces workers that die and reclaims jobs from workers that stop
+turning up. What is not built is the arrangement UI — see [How hats get in and out](#how-hats-get-in-and-out)
+and open question 1.
 
 ## In one sentence
 
@@ -96,10 +97,28 @@ Two details worth knowing before building it:
 - **Only unemployed villagers take the job.** `AssignProfessionFromJobSite` returns early unless the
   profession is `NONE`. A librarian will never spontaneously become a worker; you hire it by hand, or
   you break its lectern first. That is correct behaviour and it matches every other profession.
-- **`maxTickets` is per POI *type*, not per block.** Register it at the largest crew the mod supports
-  and let a station refuse a villager it has no free hat for — that villager releases the POI and
-  goes back to being unemployed. Self-correcting, and mildly wasteful in that a villager may walk
-  over for nothing.
+- **`maxTickets` is per POI *type*, not per block.** Registered at the largest roster the mod
+  supports, which is why the slot cap is a constant the config can only lower. See
+  [Advertising openings](#advertising-openings) for what the block does about the difference.
+
+### Advertising openings
+
+The first draft said to register the type at the largest crew and let a station turn away villagers it
+had no hat for. That works and is self-correcting, but it is much worse than it sounds: a station with
+one job would have three dozen villagers walk across the village, each made a Worker on arrival by
+`AssignProfessionFromJobSite` and un-made by `ResetProfession` a tick later.
+
+So the block **holds back the tickets it has no opening for**, taking them in its own name and
+releasing them as vacancies appear. Free tickets then mean openings, and vanilla's own `AcquirePoi`
+enforces the count exactly as it does for one librarian per lectern. It is written as an invariant —
+*free tickets equal vacancies* — approached from whichever side it is currently on, so it repairs
+itself after a load, a config change or a death the station was not loaded to see, with none of those
+needing a case of its own.
+
+One thing this must not be built on: `HAS_JOB` means *has a hat*, never *has a vacancy*. It is the
+property the point of interest is registered over, so a fully staffed station dropping out of the POI
+set would destroy the record, release every ticket its living workers hold, and end with
+`ResetProfession` clearing the profession off the whole crew.
 
 ## Filling shifts: whole shifts, because a partial one is a broken factory
 
@@ -149,7 +168,8 @@ another hat's `TAKE` target is a chain link — but that is a pile of fragile in
 overriding a decision the player is better placed to make.
 
 **So the station fills in order and does not second-guess.** Two policies, both defensible without
-knowing the topology:
+knowing the topology, and both now implemented as one loop in `nextVacancy()` — shift-major,
+slot-minor:
 
 - **Fill slots in list order.** Which makes *slot order the player's way of saying what matters most*
   — put one of each role first and the spares after, and a short-handed station gives you complete
@@ -162,6 +182,24 @@ knowing the topology:
 And **fill the daytime shift first**, so an understaffed factory runs during the hours the player is
 most likely to be standing in it. A factory that only works while you are asleep is one you cannot
 debug.
+
+### Single-slot stations were considered, and they break exactly this
+
+Worth recording, because the argument looks reasonable from the outside. Deferring the screen is
+tempting — it is the one piece with no game-test coverage, client classes not loading on a dedicated
+server — and a station with one slot needs no list, no ordering and no drag.
+
+**But the fill order is a property of a line, and a single-slot station cannot see one.** N stations
+competing for the village's unemployed villagers have nothing sequencing them, so the day shift of
+one job fills while another job's day shift stays empty — which, by the chain argument above, is the
+case that produces nothing. The coordination could be approximated (throttle each station to one
+opening so the natural spread is roughly even) but not guaranteed, and the approximation is a pile of
+heuristics scattered across independent blocks: the distributed problem the roster framing exists to
+avoid, reintroduced to save a GUI. It also makes "take the hat out to fire the workers" ambiguous,
+since the block no longer knows which crew a hat belongs to.
+
+The ticket throttle survived on its own merits — see [Advertising openings](#advertising-openings) —
+but as the mechanism that makes a *variable-size* roster work, not as a substitute for one.
 
 What the station owes the player is not a judgement but a **clear readout** — which slots are filled,
 which are not, and on which shift:
@@ -250,13 +288,15 @@ Capped, for three reasons that all point at a similar number:
 3. **A line with more roles than that is two lines.** The roster framing suggests a modest number by
    construction.
 
-**One flat list of slots, each holding a hat and tagged with a shift**, rather than a grid of roles
-times shifts. Simpler to cap, simpler to order — which matters, because slot order is now the
+**One flat list of slots, each holding a hat and a set of shifts it runs on**, rather than a grid of
+roles times shifts. Simpler to cap, simpler to order — which matters, because slot order is now the
 player's priority lever — and more flexible: a role can run three shifts while another runs one,
 which a grid would forbid for no reason.
 
-Twelve is a reasonable starting cap. Three shifts of four roles is already a serious line and twelve
-villagers is already a serious village.
+Twelve is the cap, as `WorkerStationBlockEntity.MAX_SLOTS`, with `stationSlots` able to lower it but
+never raise it — the ceiling is baked into the point of interest at registration. Twelve jobs on three
+shifts is thirty-six villagers, which is a serious village; four roles on three shifts is already a
+serious line.
 
 ## Coming back: the self-healing part, and its limit
 
@@ -271,8 +311,16 @@ villagers is already a serious village.
 the bottom of a hole is still alive and still employed, so its slot is not free and the station will
 not replace it. The job is occupied by someone who is never coming to work.
 
-The answer is an **absentee rule**: a station reclaims a job from a worker that has not been near any
-of its own targets — or the station — for some long while. The hat comes back, someone else is hired,
+There is a second gap of the same shape, and it needs the worker's help rather than the station's.
+A station cannot tell an unloaded worker from a dead one: `getEntity` finds only loaded entities, and
+the ticket count is a counter, so it can say *how many* of the ones it cannot see have gone but never
+*which*. It therefore strikes off the unaccounted-for from the bottom of its fill order and may
+occasionally be wrong — so **every worker asks its station, on every load, whether it is still on the
+books**, and sacks itself if not. Without that, a worker that was only unloaded comes back doing a job
+the station has given to somebody else, invisible to the one block supposed to know who works there.
+
+The answer to the other half is an **absentee rule**: a station reclaims a job from a worker that has
+not been near any of its own targets — or the station — for some long while. The hat comes back, someone else is hired,
 and the absentee is retired properly, which restores its old profession and leaves an ordinary
 villager standing in a hole. Harmless, and the factory carries on.
 
@@ -380,10 +428,12 @@ Which is a genuinely interesting choice rather than a strictly-better option on 
 
 ## Open questions
 
-1. **Should slot order be visible as priority?** It is load-bearing now — it is how a player says
-   which roles matter most when the village is short — so the screen probably has to show it as an
-   order rather than as an unordered grid, and let it be rearranged. That is more UI than a plain
-   container.
+1. **The screen.** The only part of this note not built. Slot order is load-bearing — it is how a
+   player says which roles matter most when the village is short — so it has to be shown as an order
+   and be rearrangeable, alongside the shift toggles per slot, the readout and the rename field. That
+   is more than a plain container, which is the whole of its risk. Until it exists, a hat goes in with
+   a right-click and the last one comes back out with an empty hand, which covers a one- or two-job
+   station and nothing larger.
 2. **How does a station cope with a line too big for its slots?** Raise the cap, or let a station name
    another it depends on — an explicit link, never an inferred one. Not worth building before someone
    hits it.

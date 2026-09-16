@@ -82,18 +82,19 @@ public class WorkerStationBlock extends BaseEntityBlock {
 		Player player, InteractionHand hand, BlockHitResult hit) {
 		if (!(stack.getItem() instanceof HardHatItem))
 			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-		if (!(level.getBlockEntity(pos) instanceof WorkerStationBlockEntity station) || station.hasJob())
+		if (!(level.getBlockEntity(pos) instanceof WorkerStationBlockEntity station))
 			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 
-		if (!level.isClientSide()) {
-			station.setHat(stack.copyWithCount(1));
-			if (!player.getAbilities().instabuild)
-				stack.shrink(1);
-		}
-		return ItemInteractionResult.sidedSuccess(level.isClientSide());
+		if (level.isClientSide())
+			return ItemInteractionResult.sidedSuccess(true);
+		if (!station.addHat(stack))
+			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+		if (!player.getAbilities().instabuild)
+			stack.shrink(1);
+		return ItemInteractionResult.SUCCESS;
 	}
 
-	/** An empty hand takes the hat back out, and the job with it. */
+	/** An empty hand takes the last hat back out, and the jobs on it with it. */
 	@Override
 	protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
 		BlockHitResult hit) {
@@ -101,9 +102,8 @@ public class WorkerStationBlock extends BaseEntityBlock {
 			return InteractionResult.PASS;
 
 		if (!level.isClientSide()) {
-			ItemStack hat = station.getHat();
-			station.dismissWorker();
-			station.setHat(ItemStack.EMPTY);
+			ItemStack hat = station.removeHat(station.slots()
+				.size() - 1);
 			if (!player.getInventory()
 				.add(hat))
 				player.drop(hat, false);
@@ -125,9 +125,9 @@ public class WorkerStationBlock extends BaseEntityBlock {
 			return;
 
 		if (level.getBlockEntity(pos) instanceof WorkerStationBlockEntity station) {
-			station.dismissWorker();
-			if (station.hasJob())
-				Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), station.getHat());
+			station.dismissAll();
+			for (WorkerStationBlockEntity.Slot slot : station.slots())
+				Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), slot.hat());
 		}
 		super.onRemove(state, level, pos, newState, movedByPiston);
 	}

@@ -61,6 +61,12 @@ public class WorkerEvents {
 		if (!Workers.isEmployed(mob))
 			return;
 
+		// A station cannot tell an unloaded worker from a dead one, so it may have hired a replacement
+		// while this one was away. The roster is the authority; ask it before going back to work.
+		Workers.verifyEmployment(mob);
+		if (!Workers.isEmployed(mob))
+			return;
+
 		// A brain does not serialize its schedule, and building one sets the village's. So a worker
 		// coming back from disk has the wrong hours until this puts its own back.
 		WorkerShift.applySchedule(mob);
@@ -128,7 +134,8 @@ public class WorkerEvents {
 			return;
 		}
 
-		Workers.employ((Mob) target, stack, program, null);
+		// The day crew, which an enderman never consults: it keeps no hours at all.
+		Workers.employ((Mob) target, stack, program, null, Shift.DAY);
 		if (!player.getAbilities().instabuild)
 			stack.shrink(1);
 

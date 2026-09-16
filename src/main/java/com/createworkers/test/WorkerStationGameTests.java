@@ -1,6 +1,8 @@
 package com.createworkers.test;
 
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
@@ -12,12 +14,14 @@ import com.createworkers.registry.CWBlocks;
 import com.createworkers.registry.CWItems;
 import com.createworkers.registry.CWPoiTypes;
 import com.createworkers.registry.CWProfessions;
+import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.Workers;
 import com.createworkers.worker.target.WorkerTarget;
 import com.simibubi.create.AllBlocks;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -37,6 +41,8 @@ import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
 
 /**
@@ -197,8 +203,7 @@ public class WorkerStationGameTests {
 				WorkerData data = Workers.getOrCreate(villager);
 				helper.assertTrue(data.getStation() != null, "a station-hired worker should remember its station");
 
-				station(helper).dismissWorker();
-				station(helper).setHat(ItemStack.EMPTY);
+				station(helper).removeHat(0);
 
 				helper.assertTrue(!Workers.isEmployed(villager),
 					"and should be sacked when the job is taken away, there being no other way to fire one");
@@ -234,8 +239,7 @@ public class WorkerStationGameTests {
 			.thenExecute(() -> {
 				helper.assertTrue(villager.getVillagerData()
 					.getLevel() <= 1, "precondition: nothing should have raised its trade level");
-				station(helper).dismissWorker();
-				station(helper).setHat(ItemStack.EMPTY);
+				station(helper).removeHat(0);
 			})
 			.thenWaitUntil(() -> {
 				helper.assertTrue(villager.getVillagerData()
@@ -328,6 +332,206 @@ public class WorkerStationGameTests {
 	 * Walls a worker into a cell it cannot path out of, far enough from its work to count as away.
 	 * A hole would not do — a villager steps up one block and climbs straight out.
 	 */
+
+	// --- the roster ----------------------------------------------------------------------
+
+	/**
+	 * The answer to "how do we fill shifts one at a time": <b>shift-major, slot-minor</b>.
+	 *
+	 * <p>This is the whole reason a station holds a line rather than a job. Workers in a factory are a
+	 * chain, so a shift missing one of them usually produces <em>nothing</em> rather than less — the
+	 * worker before the gap fills a depot that never drains and then stops entirely. A short crew
+	 * therefore has to be concentrated on one shift rather than spread thinly over three, and a rule
+	 * about several jobs at once needs a block that can see several jobs at once.
+	 *
+	 * <p>Two jobs, both wanting a day and an evening crew, and two villagers to fill four positions.
+	 * Both must land on the day shift. Fill slot-first instead and one job runs around the clock while
+	 * the other never starts, which is the shape that produces nothing.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void shortCrewsFillWholeShiftsBeforeDeepOnes(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		putHatIn(helper, STATION);
+		station(helper).setShifts(0, Set.of(Shift.DAY, Shift.EVENING));
+		station(helper).setShifts(1, Set.of(Shift.DAY, Shift.EVENING));
+
+		// One villager at a time, and the second only once the first has a job. Two arriving together
+		// would leave the order they were hired in up to whichever reached the block first, which is
+		// exactly the thing under test.
+		claimant(helper);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1,
+				"the first villager should take the first job on the day shift"))
+			.thenExecute(() -> {
+				helper.assertTrue(station(helper).slots()
+					.get(0)
+					.worker(Shift.DAY) != null, "and specifically the first job, the rack being the priority order");
+				claimant(helper);
+			})
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY)
+				+ station(helper).staffed(Shift.EVENING) == 2, "the second villager should take a job too"))
+			.thenExecute(() -> {
+				helper.assertTrue(station(helper).staffed(Shift.DAY) == 2,
+					"a crew of two should cover both jobs on one shift, and it covers "
+						+ station(helper).staffed(Shift.DAY) + " of them");
+				helper.assertTrue(station(helper).staffed(Shift.EVENING) == 0,
+					"rather than starting a second shift nobody can complete");
+			})
+			.thenSucceed();
+	}
+
+	/**
+	 * A station advertises exactly as many openings as it has, and no more.
+	 *
+	 * <p>{@code maxTickets} belongs to the point-of-interest type rather than to the block, so every
+	 * station is registered with room for the largest roster the mod allows. Left alone, a station with
+	 * one job would have three dozen villagers walk across the village to be turned away, each of them
+	 * made a Worker on arrival and un-made again a tick later. Holding back the tickets it has no
+	 * opening for is what makes "free tickets" mean "openings" — after which vanilla's own
+	 * {@code AcquirePoi} does the enforcing, exactly as it does for one librarian per lectern.
+	 *
+	 * <p>No villagers in this one on purpose: what is being measured is the advertisement, and an
+	 * entity walking over would only add a way for it to be right by accident.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void aStationAdvertisesOnlyTheOpeningsItHas(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		putHatIn(helper, STATION);
+		station(helper).setShifts(1, Set.of(Shift.DAY, Shift.EVENING, Shift.NIGHT));
+
+		BlockPos pos = helper.absolutePos(STATION);
+		helper.assertTrue(CWPoiTypes.MAX_TICKETS > 4,
+			"precondition: the type must advertise more than this station wants, or nothing is being held back");
+
+		helper.succeedWhen(() -> helper.assertTrue(freeTickets(helper, pos) == 4,
+			"one job on one shift and one on three is four openings, and it advertises "
+				+ freeTickets(helper, pos)));
+	}
+
+	/**
+	 * Taking one hat out sacks that job's crew and nobody else's.
+	 *
+	 * <p>Firing a villager is taking its hat out of the rack, there being no other way now — so the
+	 * rack has to be able to say whose hat it was. A station that sacked everybody when one job ended
+	 * would make the priority order unusable: rearranging the rack is a thing a player does while the
+	 * factory runs.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void takingOneHatOutLeavesTheRestOfTheCrewWorking(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		putHatIn(helper, STATION);
+
+		claimant(helper);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1, "one job covered"))
+			.thenExecute(() -> claimant(helper))
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 2,
+				"both jobs should be covered before anything is taken away"))
+			.thenExecute(() -> {
+				WorkerStationBlockEntity rack = station(helper);
+				UUID sacked = rack.slots()
+					.get(0)
+					.worker(Shift.DAY);
+				UUID kept = rack.slots()
+					.get(1)
+					.worker(Shift.DAY);
+				helper.assertTrue(sacked != null && kept != null && !sacked.equals(kept),
+					"precondition: two jobs, two different villagers");
+
+				rack.removeHat(0);
+
+				helper.assertTrue(!Workers.isEmployed(helper.getLevel()
+					.getEntity(sacked)), "the crew of the job that was taken away should be sacked");
+				helper.assertTrue(Workers.isEmployed(helper.getLevel()
+					.getEntity(kept)), "and the crew of the job that was not should still be working");
+			})
+			.thenSucceed();
+	}
+
+	/**
+	 * A worker asks its station, on every load, whether it is still on the books.
+	 *
+	 * <p>The other half of the roster being the authority. A station cannot tell an unloaded worker
+	 * from a dead one — {@code getEntity} finds only loaded entities, and a point-of-interest ticket is
+	 * a counter rather than a name — so it sometimes strikes off a worker that was only away, and hires
+	 * somebody else into the job. Without this check that worker would come back and carry on doing a
+	 * job the station has given to somebody else, invisible to the one block that is supposed to know
+	 * who works there.
+	 *
+	 * <p>Set up by employing a villager against a station that has never heard of it, which is exactly
+	 * the state the returning worker is in.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void aWorkerStruckOffTheRosterSacksItselfWhenItLoads(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+
+		Villager stray = helper.spawn(EntityType.VILLAGER, BESIDE_STATION.east(2));
+		ItemStack hat = new ItemStack(CWItems.HARD_HAT.get());
+		HardHatItem.setProgram(hat, programme(helper));
+		Workers.employ(stray, hat, HardHatItem.getProgram(hat),
+			GlobalPos.of(helper.getLevel()
+				.dimension(), helper.absolutePos(STATION)),
+			Shift.DAY);
+
+		helper.assertTrue(Workers.isEmployed(stray), "precondition: it is employed, and by that station");
+		helper.assertTrue(!station(helper).employs(stray.getUUID()),
+			"precondition: and the station has never heard of it");
+
+		NeoForge.EVENT_BUS.post(new EntityJoinLevelEvent(stray, helper.getLevel()));
+
+		helper.assertTrue(!Workers.isEmployed(stray),
+			"a worker its station has struck off should sack itself rather than carry on unseen");
+		helper.succeed();
+	}
+
+	/**
+	 * A villager standing at the station having already claimed it, exactly as vanilla leaves one.
+	 *
+	 * <p>Two villagers finding the same station by themselves is not a thing to build a test on. Each
+	 * one's {@code AcquirePoi} searches 48 blocks, which on a game-test grid reaches several other
+	 * tests' stations, and a claim it loses puts that position on a backoff that grows to 400 ticks —
+	 * so whether the second one is hired inside any particular window is a coin toss. That the wiring
+	 * into vanilla works at all is what the single-villager tests above are for; what these need is
+	 * two claimants, arriving in a known order.
+	 */
+	private static Villager claimant(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos station = helper.absolutePos(STATION);
+		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+
+		// Everything AssignProfessionFromJobSite would have done on arrival, and the ticket AcquirePoi
+		// would have taken on the way -- without which the station's own accounting is being handed a
+		// world that could not happen.
+		level.getPoiManager()
+			.take(type -> type.is(CWPoiTypes.WORKER_STATION_KEY), (type, pos) -> pos.equals(station), station, 1);
+		villager.setVillagerData(villager.getVillagerData()
+			.setProfession(CWProfessions.WORKER.get()));
+		villager.getBrain()
+			.setMemory(MemoryModuleType.JOB_SITE, GlobalPos.of(level.dimension(), station));
+		// And held where it stands. An unemployed villager strolls, and one that strolls out of the
+		// station's hiring range between two of its twenty-tick looks is a test that fails on the
+		// villager's legs rather than on the rack's bookkeeping. A real claimant cannot do this: it is
+		// hired within a tick or two of arriving, because arriving is what made it a Worker.
+		villager.setNoAi(true);
+		return villager;
+	}
+
+	private static int freeTickets(GameTestHelper helper, BlockPos pos) {
+		return helper.getLevel()
+			.getPoiManager()
+			.getFreeTickets(pos);
+	}
+
 	private static void sealIn(GameTestHelper helper, Villager villager, BlockPos cell) {
 		for (int y = 1; y <= 2; y++) {
 			helper.setBlock(cell.offset(1, y - 1, 0), Blocks.POLISHED_ANDESITE);
@@ -367,7 +571,7 @@ public class WorkerStationGameTests {
 	private static void putHatIn(GameTestHelper helper, BlockPos relative) {
 		ItemStack hat = new ItemStack(CWItems.HARD_HAT.get());
 		HardHatItem.setProgram(hat, programme(helper));
-		station(helper).setHat(hat);
+		station(helper).addHat(hat);
 	}
 
 	private static WorkerProgram programme(GameTestHelper helper) {

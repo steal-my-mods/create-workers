@@ -51,6 +51,8 @@ public class CWConfig {
 	public static final ModConfigSpec.BooleanValue RECALL_STUCK_WORKERS;
 	/** How long a worker may be away from its work before its station gives the job to somebody else. */
 	public static final ModConfigSpec.IntValue ABSENTEE_TIMEOUT;
+	/** How many jobs one station may hold. */
+	public static final ModConfigSpec.IntValue STATION_SLOTS;
 
 	static {
 		ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -164,6 +166,14 @@ public class CWConfig {
 				"job. Measured by where the worker is, not by how much it has moved, because a worker",
 				"with nothing to haul is idle rather than absent. 0 never gives up on anyone.")
 			.defineInRange("absenteeTimeout", 6000, 0, 72000);
+
+		STATION_SLOTS = builder
+			.comment("How many jobs one worker station may hold. Each job may run on up to three shifts,",
+				"so a station of this many slots is up to three times this many villagers -- which is",
+				"what this setting is really metering, since every worker costs a server something every",
+				"tick. 12 is the ceiling the mod is built for and cannot be raised: the number of",
+				"villagers one station can hire is fixed when its point of interest is registered.")
+			.defineInRange("stationSlots", 12, 1, 12);
 
 		builder.pop();
 		SPEC = builder.build();

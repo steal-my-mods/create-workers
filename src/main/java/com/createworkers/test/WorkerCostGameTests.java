@@ -9,6 +9,7 @@ import com.createworkers.net.WorkerStatePacket;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWComponents;
 import com.createworkers.registry.CWItems;
+import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.WorkerShift;
 import com.createworkers.worker.Workers;
@@ -392,7 +393,7 @@ public class WorkerCostGameTests {
 		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
 		WorkerData data = employ(helper, villager, INPUTS, OUTPUTS);
 
-		helper.assertTrue(WorkerShift.isOffShift(helper.getLevel()),
+		helper.assertTrue(WorkerShift.isOffShift(helper.getLevel(), Shift.DAY),
 			"precondition: this batch is the one that runs at night");
 
 		int window = 400;

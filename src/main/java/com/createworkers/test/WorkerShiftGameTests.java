@@ -9,6 +9,7 @@ import com.createworkers.CreateWorkers;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWItems;
+import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.WorkerJobGoal;
 import com.createworkers.worker.WorkerShift;
@@ -269,7 +270,7 @@ public class WorkerShiftGameTests {
 		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
 		hire(helper, villager, null);
 
-		Schedule ours = WorkerShift.workerSchedule(CWConfig.CLOCK_ON.get(), CWConfig.CLOCK_OFF.get());
+		Schedule ours = WorkerShift.scheduleFor(Shift.DAY);
 		helper.assertTrue(villager.getBrain()
 			.getSchedule() == ours, "a hired worker should be keeping the worker schedule");
 		helper.assertTrue(villager.getBrain()
@@ -310,6 +311,46 @@ public class WorkerShiftGameTests {
 		// Clocking off at the moment you clock on is read as a day that never ends, because that is
 		// the reading in which a misconfigured pair still moves items.
 		helper.assertTrue(!WorkerShift.isOffShift(18000L, 4000, 4000), "a zero-length shift should never end");
+		helper.succeed();
+	}
+
+
+	/**
+	 * The three crews keep one working day between them, each started a third of a day later.
+	 *
+	 * <p>A shift is an offset rather than a pair of times, which is the whole reason there is still
+	 * only one pair of settings: shorten the working day and every crew's day shortens, move dawn and
+	 * every crew moves with it, and no two of them can ever be made to contradict each other. What the
+	 * player is left choosing is the <em>span</em>, and the consequences of that choice are visible
+	 * here — a span equal to the offset tiles the clock exactly, and the default's longer one puts two
+	 * crews on at the changeover, which is what stops a chain of workers stalling at the hand-over.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void theThreeCrewsShareOneWorkingDayAtDifferentHours(GameTestHelper helper) {
+		int on = CWConfig.CLOCK_ON.get();
+		int off = CWConfig.CLOCK_OFF.get();
+		int span = Math.floorMod(off - on, WorkerShift.DAY_LENGTH);
+
+		helper.assertTrue(Shift.DAY.clockOn() == on, "the day crew keeps the hours as configured");
+		for (Shift shift : Shift.VALUES) {
+			helper.assertTrue(shift.clockOn() == Math.floorMod(on + shift.offset(), WorkerShift.DAY_LENGTH),
+				shift + " should start a third of a day after the one before it");
+			helper.assertTrue(
+				Math.floorMod(shift.clockOff() - shift.clockOn(), WorkerShift.DAY_LENGTH) == span,
+				shift + " should work exactly as long as every other crew");
+		}
+
+		// Three offsets of a third of a day each get back to where they started, so the crews tile the
+		// clock rather than drifting round it.
+		helper.assertTrue(Shift.VALUES.length * Shift.OFFSET == WorkerShift.DAY_LENGTH,
+			"three crews at a third of a day apart should cover the day exactly");
+
+		// And the point of the whole thing: at the moment one crew clocks on, another has not.
+		long changeover = Shift.EVENING.clockOn();
+		helper.assertTrue(!WorkerShift.isOffShift(changeover, Shift.EVENING),
+			"the evening crew is on the clock when its shift begins");
+		helper.assertTrue(WorkerShift.isOffShift(changeover, Shift.NIGHT),
+			"while the night crew is not, or there would be no shifts at all");
 		helper.succeed();
 	}
 
@@ -627,10 +668,10 @@ public class WorkerShiftGameTests {
 			.getLevel(Level.NETHER);
 		helper.assertTrue(nether != null, "precondition: the test server should have a Nether");
 
-		helper.assertTrue(WorkerShift.isOffShift(overworld), "precondition: it should be night in the overworld");
+		helper.assertTrue(WorkerShift.isOffShift(overworld, Shift.DAY), "precondition: it should be night in the overworld");
 		helper.assertTrue(nether.getDayTime() == overworld.getDayTime(),
 			"precondition: the Nether should be keeping the overworld's clock, which is the whole trap");
-		helper.assertTrue(!WorkerShift.isOffShift(nether), "nothing knocks off under a sky that never changes");
+		helper.assertTrue(!WorkerShift.isOffShift(nether, Shift.DAY), "nothing knocks off under a sky that never changes");
 		helper.succeed();
 	}
 
@@ -748,7 +789,7 @@ public class WorkerShiftGameTests {
 		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
 		hire(helper, villager, null);
 
-		Schedule ours = WorkerShift.workerSchedule(CWConfig.CLOCK_ON.get(), CWConfig.CLOCK_OFF.get());
+		Schedule ours = WorkerShift.scheduleFor(Shift.DAY);
 		helper.assertTrue(villager.getBrain()
 			.getSchedule() == ours, "precondition: hiring should have set the worker schedule");
 
@@ -776,7 +817,7 @@ public class WorkerShiftGameTests {
 		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
 		hire(helper, villager, helper.absolutePos(BED_HEAD));
 
-		helper.assertTrue(WorkerShift.isOffShift(helper.getLevel()),
+		helper.assertTrue(WorkerShift.isOffShift(helper.getLevel(), Shift.DAY),
 			"precondition: a night shift should be off the clock mid-morning");
 		helper.assertTrue(Schedule.VILLAGER_DEFAULT.getActivityAt(MID_MORNING) != Activity.REST,
 			"precondition: the village itself is awake, so only the worker's own schedule can do this");
@@ -994,7 +1035,7 @@ public class WorkerShiftGameTests {
 	private static void hire(GameTestHelper helper, Mob mob, BlockPos bed) {
 		ItemStack hat = new ItemStack(CWItems.HARD_HAT.get());
 		HardHatItem.setProgram(hat, program(helper, bed));
-		Workers.employ(mob, hat, HardHatItem.getProgram(hat), null);
+		Workers.employ(mob, hat, HardHatItem.getProgram(hat), null, Shift.DAY);
 		helper.assertTrue(Workers.isEmployed(mob), "the mob should have been hired");
 	}
 

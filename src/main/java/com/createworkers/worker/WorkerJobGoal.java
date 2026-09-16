@@ -180,7 +180,7 @@ public class WorkerJobGoal extends Goal {
 
 	private boolean isOffShift() {
 		return CWConfig.WORKING_HOURS.get() && locomotion.keepsWorkingHours()
-			&& WorkerShift.isOffShift(mob.level());
+			&& WorkerShift.isOffShift(mob.level(), data().getShift());
 	}
 
 	/**

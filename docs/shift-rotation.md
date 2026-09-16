@@ -1,11 +1,36 @@
 # Shifts, food, and what a worker does off the clock
 
-**Status: not built.** Written because [working hours](working-hours.md) shipped with a standing
-objection against it, and because the three ideas below turned out to be one idea.
+**Status: shifts are built; food and leisure are not.** Written because
+[working hours](working-hours.md) shipped with a standing objection against it, and because the three
+ideas below turned out to be one idea.
 
-A hard hat names which **shift** its worker keeps. Crews cover the clock between them, each worker
-gets a whole villager day — work, then eating and company, then sleep — and the eating is what makes
-the middle window matter rather than decorate.
+A worker keeps a **shift**. Crews cover the clock between them, each worker gets a whole villager
+day — work, then eating and company, then sleep — and the eating is what makes the middle window
+matter rather than decorate.
+
+## What shifts turned out to be *(built)*
+
+Two things moved between this note and the code, and both made it smaller.
+
+**The shift lives on the worker, set by the station's slot — not on the hat.** An earlier draft had a
+hard hat name its shift. A slot holding one hat and up to three shift toggles says the same thing in
+the way a player would say it out loud — *"feed the smelter, three shifts"* rather than *"three hats
+that happen to have the same programme"* — and it deletes a data component, a gesture and a piece of
+client state rather than adding them. `WorkerData` carries the crew a villager was actually hired
+onto; the slot carries what the job wants. A hand-hired enderman gets the day crew and never consults
+it, having no schedule at all.
+
+**A shift is an offset, not a pair of times.** `Shift.OFFSET` is a third of a day and the three crews
+each start that much later than the last, all of them keeping the one working day in the config. So
+there is still only one `clockOn`/`clockOff` pair, shortening the working day shortens it for
+everybody, moving dawn moves every crew, and no two crews can be made to contradict each other.
+
+That leaves the **span** as the operator's choice, and the table below is one value of it rather than
+the design. A span equal to the offset (8000) tiles the clock exactly; the default's 12000 puts two
+crews on at each changeover, which is the overlapping hand-over this note wanted for food and which
+also stops a chain of workers stalling at dusk; a span under 8000 leaves the factory unstaffed between
+crews, which is a legitimate thing to want and shows in the station's readout rather than being
+silently corrected.
 
 ## Why this is the feature working hours actually wants
 
