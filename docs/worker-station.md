@@ -213,6 +213,23 @@ Shift 3 (night)    ···  0/3
 If a part-staffed evening shift is useless on their line, they can see that and know to breed more
 villagers. If it is fine, nothing has been taken away from them.
 
+### And it has to rebalance, or the rule only holds while the roster grows
+
+Filling in order places new workers correctly and does nothing about the ones already placed, which
+means every death degrades the arrangement permanently. Two jobs on two shifts with three villagers
+is a complete day crew and one evening worker; lose one of the day crew and both lines are broken and
+three survivors produce nothing — for good, if the village has nobody spare.
+
+So a station **moves workers up the fill order until its roster is a prefix of it again**, and the one
+that moves is the last in that order, which the rack already expresses and a player can predict. It is
+re-employed rather than edited, because a promotion is usually a different hat as well as different
+hours.
+
+Eagerly, rather than waiting to see whether a replacement villager turns up. That costs nothing: a
+replacement fills the *last* place in the order either way, so promoting first and hiring into the
+hole behind reaches the same roster — and if no villager is spare it is the difference between a
+running factory and a stopped one.
+
 One related restraint, from the same principle: **do not fire a crew that becomes incomplete
 mid-shift.** If a worker dies at noon, the remaining crew either carries on usefully or backs its own
 line up and stops within minutes — and the station will usually have refilled the slot before that

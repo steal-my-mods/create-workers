@@ -658,6 +658,24 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   coordinate by talking to each other, which is a distributed problem invented to avoid a list. Slot
   order breaks ties within a shift, which is what makes the order of the rack the player's priority
   lever. (`shortCrewsFillWholeShiftsBeforeDeepOnes`, mutation-checked by swapping the loops.)
+- **A death has to be followed by a promotion, or the fill order only holds while a roster grows.**
+  `nextVacancy` puts new workers in the right place; it cannot move the ones already there. Three jobs
+  on two shifts with four villagers gives a complete day crew and one evening worker, and losing a day
+  worker leaves both lines broken and three survivors producing nothing — permanently, if the village
+  has nobody spare. `rebalance` therefore moves workers up the fill order until the roster is a prefix
+  of it again, which is the chain argument applied to the case the fill order alone cannot reach. It
+  is done eagerly rather than waiting to see whether a replacement arrives, because a replacement
+  fills the *last* place in the order either way: promoting first and hiring into the hole behind
+  reaches the same roster, and the state in between is the one that works.
+  (`losingADayWorkerPromotesSomebodyUpToIt`, mutation-checked by dropping the call.)
+- **A villager killed with `die()` rather than with damage may not actually die.** Both are used in
+  these tests and only one is reliable: `die()` leaves the health where it was, so `isAlive()` stays
+  true for the whole death animation, and a villager held still with `setNoAi` never got removed at
+  all. Anything asserting on the *consequences* of a death — a struck-off roster entry, a refilled
+  job — kills with `hurt(damageSources().genericKill(), Float.MAX_VALUE)`. And a roster entry is not
+  cleared on the tick of the death: assert that a worker never comes *back* after being struck off
+  (`thenExecuteFor` over the animation), never that it is absent, or the assertion fires on the stale
+  entry rather than on the bug.
 - **Never build a game test on two villagers finding the same station by themselves.** `AcquirePoi`
   scans 48 blocks, which on the test grid reaches several other tests' stations, and a claim it loses
   puts that position on a backoff that grows to 400 ticks — so whether the second villager is hired

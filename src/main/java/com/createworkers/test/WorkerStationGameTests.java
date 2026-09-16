@@ -166,13 +166,25 @@ public class WorkerStationGameTests {
 		putHatIn(helper, STATION);
 
 		Villager first = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+		boolean[] struckOff = new boolean[1];
 
 		helper.startSequence()
 			.thenWaitUntil(() -> helper.assertTrue(Workers.isEmployed(first), "the first villager should be hired"))
 			.thenExecute(() -> first.die(helper.getLevel()
 				.damageSources()
 				.genericKill()))
-			.thenExecuteAfter(20, () -> {
+			// A dying villager is unemployed from the moment it dies, still holds this block as its
+			// job site, and stays in the world for its death animation -- so it is exactly what the
+			// station finds when it goes looking to fill the vacancy that same death opened. Checked
+			// every tick across the window rather than once, the station only looking every twenty.
+			.thenExecuteFor(20, () -> {
+				if (!station(helper).employs(first.getUUID()))
+					struckOff[0] = true;
+				else
+					helper.assertTrue(!struckOff[0],
+						"a station should never hire back the worker that is in the middle of dying on it");
+			})
+			.thenExecute(() -> {
 				helper.assertTrue(station(helper).hasJob(),
 					"the job should still be in the station after its worker died");
 				helper.assertItemEntityNotPresent(CWItems.HARD_HAT.get());
@@ -379,6 +391,75 @@ public class WorkerStationGameTests {
 						+ station(helper).staffed(Shift.DAY) + " of them");
 				helper.assertTrue(station(helper).staffed(Shift.EVENING) == 0,
 					"rather than starting a second shift nobody can complete");
+			})
+			.thenSucceed();
+	}
+
+
+	/**
+	 * Losing a day-shift worker promotes somebody up from a later crew rather than leaving a hole.
+	 *
+	 * <p>Filling whole shifts before deep ones only holds while a roster is <em>growing</em>. Without
+	 * this, every death degrades it for good: two jobs on two shifts with three villagers is a complete
+	 * day crew and one evening worker, and losing one of the day crew leaves both lines broken and
+	 * three surviving workers producing nothing. The evening worker moving up is the difference between
+	 * a running factory and a stopped one — and it costs nothing, because a replacement villager fills
+	 * the last place in the order either way.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void losingADayWorkerPromotesSomebodyUpToIt(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		putHatIn(helper, STATION);
+		station(helper).setShifts(0, Set.of(Shift.DAY, Shift.EVENING));
+		station(helper).setShifts(1, Set.of(Shift.DAY, Shift.EVENING));
+
+		claimant(helper);
+		UUID[] doomed = new UUID[1];
+		boolean[] struckOff = new boolean[1];
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1, "one on days"))
+			.thenExecute(() -> claimant(helper))
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 2, "two on days"))
+			.thenExecute(() -> claimant(helper))
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.EVENING) == 1,
+				"and the third starts the evening crew, both day jobs being covered"))
+			.thenExecute(() -> {
+				UUID onDays = station(helper).slots()
+					.get(0)
+					.worker(Shift.DAY);
+				helper.assertTrue(helper.getLevel()
+					.getEntity(onDays) instanceof Villager, "precondition: the first day worker is there");
+				Villager victim = (Villager) helper.getLevel()
+					.getEntity(onDays);
+				victim.setNoAi(false);
+				victim.hurt(helper.getLevel()
+					.damageSources()
+					.genericKill(), Float.MAX_VALUE);
+				doomed[0] = onDays;
+			})
+			// A dying villager is unemployed and still holding this block as its job site for the
+			// twenty ticks of its death animation, so it is exactly what a station looking for
+			// somebody to hire would find. Checked every tick across that window rather than once,
+			// because the station only looks every twenty and a single sample is a coin toss.
+			.thenExecuteFor(25, () -> {
+				if (!station(helper).employs(doomed[0]))
+					struckOff[0] = true;
+				else
+					helper.assertTrue(!struckOff[0],
+						"a station should never hire back a villager in the middle of dying");
+			})
+			// Both at once, and deliberately not in two steps. A villager killed this way is alive for
+			// its death animation, so the roster still reads 2/1 for a while and an assertion on the
+			// day crew alone would pass before anything had happened.
+			.thenWaitUntil(() -> {
+				helper.assertTrue(station(helper).staffed(Shift.DAY) == 2,
+					"the day crew should be whole again, and it is " + station(helper).staffed(Shift.DAY) + "/2");
+				helper.assertTrue(station(helper).staffed(Shift.EVENING) == 0,
+					"because the evening worker moved up to it rather than a hole being left on days, and "
+						+ station(helper).staffed(Shift.EVENING) + " is still on evenings");
 			})
 			.thenSucceed();
 	}

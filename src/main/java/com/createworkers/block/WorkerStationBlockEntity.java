@@ -275,6 +275,7 @@ public class WorkerStationBlockEntity extends BlockEntity {
 
 		auditRoster(server);
 		sackAbsentees(server);
+		rebalance(server);
 		reconcileTickets(server);
 		staffUp(server);
 	}
@@ -393,8 +394,13 @@ public class WorkerStationBlockEntity extends BlockEntity {
 		for (Villager villager : server.getEntitiesOfClass(Villager.class, nearby, this::hasClaimedThis)) {
 			if (Workers.isEmployed(villager))
 				continue;
+			// A villager killed at its station is unemployed the instant it dies -- our own death
+			// handler takes the hat off it -- but it stays in the world for its death animation,
+			// still holding this block as its job site. Without this the station hires the corpse,
+			// shows the job as covered for a second, and then has to strike it off again when the
+			// entity finally goes.
 
-			Vacancy vacancy = nextVacancy();
+			Position vacancy = nextVacancy();
 			if (vacancy == null) {
 				turnAway(villager);
 				continue;
@@ -404,7 +410,14 @@ public class WorkerStationBlockEntity extends BlockEntity {
 		}
 	}
 
-	private record Vacancy(Slot slot, Shift shift) {
+	/** A place on the roster: one slot on one shift, whether or not anybody is in it. */
+	private record Position(int slot, Shift shift) {
+	}
+
+	/** Where a position falls in the fill order, so two of them can be compared. */
+	private int order(Position position) {
+		return position.shift()
+			.ordinal() * slots.size() + position.slot();
 	}
 
 	/**
@@ -417,24 +430,97 @@ public class WorkerStationBlockEntity extends BlockEntity {
 	 * cannot debug.
 	 */
 	@Nullable
-	private Vacancy nextVacancy() {
+	private Position nextVacancy() {
 		for (Shift shift : Shift.VALUES)
-			for (Slot slot : slots)
-				if (slot.runs(shift) && slot.workers[shift.ordinal()] == null)
-					return new Vacancy(slot, shift);
+			for (int i = 0; i < slots.size(); i++)
+				if (slots.get(i)
+					.runs(shift)
+					&& slots.get(i).workers[shift.ordinal()] == null)
+					return new Position(i, shift);
 		return null;
 	}
 
-	private void hire(ServerLevel server, Villager villager, Vacancy vacancy) {
-		WorkerProgram programme = HardHatItem.getProgram(vacancy.slot().hat);
+	/** The last place on the roster that has somebody in it, reading the fill order backwards. */
+	@Nullable
+	private Position lastStaffed() {
+		for (int s = Shift.VALUES.length - 1; s >= 0; s--) {
+			Shift shift = Shift.VALUES[s];
+			for (int i = slots.size() - 1; i >= 0; i--)
+				if (slots.get(i)
+					.runs(shift)
+					&& slots.get(i).workers[shift.ordinal()] != null)
+					return new Position(i, shift);
+		}
+		return null;
+	}
+
+	/**
+	 * Moves workers up the fill order until the roster is a prefix of it again.
+	 *
+	 * <p>Without this the fill order only holds while a roster is <em>growing</em>, and every death
+	 * degrades it for good. Three jobs on two shifts with four villagers gives a complete day crew and
+	 * one evening worker; lose one of the day crew and the day line is broken, the evening line was
+	 * never whole, and the factory produces nothing out of three surviving workers. Promoting the
+	 * evening worker up to days restores a working line — which is the chain argument that put the fill
+	 * order there in the first place, applied to the case the fill order alone cannot reach.
+	 *
+	 * <p>It costs nothing to do eagerly rather than waiting to see whether a replacement turns up,
+	 * because a replacement fills the <em>last</em> place in the order either way: promoting first and
+	 * hiring into the hole behind reaches the same roster, and the state in between is the one that
+	 * works. If no villager is spare it is the difference between a running factory and a stopped one.
+	 *
+	 * <p>The worker that moves is the last one in the fill order, which is a rule a player can predict
+	 * and which the rack's own order already expresses. It is re-employed rather than edited: a
+	 * promotion is usually a different hat as well as different hours, so it wakes up, puts down
+	 * whatever it was carrying and starts the new job clean.
+	 */
+	private void rebalance(ServerLevel server) {
+		// lastStaffed strictly decreases on every successful move, so this cannot run away -- but a
+		// roster is at most thirty-six places and a loop over a mutating list deserves the belt.
+		for (int guard = slots.size() * Shift.VALUES.length; guard > 0 && promoteOne(server); guard--)
+			;
+	}
+
+	private boolean promoteOne(ServerLevel server) {
+		Position vacancy = nextVacancy();
+		Position last = lastStaffed();
+		if (vacancy == null || last == null || order(last) < order(vacancy))
+			return false;
+
+		Slot from = slots.get(last.slot());
+		UUID id = from.workers[last.shift()
+			.ordinal()];
+		// An unloaded worker cannot be promoted, and guessing at one is what the roster audit already
+		// refuses to do. Left where it is; the next look will find it.
+		if (!(server.getEntity(id) instanceof Villager worker))
+			return false;
+
+		Slot to = slots.get(vacancy.slot());
+		WorkerProgram programme = HardHatItem.getProgram(to.hat);
+		if (!programme.hasTargets())
+			return false;
+
+		from.workers[last.shift()
+			.ordinal()] = null;
+		drop(worker);
+		Workers.employ(worker, to.hat, programme, GlobalPos.of(server.dimension(), worldPosition), vacancy.shift());
+		to.workers[vacancy.shift()
+			.ordinal()] = id;
+		setChanged();
+		return true;
+	}
+
+	private void hire(ServerLevel server, Villager villager, Position vacancy) {
+		Slot slot = slots.get(vacancy.slot());
+		WorkerProgram programme = HardHatItem.getProgram(slot.hat);
 		if (!programme.hasTargets()) {
 			turnAway(villager);
 			return;
 		}
 
-		Workers.employ(villager, vacancy.slot().hat, programme, GlobalPos.of(server.dimension(), worldPosition),
+		Workers.employ(villager, slot.hat, programme, GlobalPos.of(server.dimension(), worldPosition),
 			vacancy.shift());
-		vacancy.slot().workers[vacancy.shift()
+		slot.workers[vacancy.shift()
 			.ordinal()] = villager.getUUID();
 		setChanged();
 	}
