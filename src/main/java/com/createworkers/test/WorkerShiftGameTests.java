@@ -35,6 +35,8 @@ import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -47,6 +49,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlac
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -91,6 +94,15 @@ public class WorkerShiftGameTests {
 
 	/** What the batch that turns working hours off found the setting at, to put it back. */
 	private static boolean workingHoursWere = true;
+	/** ...and the same for the batch that inverts the hours onto a night shift. */
+	private static int clockOnWas = 0;
+	private static int clockOffWas = 12000;
+
+	/** A night shift: on at dusk, off at dawn-ish, so its off-hours are broad daylight. */
+	private static final int NIGHT_SHIFT_ON = 12000;
+	private static final int NIGHT_SHIFT_OFF = 6000;
+	/** Mid-morning: the middle of a night-shift worker's rest, and nowhere near the village's. */
+	private static final int MID_MORNING = 9000;
 
 	@BeforeBatch(batch = "night")
 	public static void nightFalls(ServerLevel level) {
@@ -132,7 +144,88 @@ public class WorkerShiftGameTests {
 		level.setDayTime(WORKING_HOURS_TIME);
 	}
 
+	/**
+	 * The hours inverted onto a night shift, with the world in broad daylight — which is the one
+	 * arrangement that could not work before workers carried a schedule of their own.
+	 */
+	@BeforeBatch(batch = "night_shift")
+	public static void invertTheHours(ServerLevel level) {
+		clockOnWas = CWConfig.CLOCK_ON.get();
+		clockOffWas = CWConfig.CLOCK_OFF.get();
+		CWConfig.CLOCK_ON.set(NIGHT_SHIFT_ON);
+		CWConfig.CLOCK_OFF.set(NIGHT_SHIFT_OFF);
+		level.setDayTime(MID_MORNING);
+	}
+
+	@AfterBatch(batch = "night_shift")
+	public static void restoreTheHours(ServerLevel level) {
+		CWConfig.CLOCK_ON.set(clockOnWas);
+		CWConfig.CLOCK_OFF.set(clockOffWas);
+		level.setDayTime(WORKING_HOURS_TIME);
+	}
+
 	// --- the clock ---------------------------------------------------------------------------
+
+	/**
+	 * A worker's schedule is its own hours, not the village's.
+	 *
+	 * <p>Asserted on the bare schedule, so no world and no villager are involved. The thing being
+	 * checked is that {@code REST} lands on the worker's off-shift window whenever that is — which is
+	 * what lets {@code WakeUp} and this mod agree instead of fighting, because vanilla's rule is
+	 * "asleep and not in REST gets stood up" and under this schedule a resting worker is in REST.
+	 *
+	 * <p>A vanilla schedule is asked the same question at the same hour, to show the two genuinely
+	 * differ rather than the test having proved nothing.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void aWorkerKeepsItsOwnHoursNotTheVillages(GameTestHelper helper) {
+		Schedule dayShift = WorkerShift.workerSchedule(0, 12000);
+		helper.assertTrue(dayShift != null, "a day shift should have a schedule");
+		helper.assertTrue(dayShift.getActivityAt(6000) == Activity.IDLE, "noon is working time on a day shift");
+		helper.assertTrue(dayShift.getActivityAt(18000) == Activity.REST, "midnight is not");
+
+		// The interesting one: on at dusk, off at dawn, so its rest is in broad daylight.
+		Schedule nightShift = WorkerShift.workerSchedule(NIGHT_SHIFT_ON, NIGHT_SHIFT_OFF);
+		helper.assertTrue(nightShift != null, "a night shift should have a schedule");
+		helper.assertTrue(nightShift.getActivityAt(18000) == Activity.IDLE, "midnight is working time on nights");
+		helper.assertTrue(nightShift.getActivityAt(MID_MORNING) == Activity.REST,
+			"a night-shift worker should be resting mid-morning, which is the whole point");
+		// Before the first keyframe the timeline wraps to the last, which is how a shift crosses
+		// midnight at all: 3000 is inside a window that opened at 12000 the previous day.
+		helper.assertTrue(nightShift.getActivityAt(3000) == Activity.IDLE, "the small hours are still the shift");
+
+		helper.assertTrue(Schedule.VILLAGER_DEFAULT.getActivityAt(MID_MORNING) != Activity.REST,
+			"precondition: the village is awake mid-morning, so the two schedules really do differ");
+
+		helper.assertTrue(WorkerShift.workerSchedule(4000, 4000) == null,
+			"a shift that never ends has no resting half to build");
+		helper.succeed();
+	}
+
+	/**
+	 * Hiring hands the schedule over, and retiring gives the village's back.
+	 *
+	 * <p>The order is the trap: {@code refreshBrain} rebuilds the brain and sets
+	 * {@code VILLAGER_DEFAULT}, so a schedule applied before it is thrown away a line later.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void hiringGivesAWorkerItsOwnScheduleAndRetiringTakesItBack(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		hire(helper, villager, null);
+
+		Schedule ours = WorkerShift.workerSchedule(CWConfig.CLOCK_ON.get(), CWConfig.CLOCK_OFF.get());
+		helper.assertTrue(villager.getBrain()
+			.getSchedule() == ours, "a hired worker should be keeping the worker schedule");
+		helper.assertTrue(villager.getBrain()
+			.getSchedule() != Schedule.VILLAGER_DEFAULT, "...which is not the village's");
+
+		retire(helper, villager);
+		helper.assertTrue(villager.getBrain()
+			.getSchedule() == Schedule.VILLAGER_DEFAULT,
+			"a retired villager should be back on the village's own hours");
+		helper.succeed();
+	}
 
 	/**
 	 * The shift is a window measured from when it starts, not a comparison against dusk, which is
@@ -585,6 +678,64 @@ public class WorkerShiftGameTests {
 	}
 
 	/**
+	 * A worker gets its schedule back when it comes off the disk.
+	 *
+	 * <p>The easiest part of this to forget, and the one with no symptom until somebody changes the
+	 * hours: a brain does not serialize its schedule, and building one — which happens on every load —
+	 * sets the village's. So the reset is simulated here exactly as a load performs it, and the join
+	 * event posted the way the level posts it.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void aWorkerGetsItsScheduleBackWhenItLoads(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		hire(helper, villager, null);
+
+		Schedule ours = WorkerShift.workerSchedule(CWConfig.CLOCK_ON.get(), CWConfig.CLOCK_OFF.get());
+		helper.assertTrue(villager.getBrain()
+			.getSchedule() == ours, "precondition: hiring should have set the worker schedule");
+
+		// What registerBrainGoals does to every villager it builds, which is every villager that loads.
+		villager.getBrain()
+			.setSchedule(Schedule.VILLAGER_DEFAULT);
+		NeoForge.EVENT_BUS.post(new EntityJoinLevelEvent(villager, helper.getLevel()));
+
+		helper.assertTrue(villager.getBrain()
+			.getSchedule() == ours, "a worker coming back from disk should be put back on its own hours");
+		helper.succeed();
+	}
+
+	/**
+	 * The payoff: a night-shift worker sleeps in broad daylight.
+	 *
+	 * <p>This could not happen before workers carried a schedule of their own. Its off-hours are the
+	 * middle of the village's working day, so vanilla's {@code WakeUp} would have stood it up on the
+	 * tick it lay down, and all it could do was stand beside the bed until dusk.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 500, batch = "night_shift")
+	public static void aNightShiftWorkerSleepsThroughTheDay(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		placeBed(helper, BED_FOOT, BED_HEAD);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		hire(helper, villager, helper.absolutePos(BED_HEAD));
+
+		helper.assertTrue(WorkerShift.isOffShift(helper.getLevel()),
+			"precondition: a night shift should be off the clock mid-morning");
+		helper.assertTrue(Schedule.VILLAGER_DEFAULT.getActivityAt(MID_MORNING) != Activity.REST,
+			"precondition: the village itself is awake, so only the worker's own schedule can do this");
+
+		BlockPos bed = helper.absolutePos(BED_HEAD);
+		helper.succeedWhen(() -> helper.assertTrue(villager.isSleeping() && villager.getSleepingPos()
+			.map(bed::equals)
+			.orElse(false),
+			"a night-shift worker should be asleep in daylight, and it is "
+				+ villager.position()
+					.distanceTo(bed.getCenter())
+				+ " from its bed with the village "
+				+ (WorkerShift.isBedtime(villager) ? "" : "not ") + "at rest"));
+	}
+
+	/**
 	 * Morning. A batch of one, because this is the only test that moves the clock itself — and it
 	 * puts the world back to working hours on the way out, for whatever runs next.
 	 */
@@ -735,6 +886,15 @@ public class WorkerShiftGameTests {
 		player.setItemInHand(InteractionHand.MAIN_HAND, hat);
 		NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(player, InteractionHand.MAIN_HAND, mob));
 		helper.assertTrue(Workers.isEmployed(mob), "the mob should have been hired");
+	}
+
+	/** ...and retires it the same way a player does: sneak, empty hand. */
+	private static void retire(GameTestHelper helper, Mob mob) {
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+		player.setShiftKeyDown(true);
+		NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(player, InteractionHand.MAIN_HAND, mob));
+		helper.assertTrue(!Workers.isEmployed(mob), "the mob should have been retired");
 	}
 
 	private static int stockRemaining(GameTestHelper helper, BlockPos relative) {

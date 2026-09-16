@@ -409,16 +409,22 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   leniently and degrades to an unemployed villager if the mod is removed; a nitwit stays a nitwit
   forever) and why it is named for the role rather than for hauling (a profession id is permanent
   save state, so a rename strands every worker in every world).
-- **Sleeping and waking must agree with vanilla's `WakeUp`, which is why there are two clocks.**
+- **Sleeping and waking must agree with vanilla's `WakeUp`, and a worker's own `Schedule` is how.**
   `WakeUp` (villager CORE, priority 0) stands up any sleeping villager whose brain is not in
-  `Activity.REST`, on every tick. So `WorkerShift.isOffShift` — the operator's clock, `clockOff` and
-  `clockOn` in the config — decides only when the *work* stops, and `WorkerShift.isBedtime` — the
-  villager's own schedule — decides when it may lie down. Collapse them into one and a `clockOff`
-  earlier than 12000 is a worker lying down and being stood up again, every tick, until the village
-  turns in. A worker that has clocked off but may not sleep yet stands at the bedside. That is a
-  consequence of sharing the *village's* schedule, not a law: `Brain.setSchedule` is public and a
-  worker could be handed a schedule whose `REST` window is its own off-shift window, at which point
-  `WakeUp` agrees by construction. See `docs/shift-rotation.md`, which needs exactly that.
+  `Activity.REST`, on every tick — so a worker whose hours are not the village's could never sleep.
+  `WorkerShift.applySchedule` settles it by handing each worker a two-state `Schedule` of its own
+  whose `REST` window *is* its off-shift hours, which makes the two agree by construction rather than
+  by coincidence. `isBedtime` is unchanged by that; what changed is the schedule it reads.
+  **Three things about it are load-bearing.** It must be applied *after* `refreshBrain`, which
+  rebuilds the brain and sets `VILLAGER_DEFAULT` — apply it before and it is thrown away a line later
+  (`hiringGivesAWorkerItsOwnScheduleAndRetiringTakesItBack`, mutation-checked by swapping the two).
+  It must be re-applied on **every load**, because a brain's codec carries memories and
+  `registerBrainGoals` sets the village's schedule on every construction
+  (`aWorkerGetsItsScheduleBackWhenItLoads`, mutation-checked by dropping the join handler). And
+  retirement needs nothing, because `refreshBrain` puts the village's own schedule back.
+  `Timeline.getValueAt` is a **step** function, not an interpolation — it returns the last keyframe at
+  or before the time and wraps to the final one before the first, which is how a two-transition
+  schedule crosses midnight and why there are no ties to resolve.
 - **A sleeping worker still has to be pinned.** `LivingEntity.isImmobile` is `isDeadOrDying()` for
   everything but a player, so goals, the brain and the navigation all keep running on a sleeping
   villager — and `Villager.startSleeping` *erases* `WALK_TARGET`, which is exactly the memory the

@@ -185,6 +185,8 @@ public class Workers {
 		villager.setVillagerData(job.setProfession(CWProfessions.WORKER.get())
 			.setLevel(Math.max(job.getLevel(), RESET_PROOF_LEVEL)));
 		refreshBrain(villager);
+		// After the refresh, never before: rebuilding the brain resets the schedule to the village's.
+		WorkerShift.applySchedule(villager);
 	}
 
 	/**

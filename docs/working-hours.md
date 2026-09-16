@@ -132,7 +132,11 @@ commute. At dawn it resumes and walks the worker back from the bed by itself.
    later than the `clockOff` is a night shift with no further machinery. What a player will actually
    feel is the default, which is the village's own hours.
 
-   **A night shift does not sleep today.** Its off-shift window is daylight, and the two-clock rule
+   **Built since: a night shift sleeps.** `WorkerShift.applySchedule` gives each worker a schedule of
+   its own, so the paragraphs below describe the problem rather than the behaviour. Kept because the
+   reasoning is what the fix was built from.
+
+   **A night shift did not sleep.** Its off-shift window is daylight, and the two-clock rule
    above says a worker may only lie down when the village is resting — so an inverted worker walks to
    its bed each morning and stands beside it until evening. The bed still earns its place, as the spot
    the worker spends the day rather than the middle of the factory floor, and the config comment says

@@ -57,6 +57,11 @@ public class WorkerEvents {
 			return;
 
 		mob.goalSelector.addGoal(0, new WorkerJobGoal(mob, locomotion));
+
+		// A brain does not serialize its schedule, and building one sets the village's. So a worker
+		// coming back from disk has the wrong hours until this puts its own back.
+		if (Workers.isEmployed(mob))
+			WorkerShift.applySchedule(mob);
 	}
 
 	@SubscribeEvent

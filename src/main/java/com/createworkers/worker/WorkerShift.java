@@ -21,7 +21,10 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.schedule.Schedule;
+import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -31,13 +34,18 @@ import net.minecraft.world.level.pathfinder.Path;
 /**
  * The working day: when a worker is on the clock, and where it spends the night.
  *
- * <p>Two clocks are involved and they are not the same one. {@link #isOffShift} is the operator's,
- * configured in ticks of the day, and it decides when the tools go down. {@link #isBedtime} is the
- * village's, read off the villager's own brain, and it decides when a worker may actually lie down.
- * Clocking off early therefore means standing beside the bed for a while, which is the honest
- * answer: vanilla's {@code WakeUp} — CORE, priority 0 — stands up any sleeping villager whose brain
- * is not in {@code REST}, on every tick, and a sleep predicate that disagreed with it would be a
- * worker lying down and getting up again for as long as the gap lasted.
+ * <p>Two clocks are involved and they answer different questions. {@link #isOffShift} is the
+ * operator's, configured in ticks of the day, and it decides when the tools go down — it is also the
+ * only one an enderman has, having no brain schedule at all. {@link #isBedtime} reads the villager's
+ * own brain, and it decides when a worker may actually lie down.
+ *
+ * <p>They no longer <em>disagree</em>, which they used to. Vanilla's {@code WakeUp} — CORE, priority
+ * 0 — stands up any sleeping villager whose brain is not in {@code REST}, every tick, so a worker
+ * whose hours were not the village's could never sleep. {@link #applySchedule} settles that by giving
+ * each worker a schedule of its own whose {@code REST} window <em>is</em> its off-shift hours, so the
+ * two clocks agree by construction rather than by coincidence. What {@link #isBedtime} still adds is
+ * everything else vanilla knows about lying down: a panicking villager is in {@code PANIC} rather
+ * than {@code REST}, and one just dragged out of bed waits before climbing back in.
  */
 public final class WorkerShift {
 
@@ -58,7 +66,77 @@ public final class WorkerShift {
 	 */
 	private static final int WOKEN_COOLDOWN_TICKS = 100;
 
+	/**
+	 * The schedule a worker on the current hours keeps, rebuilt when those hours change.
+	 *
+	 * <p>One object serves every worker on the server, because the hours are one server-wide pair of
+	 * settings. Cached rather than rebuilt per worker: a {@code Schedule} is immutable once built, and
+	 * handing the same one to a thousand brains is a thousand field writes rather than a thousand
+	 * allocations. Rebuilt only when the config it was built from has moved under it, which a config
+	 * reload can do at any time.
+	 */
+	@Nullable
+	private static Schedule cachedSchedule;
+	private static int cachedClockOn = -1;
+	private static int cachedClockOff = -1;
+
 	private WorkerShift() {
+	}
+
+	/**
+	 * Gives a worker a schedule of its own, whose {@code REST} window is its own off-shift hours.
+	 *
+	 * <p>This is what lets a worker sleep at an hour the village does not. {@code WakeUp} — villager
+	 * CORE, priority 0 — stands up any sleeping villager whose brain is not in {@code REST}, and the
+	 * answer is not to fight it but to agree with it: give the worker a schedule under which its own
+	 * off-hours <em>are</em> {@code REST}, and the two can never disagree. {@link #isBedtime} is
+	 * unchanged by this; what changes is the schedule it reads.
+	 *
+	 * <p>Must be re-applied on <b>every load</b>, not only on hiring. A brain does not serialize its
+	 * schedule — the codec carries memories — and {@code Villager.registerBrainGoals} sets
+	 * {@code VILLAGER_DEFAULT} on every construction, which includes every time the chunk comes back.
+	 *
+	 * <p>Nothing to undo on retirement: {@code refreshBrain} puts the village's own schedule back.
+	 */
+	public static void applySchedule(Mob mob) {
+		if (!(mob instanceof Villager villager))
+			return;
+		// With hours switched off a worker never clocks off, so it should keep the village's schedule
+		// and behave like any other villager -- not hold a REST window nothing will ever consult.
+		if (!CWConfig.WORKING_HOURS.get())
+			return;
+
+		Schedule schedule = workerSchedule(CWConfig.CLOCK_ON.get(), CWConfig.CLOCK_OFF.get());
+		if (schedule != null)
+			villager.getBrain()
+				.setSchedule(schedule);
+	}
+
+	/**
+	 * The two-state schedule for a shift running {@code clockOn} to {@code clockOff}: awake for the
+	 * shift, resting for the rest of the day.
+	 *
+	 * <p>Two transitions is a shape vanilla itself ships — {@code Schedule.SIMPLE} is exactly this —
+	 * so nothing here is a trick. {@code IDLE} rather than {@code WORK} for the waking half because
+	 * both are inert for a worker and {@code IDLE} is the quieter of the two: {@code WORK} runs
+	 * {@code WorkAtPoi}, which wants a {@code JOB_SITE} memory a worker does not have, while the idle
+	 * package's wanderers all need {@code WALK_TARGET} absent, which the job goal never allows.
+	 *
+	 * @return the schedule, or null for a shift that never ends and so has no resting half.
+	 */
+	@Nullable
+	public static Schedule workerSchedule(int clockOn, int clockOff) {
+		if (Math.floorMod(clockOff - clockOn, DAY_LENGTH) == 0)
+			return null;
+
+		if (cachedSchedule == null || cachedClockOn != clockOn || cachedClockOff != clockOff) {
+			cachedSchedule = new ScheduleBuilder(new Schedule()).changeActivityAt(clockOn, Activity.IDLE)
+				.changeActivityAt(clockOff, Activity.REST)
+				.build();
+			cachedClockOn = clockOn;
+			cachedClockOff = clockOff;
+		}
+		return cachedSchedule;
 	}
 
 	/**
