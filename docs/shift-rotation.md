@@ -26,11 +26,15 @@ there is still only one `clockOn`/`clockOff` pair, shortening the working day sh
 everybody, moving dawn moves every crew, and no two crews can be made to contradict each other.
 
 That leaves the **span** as the operator's choice, and the table below is one value of it rather than
-the design. A span equal to the offset (8000) tiles the clock exactly; the default's 12000 puts two
-crews on at each changeover, which is the overlapping hand-over this note wanted for food and which
-also stops a chain of workers stalling at dusk; a span under 8000 leaves the factory unstaffed between
-crews, which is a legitimate thing to want and shows in the station's readout rather than being
-silently corrected.
+the design. A span equal to the offset — 8000, and now the default — tiles the clock exactly. Anything
+longer **overlaps**, and this note was wrong to treat that as the friendly hand-over it wanted for
+food: at 12000 two crews are on together for half of every shift, so three villagers buy about one and
+a half crews of cover, and `/time set midnight` shows the evening and night crews working side by
+side. A span under 8000 leaves the factory unstaffed between crews, which is a legitimate thing to
+want and shows in the station's readout rather than being silently corrected.
+
+If the hand-over window is wanted back for food, it should be a small deliberate overlap rather than a
+third of a shift — and it belongs in this note as a decision rather than as a fallout of the default.
 
 ## Why this is the feature working hours actually wants
 

@@ -205,8 +205,14 @@ off, and `clockOff` / `clockOn` move the working day — including past each oth
 
 Those two set **one** working day, and the three crews each start a third of a day later than the last:
 a job set to run all three shifts is staffed round the clock by three villagers keeping the same hours
-at different times. Make the day longer than eight thousand ticks and two crews overlap at each
-hand-over, which is usually what you want; shorter and the factory stands idle between them.
+at different times.
+
+A third of a day is 8000 ticks, so **that is the longest a crew can work without running into the
+next one.** The default is exactly that, and the three crews tile the clock. Set `clockOff` longer and
+they overlap — at 12000 the evening crew is still going when the night crew clocks on, and three
+villagers buy about one and a half crews of cover. That costs nothing if you only ever run one shift,
+and a worker that downs tools at dusk goes straight to bed rather than standing beside it waiting for
+the village's own bedtime — so lengthen it freely if shifts are not something you use.
 
 **Endermen are exempt.** They have no bed and no schedule, and they are creatures of the night
 everywhere else in the game, so a line staffed by endermen runs around the clock. That is the reason
@@ -259,8 +265,8 @@ Two details you might otherwise read as bugs:
 | `wanderRadius` | 12 | How far a worker may stray from its post or targets before being sent back |
 | `idleBehaviour` | `PATROL` | What a worker does between jobs: `PATROL`, `HOLD_STATION` or `WANDER` |
 | `workingHours` | `true` | Whether workers knock off at the end of the day and sleep. Endermen are exempt whatever this says |
-| `clockOff` | 12000 | Time of day the tools go down: 0 is dawn, 6000 noon, 12000 dusk. The default is when the village itself turns in |
-| `clockOn` | 0 | Time of day work starts again. Later than `clockOff` inverts the two, which is how you get a night shift |
+| `clockOff` | 8000 | Time of day the tools go down: 0 is dawn, 6000 noon, 12000 dusk. One crew's day — 8000 is a third of the clock, so the three crews tile it exactly. Longer and they overlap, which only matters if you run more than one shift |
+| `clockOn` | 0 | Time of day the day crew starts. Later than `clockOff` inverts the two, which is how you get a night shift |
 | `bedSearchRadius` | 16 | How far from the job site a worker may look for a bed of its own. 0 means it sleeps only in a bed assigned on its hat |
 | `recallStuckWorkers` | `false` | Whether a worker that has repeatedly failed to walk back to its work is teleported there. Workers that can walk home always walk; this is only for the one at the bottom of a hole |
 | `stationSlots` | 12 | How many jobs one Worker Station may hold. Each may run three shifts, so this is really a cap on villagers — twelve jobs is up to thirty-six of them. 12 is the ceiling and cannot be raised |

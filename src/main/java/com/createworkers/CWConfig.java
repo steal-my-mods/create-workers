@@ -129,14 +129,22 @@ public class CWConfig {
 
 		CLOCK_OFF = builder
 			.comment("The time of day a worker downs tools, in ticks: 0 is dawn, 6000 noon, 12000 dusk,",
-				"18000 midnight. The default is the moment the village itself turns in.",
-				"A worker clocked off earlier than that walks to its bed and stands beside it until",
-				"the village's own bedtime comes, because lying down before then is undone by the same",
-				"vanilla behaviour that gets a villager up in the morning.")
-			.defineInRange("clockOff", 12000, 0, 23999);
+				"18000 midnight.",
+				"",
+				"This is one crew's working day, and the three crews keep the same one -- each started",
+				"8000 ticks after the last. So a day longer than 8000 ticks means crews OVERLAP: at",
+				"12000 the evening crew is still working when the night crew clocks on, and you pay for",
+				"three villagers to get about one and a half crews of cover. 8000 tiles the clock",
+				"exactly, which is what a rota is for, and is still a longer working day than a vanilla",
+				"villager's own 7000.",
+				"",
+				"Raise it if you only ever run one shift -- overlap costs nothing when there is nobody to",
+				"overlap with, and a worker that downs tools at dusk goes straight to bed rather than",
+				"standing beside it waiting for the village's own bedtime.")
+			.defineInRange("clockOff", 8000, 0, 23999);
 
 		CLOCK_ON = builder
-			.comment("The time of day a worker starts again, in ticks. The default is first light.",
+			.comment("The time of day the day crew starts, in ticks. The default is first light.",
 				"Setting this later than clockOff inverts the two, which is how a night shift is made --",
 				"and it moves every worker on the server, not one of them. Note that a shift whose off",
 				"hours are daylight rests standing rather than sleeping: workers may only lie down during",

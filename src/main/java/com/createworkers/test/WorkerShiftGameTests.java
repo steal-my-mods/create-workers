@@ -315,6 +315,42 @@ public class WorkerShiftGameTests {
 	}
 
 
+
+	/**
+	 * The shipped working day is short enough that the three crews tile the clock instead of
+	 * overlapping.
+	 *
+	 * <p>Arithmetic rather than taste. The crews are {@link Shift#OFFSET} apart, so a working day
+	 * longer than that means two of them are on at once for the difference — and the default was
+	 * 12000, left over from when there was one shift and a worker simply stopped at dusk. Three
+	 * villagers then bought about one and a half crews of cover, and at night the evening crew was
+	 * still going when the night crew clocked on, which is what it looked like from the floor.
+	 *
+	 * <p>Asserted on the <b>default</b> rather than the loaded value, because what is being pinned is
+	 * what a server gets before anybody edits anything.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void theShippedCrewsDoNotOverlap(GameTestHelper helper) {
+		int on = CWConfig.CLOCK_ON.getDefault();
+		int off = CWConfig.CLOCK_OFF.getDefault();
+		int span = Math.floorMod(off - on, WorkerShift.DAY_LENGTH);
+
+		helper.assertTrue(span > 0 && span <= Shift.OFFSET,
+			"a crew's working day must fit in its own third of the clock, and the default is " + span
+				+ " against a " + Shift.OFFSET + " tick slot");
+
+		// And the consequence, stated the way a player would see it: never two crews on at once.
+		for (long time = 0; time < WorkerShift.DAY_LENGTH; time += 500) {
+			int working = 0;
+			for (Shift shift : Shift.VALUES)
+				if (!WorkerShift.isOffShift(time, Math.floorMod(on + shift.offset(), WorkerShift.DAY_LENGTH),
+					Math.floorMod(off + shift.offset(), WorkerShift.DAY_LENGTH)))
+					working++;
+			helper.assertTrue(working <= 1, working + " crews were on the clock at once at " + time);
+		}
+		helper.succeed();
+	}
+
 	/**
 	 * The three crews keep one working day between them, each started a third of a day later.
 	 *

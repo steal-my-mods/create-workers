@@ -751,6 +751,14 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   while shifts are available" looks like from the outside. So it drives free tickets at `vacancies()`
   from either side and clamps `reserved` at zero afterwards; reading the count low only ever makes the
   roster audit more cautious.
+- **A crew's working day cannot be longer than `Shift.OFFSET`, and the default used to be.** The three
+  crews are a third of a day apart, so a `clockOff` 12000 ticks after `clockOn` puts two of them on the
+  clock together for 4000 of every 8000 — three villagers buying about one and a half crews of cover,
+  and at `/time set midnight` (18000) the evening crew still working beside the night crew, which is
+  exactly what it looks like from the factory floor. It is arithmetic, not a bug in the assignment: the
+  workers are on the crews the fill order says. The default is 8000 now.
+  `theShippedCrewsDoNotOverlap` asserts it against `getDefault()` rather than the loaded value, so it
+  pins what a server gets before anybody edits anything.
 - **A station must reconcile its tickets *after* it hires, never before.** Reconciling first leaves it
   advertising, for the rest of that tick, the openings it is about to fill — and a villager that claims
   one, walks over and is turned away does not simply try again. `AcquirePoi.JitteredLinearRetry` puts
