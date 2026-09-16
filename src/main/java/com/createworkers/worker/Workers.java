@@ -141,25 +141,6 @@ public class Workers {
 	}
 
 	/**
-	 * Moves a worker to another job on the same station, keeping whatever it is carrying.
-	 *
-	 * <p>What a promotion does. Everything {@link #employ} does, except that the cargo stays in the
-	 * worker's hands and is delivered into the new job rather than dropped at its feet.
-	 */
-	public static void reassign(Mob mob, ItemStack hat, WorkerProgram programme, GlobalPos station, Shift shift) {
-		WorkerData data = getOrCreate(mob);
-		data.reassign(hat, programme);
-		data.setShift(shift);
-		data.rememberStation(station);
-
-		WorkerShift.applySchedule(mob, shift);
-		data.markAtWork(mob.level()
-			.getGameTime());
-		updateCargoAppearance(mob, data.getHeld());
-		WorkerStatePacket.sync(mob, data);
-	}
-
-	/**
 	 * Takes a mob off the job, and returns whatever it should drop.
 	 *
 	 * <p>A villager's profession is left alone here too, and vanilla tidies it: a worker with no job

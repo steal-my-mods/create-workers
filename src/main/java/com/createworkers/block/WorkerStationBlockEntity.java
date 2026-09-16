@@ -89,6 +89,13 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	private static final int STAFFING_INTERVAL = 20;
 	/** How far from the block to look for an arriving claimant. Vanilla assigns within 2; this is slack. */
 	private static final double HIRING_RANGE = 4.0D;
+	/**
+	 * How long a worker gets to finish what it is carrying before its station moves it or lets it go.
+	 *
+	 * <p>Long enough to walk a beat and hand over a stack, short enough that a job whose last output is
+	 * full or unreachable is not a job nobody can ever be hired into. Thirty seconds.
+	 */
+	private static final int NOTICE_TICKS = 600;
 
 	/** One job: a hat, the shifts it runs on, and who is wearing it on each of them. */
 	public static final class Slot {
@@ -360,10 +367,11 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		Slot slot = jobAt(index);
 		if (slot == null || wanted.isEmpty())
 			return;
-		for (Shift shift : Shift.VALUES)
-			if (slot.runs(shift) && !wanted.contains(shift))
-				dismiss(slot, shift);
 
+		// Nobody is sacked here. A worker on a shift this job no longer runs is one the next look gives
+		// notice to and lets go once its hands are empty -- see finishHandovers. Doing it on the spot
+		// dropped a half-finished delivery on the floor and then, the worker being unemployed and still
+		// stood at its job site, hired it straight back onto whichever shift had just been switched on.
 		slot.shifts.clear();
 		slot.shifts.addAll(wanted);
 		changed();
@@ -467,6 +475,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 			return;
 
 		auditRoster(server);
+		finishHandovers(server);
 		sackAbsentees(server);
 		rebalance(server);
 		staffUp(server);
@@ -570,9 +579,18 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 			reserved++;
 			setChanged();
 		}
-		while (free < wanted && reserved > 0 && releaseTicket(server)) {
+		while (free < wanted && releaseTicket(server)) {
 			free++;
 			reserved--;
+			setChanged();
+		}
+		// Never below zero. Reaching for a ticket this station did not hold back means one leaked --
+		// a claimant that wandered off and died somewhere, a release that vanilla refused because the
+		// villager's profession no longer matched -- and the alternative to letting the count go is a
+		// station that can never advertise again, standing there with openings nobody is offered.
+		// Reading the count low only ever makes the roster audit more cautious.
+		if (reserved < 0) {
+			reserved = 0;
 			setChanged();
 		}
 	}
@@ -679,10 +697,9 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * works. If no villager is spare it is the difference between a running factory and a stopped one.
 	 *
 	 * <p>The worker that moves is the last one in the fill order, which is a rule a player can predict
-	 * and which the rack's own order already expresses. It keeps whatever it is carrying: a promotion
-	 * is not a sacking, and dropping a half-finished delivery on the floor in the middle of a shift is
-	 * items out of the player's machines scattered for a reason nothing in the world explains. The new
-	 * job takes delivery of it first — see {@code WorkerData.reassign}.
+	 * and which the rack's own order already expresses. A worker with something in its hands serves
+	 * notice first: the load was picked up for the job it is leaving, and the job it is joining may have
+	 * nowhere that should take it, so carrying it across would put items where they do not belong.
 	 */
 	private void rebalance(ServerLevel server) {
 		// lastStaffed strictly decreases on every successful move, so this cannot run away -- but a
@@ -710,9 +727,21 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		if (!programme.hasTargets())
 			return false;
 
+		// A promotion is a different job, so whatever is in this worker's hands was picked up for
+		// somewhere the new job may not deliver to -- and handing it on regardless would put items
+		// where they do not belong, which is worse than dropping them. So it finishes first.
+		WorkerData carrying = Workers.get(worker);
+		if (carrying != null && !carrying.getHeld()
+			.isEmpty()) {
+			carrying.giveNotice(server.getGameTime() + NOTICE_TICKS);
+			if (!carrying.noticeExpired(server.getGameTime()))
+				return false;
+			drop(worker);
+		}
+
 		from.workers[last.shift()
 			.ordinal()] = null;
-		Workers.reassign(worker, to.hat, programme, GlobalPos.of(server.dimension(), worldPosition),
+		Workers.employ(worker, to.hat, programme, GlobalPos.of(server.dimension(), worldPosition),
 			vacancy.shift());
 		to.workers[vacancy.shift()
 			.ordinal()] = id;
@@ -776,6 +805,58 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 				// The ticket has to go back by hand. A sacked absentee is alive and still holding this
 				// block as its job site, so its ticket would stay taken and nobody could ever replace
 				// it -- which is the exact failure this is meant to end.
+				turnAway(worker);
+				drop(worker);
+				slot.workers[shift.ordinal()] = null;
+				rosterChanged();
+			}
+		}
+	}
+
+	/**
+	 * Lets go of workers whose shift the player has turned off, once they have finished.
+	 *
+	 * <p>A worker is left on the roster after its shift is switched off, holding a place the job no
+	 * longer runs — which is nowhere, as far as every count and the fill order are concerned, so it is
+	 * neither double-hired nor shown as staffing anything. What it gets is time: it stops taking new
+	 * pickups and hands over what it is already carrying, and only then is it let go. Dropping a
+	 * half-finished delivery on the floor the instant a toggle is clicked is items out of the player's
+	 * own machines, scattered for a reason nothing in the world explains.
+	 *
+	 * <p>Turning the shift back on before it finishes cancels the whole thing, which is what a player
+	 * who clicked the wrong toggle means.
+	 */
+	private void finishHandovers(ServerLevel server) {
+		for (Slot slot : slots) {
+			if (slot == null)
+				continue;
+			for (Shift shift : Shift.VALUES) {
+				UUID id = slot.workers[shift.ordinal()];
+				if (id == null)
+					continue;
+
+				WorkerData data = server.getEntity(id) instanceof Villager worker ? Workers.get(worker) : null;
+				if (slot.runs(shift)) {
+					// Put back. Nothing to finish after all.
+					if (data != null && data.isServingNotice())
+						data.clearNotice();
+					continue;
+				}
+
+				if (!(server.getEntity(id) instanceof Villager worker) || data == null) {
+					// Not there to be given notice, and its place is not one the job runs any more.
+					slot.workers[shift.ordinal()] = null;
+					rosterChanged();
+					continue;
+				}
+
+
+				if (!data.getHeld()
+					.isEmpty() && !data.noticeExpired(server.getGameTime())) {
+					data.giveNotice(server.getGameTime() + NOTICE_TICKS);
+					continue;
+				}
+
 				turnAway(worker);
 				drop(worker);
 				slot.workers[shift.ordinal()] = null;

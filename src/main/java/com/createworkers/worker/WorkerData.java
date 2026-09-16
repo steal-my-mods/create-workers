@@ -98,6 +98,22 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	 * chunk is away and a worker coming back after an hour of game time is not an absentee.
 	 */
 	private long lastAtWork;
+	/**
+	 * When this worker's job ends whether its hands are empty or not, or 0 if it is not leaving.
+	 *
+	 * <p>A worker being moved or let go by its station serves notice rather than downing tools on the
+	 * spot: it stops taking new pickups and delivers what it is already carrying, and the station
+	 * completes the change once its hands are empty. Without that, a half-finished delivery is dropped
+	 * on the floor mid-shift — items out of the player's own machines, scattered for a reason nothing
+	 * in the world explains.
+	 *
+	 * <p>The deadline is not optional. A worker whose last output is full, unreachable or gone would
+	 * never empty its hands, and a job nobody can ever leave is a job nobody can ever be hired into.
+	 *
+	 * <p>Runtime only. A worker that comes back from disk is not mid-handover as far as anything can
+	 * tell, and its station will give it notice again on the next look.
+	 */
+	private long noticeUntil;
 	@Nullable
 	private ArmBlockEntity host;
 
@@ -179,6 +195,26 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		this.shift = shift;
 	}
 
+	/** @return whether this worker is finishing up before its station moves it or lets it go. */
+	public boolean isServingNotice() {
+		return noticeUntil != 0L;
+	}
+
+	/** Starts the notice if it has not already started; the deadline is not pushed back by asking twice. */
+	public void giveNotice(long until) {
+		if (noticeUntil == 0L)
+			noticeUntil = until;
+	}
+
+	public void clearNotice() {
+		noticeUntil = 0L;
+	}
+
+	/** @return whether this worker has had long enough to finish and is out of time. */
+	public boolean noticeExpired(long gameTime) {
+		return noticeUntil != 0L && gameTime >= noticeUntil;
+	}
+
 	/** Puts the entity to work with the given hat. */
 	public void employ(ItemStack hatStack, WorkerProgram program) {
 		this.hat = hatStack.copyWithCount(1);
@@ -191,23 +227,8 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		this.cooldown = 0;
 		this.station = null;
 		this.shift = Shift.DAY;
+		this.noticeUntil = 0L;
 		invalidatePoints();
-	}
-
-	/**
-	 * Moves the worker to a different job without taking anything off it.
-	 *
-	 * <p>A promotion is not a sacking, and it should not look like one. Dismissing and re-hiring drops
-	 * whatever the worker was carrying on the floor — items that came out of the player's machines,
-	 * scattered in the middle of a shift for a reason invisible from anywhere in the world. Keeping the
-	 * cargo and starting in {@code SEARCH_OUTPUTS} means the worker delivers what is in its hands into
-	 * its new job before it picks anything else up, which is what a hand-over looks like.
-	 */
-	public void reassign(ItemStack hatStack, WorkerProgram program) {
-		ItemStack carried = held;
-		employ(hatStack, program);
-		held = carried;
-		phase = held.isEmpty() ? Phase.SEARCH_INPUTS : Phase.SEARCH_OUTPUTS;
 	}
 
 	/**
@@ -230,6 +251,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		targetIndex = -1;
 		station = null;
 		shift = Shift.DAY;
+		noticeUntil = 0L;
 		releasePoints();
 		return drops;
 	}

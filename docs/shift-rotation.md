@@ -437,8 +437,9 @@ are the decoration on top — and after the station, because that is what makes 
    continuously, which changes what the `HAS_SPACE` filter in the discovery hunt sees for anyone
    else nearby. Worth checking before promising it.
 5. **Shift visible on the gear?** A base with a dozen workers needs the crew readable across a room.
-   The gear textures are generated already, so a different hi-vis trim per shift costs a script
-   change — and it should ship *with* the mechanic, not after it. A shift you cannot see is the same
+   The gear textures are generated already, so a different vest colour per shift costs a script
+   change — and it should ship *with* the mechanic, not after it. On the vest, not on the sleeves:
+   trim at the cuffs and hem was tried and read as a costume. A shift you cannot see is the same
    feature as no shift, plus confusion. See
    [the uniform](worker-station.md#a-uniform-that-can-be-read-across-a-room), which pairs it with the
    cheaper and more useful half of the same idea: naming a hat names the villager wearing it.

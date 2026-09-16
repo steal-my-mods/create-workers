@@ -149,9 +149,16 @@ worlds keep their professions until they are re-hired, and nothing changes under
 
 ## The clothing
 
-`tools/generate_worker_profession.py` writes the profession's overlay: hi-vis trim on the sleeve
-cuffs and the robe hem, sampled from `worker_gear.png` so the two cannot drift apart, and everything
-else transparent so the villager's own biome robe shows through. It writes **two** files, because the
+`tools/generate_worker_profession.py` writes the profession's overlay, and it is **entirely
+transparent**, so a worker shows its own biome robe and is recognised by the hard hat and the hi-vis
+vest alone — both of which are geometry.
+
+It did once paint hi-vis trim on the sleeve cuffs and the robe hem, on the reasoning that those are
+the only parts the hat and vest leave visible. They are, and it looked wrong: orange around the hands
+and the feet reads as a costume rather than as safety gear. If a crew ever needs reading across a room
+by colour, that belongs on the vest, which is the hi-vis thing already.
+
+The generator still writes **two** files, because the
 overlay is looked up per renderer — `villager/profession/worker.png` and
 `zombie_villager/profession/worker.png`. Vanilla ships a full set under both, and a converted villager
 keeps its `VillagerData`, so a profession that skipped the zombie one would render as missing texture

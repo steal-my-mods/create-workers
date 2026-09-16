@@ -157,6 +157,13 @@ public class WorkerJobGoal extends Goal {
 
 		switch (data.getPhase()) {
 			case SEARCH_INPUTS -> {
+				// A worker serving notice finishes what it is carrying and starts nothing new. Its
+				// station is waiting for its hands to be empty before moving it or letting it go, and
+				// a worker that kept picking things up would never get there.
+				if (data.isServingNotice()) {
+					data.setCooldown(IDLE_RESCAN_TICKS);
+					break;
+				}
 				int index = data.searchForItem(now);
 				if (index >= 0) {
 					data.selectTarget(Phase.MOVE_TO_INPUT, index);

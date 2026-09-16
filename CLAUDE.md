@@ -407,6 +407,12 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   model's own third-person transform, not from a figure chosen here: a block in hand is 0.375 of a
   block against the 0.5 vanilla's `CarriedBlockLayer` gives an enderman, and against the 0.1875 the
   chest carry works out at.
+- **The worker profession's overlay is blank, and the file still has to exist.** It painted hi-vis
+  cuffs and a hi-vis hem — the sleeves and the robe are the only parts the hat and vest do not cover,
+  so they looked like free space. They are not: orange at the hands and feet reads as a costume rather
+  than as safety gear, and the vest is the thing a worker should be recognised by. Per-shift colour, if
+  it is ever wanted, belongs on the vest geometry. The generator still writes both sheets because a
+  profession with no texture renders as missing texture, per renderer.
 - **A profession needs a clothing overlay for every renderer that looks one up.** Vanilla ships a
   full set under both `villager/profession/` and `zombie_villager/profession/`, so a modded
   profession that ships only the first renders as missing texture the moment a worker is bitten — a
@@ -725,6 +731,14 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   move, `stack.isEmpty()` means `slot.setByPlayer(ItemStack.EMPTY)`, never `setChanged()` alone.
   `shiftClickingAHatOutEndsItsJob` reproduces it end to end, saving the block entity at the finish
   because that is where the crash actually was, and is mutation-checked by dropping the clear.
+- **Ticket reconciliation must be able to release more than it took.** The obvious guard —
+  only release a ticket this station held back — makes a leak permanent: a claimant that wandered off
+  and died, or a release vanilla refused because the villager's profession no longer matched the job
+  site, leaves a ticket out on loan forever, and a station whose free count is stuck below its
+  vacancies stands there with openings it never offers anybody. That is what "villagers standing around
+  while shifts are available" looks like from the outside. So it drives free tickets at `vacancies()`
+  from either side and clamps `reserved` at zero afterwards; reading the count low only ever makes the
+  roster audit more cautious.
 - **A station must reconcile its tickets *after* it hires, never before.** Reconciling first leaves it
   advertising, for the rest of that tick, the openings it is about to fill — and a villager that claims
   one, walks over and is turned away does not simply try again. `AcquirePoi.JitteredLinearRetry` puts
@@ -739,11 +753,24 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   shift toggled against that stale view wrote the client's fiction back over the truth. They set
   `rosterChanged` now and the tick syncs once at the end, which is also why it is a flag rather than a
   packet per worker.
-- **A promotion keeps the worker's cargo; only a sacking drops it.** Dismissing and re-hiring scattered
-  a half-finished delivery on the floor mid-shift — items out of the player's own machines, for a
-  reason nothing in the world explains. `WorkerData.reassign` keeps `held` and starts the new job in
-  `SEARCH_OUTPUTS`, so the worker delivers what is in its hands before it picks anything up.
-  (`aPromotedWorkerCarriesItsLoadIntoTheNewJob`, mutation-checked by putting the drop back.)
+- **A worker being moved or let go serves notice; it is never stopped mid-delivery.** Dropping a
+  half-finished delivery on the floor is items out of the player's own machines scattered for a reason
+  nothing in the world explains. So `WorkerData.noticeUntil` makes the worker stop taking new pickups
+  and hand over what it already has, and the station completes the change on a later look, once its
+  hands are empty. **Carrying the load across to the new job is not the answer** — that was the first
+  attempt: a promotion is a *different* job, so the load was picked up for outputs the new job may have
+  no business delivering to, which either strands the worker holding something nothing accepts or puts
+  items somewhere that takes anything and should not have had them. **The deadline is not optional**
+  either: a worker whose last output is full or unreachable would never empty its hands, and a job
+  nobody can leave is a job nobody can be hired into. (`aWorkerWhoseShiftIsTurnedOffFinishesFirst` and
+  `aPromotionWaitsForTheWorkerToPutItsLoadDown`, each mutation-checked.)
+- **Turning a shift off must not sack anybody on the spot, and the second effect is worse than the
+  first.** It dropped the cargo, yes — but it also left an *unemployed* villager standing at its own
+  job site, which `staffUp` then hired straight back onto whichever shift had just been switched on.
+  So a player toggling shifts saw items hit the floor and the worker apparently teleport between
+  crews. `setShifts` now only changes which shifts the job runs; a worker left on one it no longer runs
+  is counted by nothing — not `positions`, not `staffed`, not `nextVacancy` — and `finishHandovers`
+  lets it go once it is done. Turning the shift back on first simply cancels the notice.
 - **A test that waits for "somebody is on that shift" after killing a worker passes instantly.** The
   dead worker's record stays on the rack until the next audit strikes it off, so the wait has to name
   the villager it expects — `carrierId.equals(jobAt(0).worker(DAY))` — not merely check for non-null.

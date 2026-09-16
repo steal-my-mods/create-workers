@@ -765,15 +765,60 @@ public class WorkerStationGameTests {
 
 
 	/**
-	 * A promoted worker carries its load into the new job rather than dropping it where it stood.
+	 * A worker whose shift is switched off finishes what it is carrying before it is let go.
 	 *
-	 * <p>A promotion is not a sacking and should not look like one. Dismissing and re-hiring scattered
-	 * whatever the worker was holding on the floor — items out of the player's own machines, dropped in
-	 * the middle of a shift for a reason nothing in the world explains — and the player watching it
-	 * happen has no way to tell it from a bug.
+	 * <p>Turning a toggle off used to drop a half-finished delivery on the floor on the spot — items
+	 * out of the player's own machines, scattered in the middle of a shift for a reason nothing in the
+	 * world explains, and indistinguishable from a bug to the person watching it happen.
 	 */
 	@GameTest(template = "work_site", timeoutTicks = 900)
-	public static void aPromotedWorkerCarriesItsLoadIntoTheNewJob(GameTestHelper helper) {
+	public static void aWorkerWhoseShiftIsTurnedOffFinishesFirst(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		station(helper).setShifts(0, Set.of(Shift.DAY));
+
+		claimant(helper);
+		UUID[] hired = new UUID[1];
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1, "somebody on days"))
+			.thenExecute(() -> {
+				hired[0] = station(helper).jobAt(0)
+					.worker(Shift.DAY);
+				Workers.get(helper.getLevel()
+					.getEntity(hired[0]))
+					.setHeld(new ItemStack(Items.COBBLESTONE, 4));
+				// The job moves to evenings, so the villager on days is leaving.
+				station(helper).setShifts(0, Set.of(Shift.EVENING));
+			})
+			.thenExecuteAfter(60, () -> {
+				helper.assertTrue(Workers.isEmployed(helper.getLevel()
+					.getEntity(hired[0])), "a worker with something in its hands is not sacked on the spot");
+				helper.assertTrue(Workers.get(helper.getLevel()
+					.getEntity(hired[0]))
+					.isServingNotice(), "it is given notice instead");
+				helper.assertItemEntityNotPresent(Items.COBBLESTONE);
+			})
+			.thenExecute(() -> Workers.get(helper.getLevel()
+				.getEntity(hired[0]))
+				.setHeld(ItemStack.EMPTY))
+			.thenWaitUntil(() -> helper.assertTrue(!Workers.isEmployed(helper.getLevel()
+				.getEntity(hired[0])), "and let go once its hands are empty"))
+			.thenExecute(() -> helper.assertItemEntityNotPresent(Items.COBBLESTONE))
+			.thenSucceed();
+	}
+
+	/**
+	 * A promotion waits for the worker to put down what it is carrying.
+	 *
+	 * <p>A promotion is a <em>different</em> job, so the load in a worker's hands was picked up for
+	 * somewhere the new job may have no business delivering to. Carrying it across would either strand
+	 * the worker holding something nothing will accept, or — worse — put it somewhere that takes
+	 * anything and should not have had it. So the old job finishes first.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void aPromotionWaitsForTheWorkerToPutItsLoadDown(GameTestHelper helper) {
 		prepareWorkSite(helper);
 		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
 		putHatIn(helper, STATION);
@@ -782,20 +827,17 @@ public class WorkerStationGameTests {
 		station(helper).setShifts(1, Set.of(Shift.DAY));
 
 		claimant(helper);
-		UUID[] carrierId = new UUID[1];
+		UUID[] carrier = new UUID[1];
 
 		helper.startSequence()
 			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1, "the first job"))
 			.thenExecute(() -> claimant(helper))
 			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 2, "and the second"))
 			.thenExecute(() -> {
-				// The worker on the less important job is the one that will be promoted, so it is the
-				// one given something to carry.
-				carrierId[0] = station(helper).jobAt(1)
+				carrier[0] = station(helper).jobAt(1)
 					.worker(Shift.DAY);
-				Villager carrier = (Villager) helper.getLevel()
-					.getEntity(carrierId[0]);
-				Workers.get(carrier)
+				Workers.get(helper.getLevel()
+					.getEntity(carrier[0]))
 					.setHeld(new ItemStack(Items.COBBLESTONE, 4));
 
 				Villager victim = (Villager) helper.getLevel()
@@ -806,18 +848,19 @@ public class WorkerStationGameTests {
 					.damageSources()
 					.genericKill(), Float.MAX_VALUE);
 			})
-			// Named, not merely non-null: the dead worker's record is still on the rack until the audit
-			// strikes it off, so "somebody is on the day shift" is true from the moment it is killed.
-			.thenWaitUntil(() -> helper.assertTrue(carrierId[0].equals(station(helper).jobAt(0)
-				.worker(Shift.DAY)), "the carrier should have been promoted onto the more important job"))
-			.thenExecute(() -> {
-				Villager promoted = (Villager) helper.getLevel()
-					.getEntity(carrierId[0]);
-				helper.assertTrue(Workers.get(promoted)
-					.getHeld()
-					.getCount() == 4, "the promoted worker should still be carrying its load");
+			.thenExecuteAfter(60, () -> {
+				helper.assertTrue(!carrier[0].equals(station(helper).jobAt(0)
+					.worker(Shift.DAY)), "a worker with a load in its hands should not have been moved yet");
+				helper.assertTrue(Workers.get(helper.getLevel()
+					.getEntity(carrier[0]))
+					.isServingNotice(), "it should have been given notice to finish");
 				helper.assertItemEntityNotPresent(Items.COBBLESTONE);
 			})
+			.thenExecute(() -> Workers.get(helper.getLevel()
+				.getEntity(carrier[0]))
+				.setHeld(ItemStack.EMPTY))
+			.thenWaitUntil(() -> helper.assertTrue(carrier[0].equals(station(helper).jobAt(0)
+				.worker(Shift.DAY)), "and be promoted once they are empty"))
 			.thenSucceed();
 	}
 

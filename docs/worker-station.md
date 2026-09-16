@@ -307,9 +307,14 @@ additions make it real:
 ### A uniform that can be read across a room
 
 The gear is already generated from `worker_gear.png`, so putting information on it is cheap — and one
-thing is worth showing: **the shift, as a hi-vis trim colour.** A different trim per crew costs a
+thing is worth showing: **the shift, as the colour of the vest.** A different vest per crew costs a
 change to the generator script rather than to any render code, and it is what
 [shift rotation](shift-rotation.md) already wanted.
+
+**The vest, and not trim on the sleeves and hem.** That was tried: the profession overlay is the one
+part of a worker that is a texture rather than geometry, so it looked like the cheap place to put
+colour. Orange at the hands and feet reads as a costume rather than as safety gear, and it is now
+blank — the vest is what a hi-vis wearer is recognised by, so it is what should carry the crew.
 
 That, plus the name floating over the worker, is enough. *The evening crew is one short, and it is
 "Smelting feed" who is missing* is a sentence a player can form by looking, without opening anything.
