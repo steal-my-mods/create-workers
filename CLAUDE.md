@@ -14,7 +14,8 @@ endermen haul items between inventories the way a Mechanical Arm does.
 ./gradlew publishMods -PdryRun=true   # ...or rehearse it without uploading anything
 python3 tools/generate_logo.py         # the in-jar badge at 256
 python3 tools/generate_logo.py branding/icon-512.png --size 512   # ...and the 512 CurseForge wants
-python3 tools/generate_ponder_structure.py   # both Ponder scenes' structure NBT
+python3 tools/generate_ponder_structure.py   # all three Ponder scenes' structure NBT
+python3 tools/generate_ponder_lang.py        # ...and their lang entries, read out of the storyboards
 python3 tools/generate_station_textures.py   # the Worker Station's block textures
 python3 tools/generate_worker_profession.py  # the worker profession's clothing, both variants
 ```
@@ -130,8 +131,9 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/HardHatClientExtensions` | Feeds that model to the armour renderer; re-baked on resource reload |
 | `client/WorkerCargoLayer` | Visible cargo — in the hand when the model has one, against the chest when it does not |
 | `client/ponder/CWPonderPlugin` | Hands the scenes to Ponder. A scene is filed under an **item id**, which is what the "hold W" prompt keys off; both scenes are filed under the hat, so they are consecutive pages |
-| `client/ponder/HardHatScene` | The hat's first scene: programme, hire, haul, clock off |
-| `client/ponder/WorkingHoursScene` | The second: last delivery of the day, walk to bed, sleep, the enderman night shift, morning |
+| `client/ponder/HardHatScene` | First scene: what a hat is and how it is programmed. **Stops before hiring**, which is no longer a thing you do to a villager |
+| `client/ponder/WorkerStationScene` | Second: a hat goes into a Station, a villager is taken on, it hauls, and the job outlives it |
+| `client/ponder/WorkingHoursScene` | Third: crews, the last delivery of the day, walk to bed, sleep, the enderman night shift, morning |
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
 | `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own. Its job-site predicates match the worker station **and nothing else** |
 | `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over |
@@ -268,12 +270,21 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   are a different set of files under a different root: `assets/createworkers/ponder/<name>.nbt`,
   the path Ponder builds by hand as `ponder/%s.nbt`.
 - **Ponder text does not fall back to the string in the code.** The English handed to `.text(...)`
-  in a storyboard is only a default for a lang generator; with editing mode off,
-  `PonderLocalization.getSpecific` goes straight to `I18n.get`, so a beat with no
-  `createworkers.ponder.<scene>.text_<n>` key renders the key. The `n` is an incrementing counter
-  over the `.text(` calls *in the order the storyboard makes them*, so inserting a beat in the
-  middle silently shifts every line after it onto the wrong step. Nothing checks this; compare the
-  calls against the lang file after touching either.
+  in a storyboard is only a default; with editing mode off, `PonderLocalization.getSpecific` goes
+  straight to `I18n.get`, so a beat with no `createworkers.ponder.<scene>.text_<n>` key renders the
+  key in front of a player. The `n` counts the `.text(` calls *in the order the storyboard makes
+  them*, so inserting a beat in the middle silently shifts every line after it onto the wrong step —
+  a defect invisible in either file on its own. **It is generated now**:
+  `tools/generate_ponder_lang.py` reads the storyboards and rewrites only the
+  `createworkers.ponder.*` block, and both workflows re-run it and fail on a diff. Run it after
+  touching a scene; do not renumber by hand.
+- **A Ponder scene is the mod's most easily-forgotten documentation, and the only one shipped inside
+  the jar.** The hiring scene went on teaching "right-click a villager with a hat" for several
+  versions after stations took that away — which is the worst kind of wrong, because nothing in the
+  game contradicts a Ponder page. When a mechanic changes, the scene is part of the change. What can
+  be checked automatically is only the plate: `theHiringPlateHasAnEmptyStationInIt` and
+  `theWorkingHoursPlateHasABedInIt` parse the NBT with Minecraft's own `StructureTemplate`, since
+  Ponder itself does not load on a dedicated server.
 - **A ponder level reports itself as client-side, so a worker in a scene is a puppet.** No brain,
   no `serverAiStep`, nothing that would move it — hence `WalkInstruction`, which sets the position
   every tick. The facing and the leg swing then come for free out of `LivingEntity.tick`, which

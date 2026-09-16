@@ -1,6 +1,6 @@
 # The Worker Station
 
-**Status: built.** The block hires, holds a rack of up to twelve jobs, runs each of them on any of the
+**Status: built, and in Ponder.** The block hires, holds a rack of up to twelve jobs, runs each of them on any of the
 three shifts, promotes workers up the order when one is lost, replaces workers that die and reclaims
 jobs from workers that stop turning up. The screen is built too — slots, shift toggles, order arrows
 and the staffing readout — though nobody has looked at it in a running game yet, and its shape (a

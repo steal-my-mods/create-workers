@@ -1,5 +1,13 @@
 package com.createworkers.test;
 
+import java.io.IOException;
+import java.io.InputStream;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -843,6 +851,43 @@ public class WorkerStationGameTests {
 			.thenSucceed();
 	}
 
+
+
+	/**
+	 * The hiring scene's plate really has a Station in it, and that Station starts without a job.
+	 *
+	 * <p>The only automated check a Ponder scene admits — it does not load on a dedicated server, so
+	 * nothing here can render one. What can be read is the plate, and two things about it are worth
+	 * reading. That the Station is there at all: a scene whose subject is missing is a scene about an
+	 * empty yard. And that {@code has_job} is <b>false</b>, because the scene's whole first beat is a
+	 * hat going in and the block becoming a job site — it flips the property with
+	 * {@code cycleBlockProperty}, so a plate that shipped the Station already staffed would show it
+	 * quietly losing its job instead.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void theHiringPlateHasAnEmptyStationInIt(GameTestHelper helper) {
+		CompoundTag tag;
+		try (InputStream source = WorkerStationGameTests.class
+			.getResourceAsStream("/assets/createworkers/ponder/worker_station.nbt")) {
+			helper.assertTrue(source != null, "the hiring ponder plate should be in the jar");
+			tag = NbtIo.readCompressed(source, NbtAccounter.unlimitedHeap());
+		} catch (IOException failure) {
+			throw new IllegalStateException("could not read the hiring ponder plate", failure);
+		}
+
+		StructureTemplate plate = new StructureTemplate();
+		plate.load(helper.getLevel()
+			.holderLookup(Registries.BLOCK), tag);
+
+		List<StructureTemplate.StructureBlockInfo> stations =
+			plate.filterBlocks(BlockPos.ZERO, new StructurePlaceSettings(), CWBlocks.WORKER_STATION.get());
+		helper.assertTrue(stations.size() == 1,
+			"the plate should hold exactly one Worker Station, and it holds " + stations.size());
+		helper.assertTrue(!stations.get(0)
+			.state()
+			.getValue(WorkerStationBlock.HAS_JOB), "and it should start with no job in it");
+		helper.succeed();
+	}
 
 	/**
 	 * A second villager takes a job at a station that already has a worker on it.

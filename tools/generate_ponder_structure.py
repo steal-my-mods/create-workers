@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 Generates the structure templates the hard hat's Ponder scenes are staged on:
-a checkerboard base plate with a Depot at two opposite corners, and a second
-copy of the same yard with a bed in the free corner for the working-hours scene.
+a checkerboard base plate with a Depot at two opposite corners, and two more
+copies of the same yard -- one with a Worker Station in a free corner, one with a
+bed in another -- for the scenes that follow.
 
 Ponder scenes are normally built in a creative world and pulled out of a
 structure block, which is fine for Create -- they have hundreds of them and an
@@ -50,6 +51,12 @@ BED_FOOT = (5, 1, 2)
 BED_HEAD = (5, 1, 1)
 BED_FOOT_STATE = ('minecraft:red_bed', {'facing': 'north', 'part': 'foot', 'occupied': 'false'})
 BED_HEAD_STATE = ('minecraft:red_bed', {'facing': 'north', 'part': 'head', 'occupied': 'false'})
+
+# The station the hiring scene puts a hat into. It starts empty, because that is
+# what the scene is about -- has_job is the property the point of interest is
+# registered over, and the scene flips it when the hat goes in.
+STATION = (1, 1, 5)
+STATION_STATE = ('createworkers:worker_station', {'has_job': 'false'})
 
 
 # --- the smallest NBT writer that will do -------------------------------------
@@ -150,7 +157,8 @@ def build(palette, blocks):
 
 SCENES = {
     'hard_hat': (),
-    'working_hours': ((BED_FOOT, BED_FOOT_STATE), (BED_HEAD, BED_HEAD_STATE)),
+    'worker_station': ((STATION, STATION_STATE),),
+    'working_hours': ((STATION, STATION_STATE), (BED_FOOT, BED_FOOT_STATE), (BED_HEAD, BED_HEAD_STATE)),
 }
 
 

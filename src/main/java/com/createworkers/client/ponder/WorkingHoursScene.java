@@ -48,6 +48,8 @@ public class WorkingHoursScene {
 	private static final BlockPos INPUT_DEPOT = new BlockPos(1, 1, 1);
 	private static final BlockPos OUTPUT_DEPOT = new BlockPos(5, 1, 5);
 	/** The head is the half that matters: it is the point of interest, and where a sleeper lies. */
+	/** The same Station as the scene before, so the yard is visibly the place the player just saw. */
+	private static final BlockPos STATION = new BlockPos(1, 1, 5);
 	private static final BlockPos BED_HEAD = new BlockPos(5, 1, 1);
 	private static final BlockPos BED_FOOT = new BlockPos(5, 1, 2);
 
@@ -71,7 +73,7 @@ public class WorkingHoursScene {
 
 	public static void nightShift(SceneBuilder builder, SceneBuildingUtil util) {
 		CreateSceneBuilder scene = new CreateSceneBuilder(builder);
-		scene.title("working_hours", "Working Hours");
+		scene.title("working_hours", "Shifts and Sleep");
 		scene.configureBasePlate(0, 0, 7);
 		scene.showBasePlate();
 
@@ -83,6 +85,8 @@ public class WorkingHoursScene {
 			.position(INPUT_DEPOT)
 			.add(util.select()
 				.position(OUTPUT_DEPOT))
+			.add(util.select()
+				.position(STATION))
 			.add(bed);
 		Vec3 bedTop = util.vector()
 			.topOf(BED_HEAD);
@@ -109,11 +113,20 @@ public class WorkingHoursScene {
 
 		scene.overlay()
 			.showText(80)
-			.text("At the end of the day, Workers down tools and sleep until morning")
+			.text("At the end of its crew's day a Worker downs tools, walks to a bed and sleeps until morning")
 			.attachKeyFrame()
 			.pointAt(BESIDE_INPUT.add(EYE))
 			.placeNearTarget();
 		scene.idle(90);
+
+		scene.overlay()
+			.showText(90)
+			.text("A job can run up to three crews — day, evening and night — so one Hat can be covered around the clock")
+			.attachKeyFrame()
+			.pointAt(util.vector()
+				.topOf(STATION))
+			.placeNearTarget();
+		scene.idle(100);
 
 		// --- the last delivery of the day ------------------------------------------------
 
@@ -240,8 +253,8 @@ public class WorkingHoursScene {
 	}
 
 	/**
-	 * Puts the gear on a scene worker, or takes it off again — the same trick {@link HardHatScene}
-	 * uses, writing straight to the {@code WorkerData} attachment the render layers read.
+	 * Puts the gear on a scene worker, or takes it off again — the same trick
+	 * {@link WorkerStationScene} uses, writing straight to the {@code WorkerData} attachment the render layers read.
 	 */
 	private static void dress(CreateSceneBuilder scene, ElementLink<EntityElement> worker, ItemStack hat,
 		ItemStack held) {

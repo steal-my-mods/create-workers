@@ -86,10 +86,10 @@ rather more durable — and it renders as the same 3D hat the workers wear rathe
 painted on your head.
 
 **Or let the game explain it.** Hold **W** over a Hard Hat in your inventory and Create's own Ponder
-screen walks through the whole job: assigning one Depot as an input, right-clicking a second twice to
-make it an output, hiring a villager, and watching them carry an ingot across the yard and clock off
-again. A second page covers working hours — the last delivery of the day, the walk to bed, and the
-enderman that carries on through the night.
+screen walks through it over three pages: programming a hat, assigning one Depot as an input and
+right-clicking a second twice to make it an output; then a Worker Station taking on a villager and
+watching it carry an ingot across the yard; then shifts and sleep — the last delivery of the day, the
+walk to bed, and the enderman that carries on through the night.
 
 ### The job site
 
@@ -315,12 +315,18 @@ well but never upscales.
 
 ### The Ponder scene's plate
 
-The little diorama the Ponder scene plays out on is generated as well, rather than built in a
-creative world and saved:
+The little diorama the Ponder scenes play out on is generated as well, rather than built in a
+creative world and saved — and so are the lines of text, which are read straight out of the
+storyboards:
 
 ```bash
 python3 tools/generate_ponder_structure.py   # assets/createworkers/ponder/*.nbt
+python3 tools/generate_ponder_lang.py        # the scenes' lang entries
 ```
+
+The second one is not tidiness. Ponder numbers a scene's lines by the order the storyboard writes
+them, and looks each up by that number — so inserting a beat in the middle moves every line after it
+onto the wrong step, silently, in a way neither file shows on its own.
 
 It writes the NBT directly, gzipped with `mtime=0` so an unchanged scene produces a byte-identical
 file. Both scenes' plates come out of one shared `yard()`, so they are visibly the same place — the

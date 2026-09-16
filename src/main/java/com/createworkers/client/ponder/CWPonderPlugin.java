@@ -27,10 +27,12 @@ public class CWPonderPlugin implements PonderPlugin {
 	@Override
 	public void registerScenes(PonderSceneRegistrationHelper<ResourceLocation> helper) {
 		// The second argument names the schematic, which Ponder loads from
-		// assets/createworkers/ponder/<name>.nbt. Both scenes hang off the same item, so Ponder
+		// assets/createworkers/ponder/<name>.nbt. All three scenes hang off the same item, so Ponder
 		// offers them as consecutive pages -- which is why the order here is the order to watch them
-		// in, and why the working-hours scene assumes the hiring one has been seen.
-		helper.addStoryBoard(CreateWorkers.asResource("hard_hat"), "hard_hat", HardHatScene::hiring);
+		// in, and why each one assumes the ones before it have been seen. They are also staged on the
+		// same yard for that reason.
+		helper.addStoryBoard(CreateWorkers.asResource("hard_hat"), "hard_hat", HardHatScene::programming);
+		helper.addStoryBoard(CreateWorkers.asResource("hard_hat"), "worker_station", WorkerStationScene::hiring);
 		helper.addStoryBoard(CreateWorkers.asResource("hard_hat"), "working_hours", WorkingHoursScene::nightShift);
 	}
 }
