@@ -325,6 +325,15 @@ public class WorkerJobGoal extends Goal {
 	 * nothing in the job goal occupies them during a cooldown.
 	 */
 	private void keepNearPost(WorkerData data, long gameTime) {
+		// Where the worker is, asked first and regardless of what it thinks it is doing. This is the
+		// signal a station's absentee rule reads, and it has to be proximity rather than activity: a
+		// worker cycling through targets it can never reach has one selected every tick, so anything
+		// keyed off "is it busy" would show it hard at work from the bottom of a hole. Computed once
+		// and shared with the leash below, which asks the same question.
+		boolean atWork = !Workers.isOffStation(mob.blockPosition(), data, CWConfig.WANDER_RADIUS.get());
+		if (atWork)
+			data.markAtWork(gameTime);
+
 		if (data.getTargetPoint() != null) {
 			forgetIdling();
 			forgetLeash(data);
@@ -337,8 +346,7 @@ public class WorkerJobGoal extends Goal {
 		// can stray in the first place -- an enderman only ever moves where the job sends it, so
 		// leashing one is bookkeeping with nothing behind it, and a distress signal from one would be
 		// a false alarm.
-		if (locomotion.needsLeash()
-			&& Workers.isOffStation(mob.blockPosition(), data, CWConfig.WANDER_RADIUS.get())) {
+		if (locomotion.needsLeash() && !atWork) {
 			walkHome(data);
 			return;
 		}

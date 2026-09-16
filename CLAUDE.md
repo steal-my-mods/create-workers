@@ -345,6 +345,24 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   to convert anything else, so there is no village job to take, preserve or give back.
   **The corollary is that an employed villager can never become a worker** — break its workstation
   first, exactly as vanilla makes you.
+- **A station tells a dead worker from an unloaded one by the POI ticket, never by an entity lookup.**
+  `ServerLevel.getEntity` finds only *loaded* entities, so a worker that walked into a chunk nobody is
+  standing in reads as gone — and a station that believed it would hire a second villager onto the
+  same job. `Villager` releases its tickets on death and on conversion and **not on unloading**, and
+  the ticket is saved with the chunk section, so `getFreeTickets(stationPos) == 0` is the honest
+  answer and survives the chunk going away.
+- **The absentee signal is proximity, and it cannot be anything else.** `WorkerData.lastAtWork` is
+  stamped in `keepNearPost` only when the worker is *near* its own work — before the early return, so
+  that having a target selected does not count. A worker cycling through targets it can never reach
+  has one selected every tick, so anything keyed off "is it busy" shows it hard at work from the
+  bottom of a hole; `leashFailures` is no good for the same reason, since it resets whenever a target
+  is picked. The clock is re-stamped on **hire and on every load**, because it freezes while a chunk
+  is away and a worker returning after an hour of game time is not an absentee.
+  (`aWorkerThatStopsTurningUpLosesTheJob`, mutation-checked both ways: by never sacking, and by
+  stamping the clock regardless of position.)
+- **Sacking an absentee has to release the POI ticket by hand.** Unlike a death or a hat being taken
+  out, the villager is alive and still holding the station as its `JOB_SITE`, so the one ticket would
+  stay taken and nobody could ever replace it — which is the exact failure the block exists to end.
 - **Nothing puts a fired worker's profession back, because vanilla does.** Losing the station loses
   the job site, and `ResetProfession` clears the profession of a villager with no job site that has
   never traded and is still on trade level one — which a worker now always is, nothing having raised

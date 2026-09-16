@@ -49,6 +49,8 @@ public class CWConfig {
 	public static final ModConfigSpec.IntValue BED_SEARCH_RADIUS;
 	/** Whether a worker that cannot walk home is put back by hand. */
 	public static final ModConfigSpec.BooleanValue RECALL_STUCK_WORKERS;
+	/** How long a worker may be away from its work before its station gives the job to somebody else. */
+	public static final ModConfigSpec.IntValue ABSENTEE_TIMEOUT;
 
 	static {
 		ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -153,6 +155,15 @@ public class CWConfig {
 				"short with nothing to say which villager to go and find, and some servers would rather",
 				"have the teleport than the puzzle. Workers that can walk home always walk.")
 			.define("recallStuckWorkers", false);
+
+		ABSENTEE_TIMEOUT = builder
+			.comment("How long a worker may go without being anywhere near its own work before the",
+				"station that hired it gives the job to somebody else, in ticks. 6000 is five minutes.",
+				"This is what stops a line quietly running short because one villager fell in a hole:",
+				"the absentee is let go, an ordinary villager again, and the next one along takes the",
+				"job. Measured by where the worker is, not by how much it has moved, because a worker",
+				"with nothing to haul is idle rather than absent. 0 never gives up on anyone.")
+			.defineInRange("absenteeTimeout", 6000, 0, 72000);
 
 		builder.pop();
 		SPEC = builder.build();

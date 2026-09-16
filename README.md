@@ -54,8 +54,10 @@ P A P      H = Hard Hat, programmed
 ```
 
 The hat stays in the station and the worker wears a copy, so **if that worker dies the job is still
-there** and the next villager along picks it up. A factory built on stations repairs its own
-workforce. To end the job, take the hat back out with an empty hand or break the block; either one
+there** and the next villager along picks it up. And if one stops turning up — walled in by a build,
+fallen somewhere it cannot climb out of — the station gives the job away after `absenteeTimeout` and
+hires a replacement, so a line never quietly runs short over one lost villager. A factory built on
+stations repairs its own workforce. To end the job, take the hat back out with an empty hand or break the block; either one
 hands the hat back and puts the villager out of work.
 
 Two things a station will not do. A villager that already has a job of its own will never take one —
@@ -245,6 +247,7 @@ Two details you might otherwise read as bugs:
 | `clockOn` | 0 | Time of day work starts again. Later than `clockOff` inverts the two, which is how you get a night shift |
 | `bedSearchRadius` | 16 | How far from the job site a worker may look for a bed of its own. 0 means it sleeps only in a bed assigned on its hat |
 | `recallStuckWorkers` | `false` | Whether a worker that has repeatedly failed to walk back to its work is teleported there. Workers that can walk home always walk; this is only for the one at the bottom of a hole |
+| `absenteeTimeout` | 6000 | How long a worker may go without being anywhere near its own work before its station gives the job to somebody else. 0 never gives up on anyone |
 
 ## Development
 

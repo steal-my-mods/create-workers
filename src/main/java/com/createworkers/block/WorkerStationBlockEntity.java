@@ -4,9 +4,11 @@ import java.util.UUID;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.createworkers.CWConfig;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWBlockEntities;
+import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.Workers;
 
 import net.minecraft.core.BlockPos;
@@ -117,8 +119,10 @@ public class WorkerStationBlockEntity extends BlockEntity {
 	private void staffUp(Level level) {
 		if (!hasJob() || !(level instanceof ServerLevel server))
 			return;
-		if (stillStaffed(server))
+		if (stillStaffed(server)) {
+			sackIfAbsent(server);
 			return;
+		}
 
 		WorkerProgram programme = HardHatItem.getProgram(hat);
 		if (!programme.hasTargets())
@@ -134,16 +138,66 @@ public class WorkerStationBlockEntity extends BlockEntity {
 		}
 	}
 
+	/**
+	 * Whether somebody is already doing this job.
+	 *
+	 * <p>An unloaded worker is not a dead one, and telling them apart matters: {@code getEntity}
+	 * finds only loaded entities, so a worker that walked into a chunk nobody is standing in would
+	 * read as gone and the station would hire a second villager onto the same job. The
+	 * point-of-interest ticket is the honest answer, because it is saved with the chunk section and
+	 * released by {@code Villager} only on death or conversion — never on unloading.
+	 */
 	private boolean stillStaffed(ServerLevel server) {
 		if (workerId == null)
 			return false;
 
 		Entity entity = server.getEntity(workerId);
-		if (entity == null || !entity.isAlive() || !Workers.isEmployed(entity)) {
+		if (entity == null)
+			return server.getPoiManager()
+				.getFreeTickets(worldPosition) == 0;
+
+		if (!entity.isAlive() || !Workers.isEmployed(entity)) {
 			workerId = null;
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Gives the job to somebody else when its holder has stopped turning up.
+	 *
+	 * <p>The station can replace a worker that dies, because dying frees the ticket. It cannot
+	 * replace one that is merely never coming back — walled in, fallen somewhere, stranded across a
+	 * gap — and that is the failure this whole block was built to answer: a line quietly running short
+	 * with nothing to say which villager to go and look for.
+	 *
+	 * <p>Absence is measured by where the worker is and not by what it has moved, because a worker
+	 * with nothing to haul is idle rather than absent — and a worker uselessly cycling through targets
+	 * it can never reach looks busy by every other measure.
+	 */
+	private void sackIfAbsent(ServerLevel server) {
+		int timeout = CWConfig.ABSENTEE_TIMEOUT.get();
+		if (timeout <= 0 || workerId == null)
+			return;
+
+		Entity entity = server.getEntity(workerId);
+		if (!(entity instanceof Villager worker))
+			return; // not loaded, so not judged: its clock is not running either
+
+		WorkerData data = Workers.get(worker);
+		if (data == null || server.getGameTime() - data.lastAtWork() <= timeout)
+			return;
+
+		// The ticket has to go back by hand. A sacked absentee is alive and still holding this block
+		// as its job site, so the one ticket would stay taken and nobody could ever replace it —
+		// which is the exact failure this is meant to end. Vanilla clears the profession afterwards,
+		// a worker with no job site being what ResetProfession is for.
+		worker.releasePoi(MemoryModuleType.JOB_SITE);
+		worker.getBrain()
+			.eraseMemory(MemoryModuleType.JOB_SITE);
+		for (ItemStack drop : Workers.dismiss(worker))
+			worker.spawnAtLocation(drop);
+		workerId = null;
 	}
 
 	private boolean hasClaimedThis(Villager villager) {

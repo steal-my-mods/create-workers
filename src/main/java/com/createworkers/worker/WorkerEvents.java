@@ -58,10 +58,17 @@ public class WorkerEvents {
 
 		mob.goalSelector.addGoal(0, new WorkerJobGoal(mob, locomotion));
 
+		if (!Workers.isEmployed(mob))
+			return;
+
 		// A brain does not serialize its schedule, and building one sets the village's. So a worker
 		// coming back from disk has the wrong hours until this puts its own back.
-		if (Workers.isEmployed(mob))
-			WorkerShift.applySchedule(mob);
+		WorkerShift.applySchedule(mob);
+		// And its absence clock freezes while its chunk is away, so a worker returning after an hour
+		// of game time would read as an absentee the moment it loaded. A fresh start on every load.
+		Workers.getOrCreate(mob)
+			.markAtWork(event.getLevel()
+				.getGameTime());
 	}
 
 	/**

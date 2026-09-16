@@ -2,6 +2,7 @@ package com.createworkers.test;
 
 import java.util.List;
 
+import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.block.WorkerStationBlock;
 import com.createworkers.block.WorkerStationBlockEntity;
@@ -17,6 +18,8 @@ import com.createworkers.worker.target.WorkerTarget;
 import com.simibubi.create.AllBlocks;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.AfterBatch;
+import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -56,9 +59,36 @@ public class WorkerStationGameTests {
 	/** Right beside the station, so vanilla's two-block assignment range is never the variable. */
 	private static final BlockPos BESIDE_STATION = new BlockPos(5, 1, 6);
 
+	/** A cell in the far corner, outside the tightened wander radius this batch runs with. */
+	private static final BlockPos CELL = new BlockPos(9, 1, 1);
+	/** Short enough to watch, long enough that a worker at its post is plainly not being sacked for time. */
+	private static final int ABSENTEE_TICKS = 100;
+	private static final int TIGHT_WANDER_RADIUS = 4;
+
+	private static int absenteeWas = 6000;
+	private static int wanderRadiusWas = 12;
+
 	private static final int STOCK = 16;
 	/** Long enough for the brain to acquire a point of interest and the station to notice. */
 	private static final int HIRING_TICKS = 200;
+
+	/**
+	 * A timeout short enough to watch, and a wander radius tight enough that an eleven-block test site
+	 * can put a worker outside it at all.
+	 */
+	@BeforeBatch(batch = "absentee")
+	public static void impatience(ServerLevel level) {
+		absenteeWas = CWConfig.ABSENTEE_TIMEOUT.get();
+		wanderRadiusWas = CWConfig.WANDER_RADIUS.get();
+		CWConfig.ABSENTEE_TIMEOUT.set(ABSENTEE_TICKS);
+		CWConfig.WANDER_RADIUS.set(TIGHT_WANDER_RADIUS);
+	}
+
+	@AfterBatch(batch = "absentee")
+	public static void patience(ServerLevel level) {
+		CWConfig.ABSENTEE_TIMEOUT.set(absenteeWas);
+		CWConfig.WANDER_RADIUS.set(wanderRadiusWas);
+	}
 
 	/**
 	 * A station with a hat in it is a job site; an empty one is not.
@@ -251,7 +281,65 @@ public class WorkerStationGameTests {
 			.thenSucceed();
 	}
 
+	/**
+	 * A worker that stops turning up loses the job; one that is simply there keeps it.
+	 *
+	 * <p>Both halves matter, and the first half is the one that makes the test worth anything. The
+	 * station can already replace a worker that <em>dies</em>, because dying frees its ticket. What it
+	 * could not do before is replace one that is alive and never coming back — and the temptation is
+	 * to measure that by how much work is getting done, which would sack the wrong villager every time
+	 * an input ran dry. So the worker here is left standing at its post for longer than the timeout
+	 * first, and must still have its job.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 1200, batch = "absentee")
+	public static void aWorkerThatStopsTurningUpLosesTheJob(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+		BlockPos station = helper.absolutePos(STATION);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(Workers.isEmployed(villager), "the villager should be hired"))
+			// Standing about at its own work for well past the timeout is not absence. A worker with
+			// nothing to haul is idle, and sacking it would be sacking it for the input running dry.
+			.thenExecuteAfter(ABSENTEE_TICKS * 2, () -> {
+				helper.assertTrue(Workers.isEmployed(villager),
+					"a worker standing at its own post should keep its job however long it stands there");
+				sealIn(helper, villager, CELL);
+			})
+			.thenWaitUntil(() -> {
+				helper.assertTrue(!Workers.isEmployed(villager),
+					"a worker walled away from its work should have been let go by now");
+				helper.assertTrue(helper.getLevel()
+					.getPoiManager()
+					.getFreeTickets(station) > 0,
+					"and its ticket should be back, or nobody could ever replace it");
+			})
+			.thenExecute(() -> helper.spawn(EntityType.VILLAGER, BESIDE_STATION))
+			.thenWaitUntil(() -> helper.assertTrue(someoneIsEmployed(helper),
+				"so that somebody else can take the job on"))
+			.thenSucceed();
+	}
+
 	// --- helpers ---
+
+	/**
+	 * Walls a worker into a cell it cannot path out of, far enough from its work to count as away.
+	 * A hole would not do — a villager steps up one block and climbs straight out.
+	 */
+	private static void sealIn(GameTestHelper helper, Villager villager, BlockPos cell) {
+		for (int y = 1; y <= 2; y++) {
+			helper.setBlock(cell.offset(1, y - 1, 0), Blocks.POLISHED_ANDESITE);
+			helper.setBlock(cell.offset(-1, y - 1, 0), Blocks.POLISHED_ANDESITE);
+			helper.setBlock(cell.offset(0, y - 1, 1), Blocks.POLISHED_ANDESITE);
+			helper.setBlock(cell.offset(0, y - 1, -1), Blocks.POLISHED_ANDESITE);
+		}
+		helper.setBlock(cell.above(2), Blocks.POLISHED_ANDESITE);
+
+		BlockPos inside = helper.absolutePos(cell);
+		villager.moveTo(inside.getX() + 0.5D, inside.getY(), inside.getZ() + 0.5D, 0, 0);
+	}
 
 	private static boolean isJobSite(ServerLevel level, BlockPos pos) {
 		PoiManager poi = level.getPoiManager();

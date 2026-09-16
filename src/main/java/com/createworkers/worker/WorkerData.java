@@ -79,6 +79,16 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	private int deliveryProbes;
 	private int bedSearches;
 	private int leashFailures;
+	/**
+	 * When this worker was last standing near its own work.
+	 *
+	 * <p>The signal a station's absentee rule reads, and deliberately about *position* rather than
+	 * about progress: a worker with nothing to haul is idle, not absent, and one cycling through
+	 * targets it can never reach has a target selected every tick and would otherwise look busy
+	 * forever. Set when the worker is hired and again whenever it loads, because it freezes while a
+	 * chunk is away and a worker coming back after an hour of game time is not an absentee.
+	 */
+	private long lastAtWork;
 	@Nullable
 	private ArmBlockEntity host;
 
@@ -428,6 +438,15 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 
 	public void clearLeashFailures() {
 		leashFailures = 0;
+	}
+
+	/** @return the game time this worker was last near its own work. */
+	public long lastAtWork() {
+		return lastAtWork;
+	}
+
+	public void markAtWork(long gameTime) {
+		lastAtWork = gameTime;
 	}
 
 	private void resetCostAccount() {

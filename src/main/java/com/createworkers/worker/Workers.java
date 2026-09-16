@@ -131,6 +131,8 @@ public class Workers {
 			data.rememberStation(station);
 
 		WorkerShift.applySchedule(mob);
+		data.markAtWork(mob.level()
+			.getGameTime());
 		updateCargoAppearance(mob, data.getHeld());
 		WorkerStatePacket.sync(mob, data);
 	}
