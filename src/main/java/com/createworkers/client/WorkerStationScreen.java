@@ -1,6 +1,5 @@
 package com.createworkers.client;
 
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 
@@ -59,7 +58,7 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 	@Override
 	protected void init() {
 		setWindowSize(WorkerStationMenu.PANEL_WIDTH,
-			WorkerStationMenu.FIRST_ROW_Y + ROWS * WorkerStationMenu.ROW_HEIGHT + READOUT_HEIGHT + 76);
+			WorkerStationMenu.FIRST_ROW_Y + ROWS * WorkerStationMenu.ROW_HEIGHT + READOUT_HEIGHT + 82);
 		super.init();
 	}
 
@@ -98,8 +97,11 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 			return;
 		}
 
-		graphics.drawString(font, job.hat()
-			.getHoverName(), x + 30, rowY + 5, TEXT, false);
+		// Clipped rather than allowed to run under the toggles: a hat can be named anything on an anvil,
+		// and the columns to its right are the part of the row a player is reading.
+		graphics.drawString(font, font.plainSubstrByWidth(job.hat()
+			.getHoverName()
+			.getString(), FIRST_TOGGLE_X - 34), x + 30, rowY + 5, TEXT, false);
 
 		for (Shift shift : Shift.VALUES) {
 			int tx = x + FIRST_TOGGLE_X + shift.ordinal() * TOGGLE_WIDTH;
@@ -226,12 +228,13 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 		return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
 	}
 
+	/** Asked several times a row, several times a frame, so it indexes rather than copies. */
 	private WorkerStationBlockEntity.Slot jobAt(int row) {
 		WorkerStationBlockEntity station = menu.contentHolder;
-		if (station == null)
+		if (station == null || row < 0)
 			return null;
-		List<WorkerStationBlockEntity.Slot> jobs = new ArrayList<>(station.slots());
-		return row >= 0 && row < jobs.size() ? jobs.get(row) : null;
+		List<WorkerStationBlockEntity.Slot> jobs = station.slots();
+		return row < jobs.size() ? jobs.get(row) : null;
 	}
 
 	private static String initial(Shift shift) {

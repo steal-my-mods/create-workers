@@ -3,7 +3,6 @@ package com.createworkers.block;
 import com.createworkers.registry.CWMenuTypes;
 import com.simibubi.create.foundation.gui.menu.MenuBase;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -47,15 +46,18 @@ public class WorkerStationMenu extends MenuBase<WorkerStationBlockEntity> {
 		return new WorkerStationMenu(CWMenuTypes.WORKER_STATION.get(), id, inventory, station);
 	}
 
+	/**
+	 * Never used, and it cannot be.
+	 *
+	 * <p>{@code MenuBase}'s buffer constructor calls this <em>before</em> its {@code init} assigns any
+	 * field, so there is no player here to ask for a level and no way to find the block this menu is
+	 * for. Reaching for {@code Minecraft} instead is what Create's own menus do, and it loads a client
+	 * class from a class a dedicated server also loads. So the buffer is read in
+	 * {@code CWMenuTypes} instead, where the inventory — and through it the player, and the level — is
+	 * an argument, and this menu is only ever built from a block it already has.
+	 */
 	@Override
 	protected WorkerStationBlockEntity createOnClient(RegistryFriendlyByteBuf buf) {
-		BlockPos pos = buf.readBlockPos();
-		// The client's own copy, not one rebuilt from this packet. The block entity syncs itself to
-		// everyone tracking the chunk, so reading it here is what keeps the screen live while it is
-		// open -- a worker hired or lost while the player is looking shows up without a menu packet.
-		if (player.level()
-			.getBlockEntity(pos) instanceof WorkerStationBlockEntity station)
-			return station;
 		return null;
 	}
 

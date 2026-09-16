@@ -139,7 +139,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `block/WorkerStationMenu` | The rack as real slots, over Create's `MenuBase`. Its geometry constants are shared with the screen, because slots are placed before any screen exists |
 | `client/WorkerStationScreen` | The rack arranged: shift toggles, order arrows, staffing readout. Reads the block entity, never its own copy |
 | `net/StationRosterPacket` | The two edits that are not an item — which shifts a job runs, and where it sits |
-| `registry/CWMenuTypes` | Screens this mod opens |
+| `registry/CWMenuTypes` | Screens this mod opens. **Reads the open packet's buffer itself**, because `MenuBase` cannot |
 | `registry/CWCapabilities` | What other machines can reach into: the station's rack, and nothing else |
 | `registry/CWPoiTypes` | The station as a village workstation. `maxTickets` is the largest roster the mod allows, because it belongs to the *type*; the block holds back the difference |
 | `recipe/ClearProgramRecipe` | Crafting a hat by itself blanks its program, the way a Create filter clears |
@@ -663,6 +663,23 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   coordinate by talking to each other, which is a distributed problem invented to avoid a list. Slot
   order breaks ties within a shift, which is what makes the order of the rack the player's priority
   lever. (`shortCrewsFillWholeShiftsBeforeDeepOnes`, mutation-checked by swapping the loops.)
+- **`MenuBase` calls `createOnClient` before it has assigned a single one of its fields.** Its buffer
+  constructor is `super(type, id); init(inventory, createOnClient(buf))` — so `player`,
+  `playerInventory` and `contentHolder` are all still null inside it, and a `createOnClient` that reads
+  `player.level()` to find its block **crashes the client on the tick the screen opens**, which is how
+  the first version of the station screen shipped. Create's own menus answer this by reaching for
+  `Minecraft.getInstance().level`, and **that is worse, not better**: it loads a client class from a
+  class a dedicated server also loads, which NeoForge refuses outright ("Attempted to load class
+  net/minecraft/client/multiplayer/ClientLevel for invalid dist DEDICATED_SERVER"). The buffer is
+  therefore read in `CWMenuTypes`' factory, which is handed the `Inventory` — and an inventory has a
+  player, and a player has a level. `createOnClient` returns null and is never called.
+  `theStationMenuIsBuiltOverTheRack` is what found the second bug; nothing can find the first but a
+  running client.
+- **`MenuBase.stillValid` returns `true` unconditionally** unless its content holder implements
+  Create's `IInteractionChecker`. So a menu over a block entity that does not implement it never closes
+  when the player walks away, and any packet that gates on `stillValid` — `StationRosterPacket` does,
+  and what it guards is hiring and firing villagers — is gating on nothing at all. Mutation-checked by
+  dropping the interface, which leaves a player forty blocks off still able to rearrange the rack.
 - **A menu's slots are placed once, before any screen exists, and a `Slot`'s position is final.** Both
   halves bite. The menu is built on the server *and* on the client from the payload, so anything its
   layout depends on must be true on both sides at that moment — which is why the rack's `getSlots()`

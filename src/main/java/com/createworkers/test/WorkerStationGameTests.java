@@ -8,6 +8,7 @@ import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.block.WorkerStationBlock;
 import com.createworkers.block.WorkerStationBlockEntity;
+import com.createworkers.block.WorkerStationMenu;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWBlocks;
@@ -29,6 +30,8 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.npc.Villager;
@@ -513,6 +516,70 @@ public class WorkerStationGameTests {
 		helper.assertTrue(ItemStack.isSameItem(pulled, first), "taking slot zero gives back the first job's hat");
 		helper.assertTrue(station(helper).slots()
 			.size() == 2, "and the list closes up behind it");
+		helper.succeed();
+	}
+
+
+	/**
+	 * The station's menu builds, and its slots are the rack's slots.
+	 *
+	 * <p>Half a screen's worth of coverage, and the half that can be had: a menu is built on the server
+	 * as well as on the client, so everything about its shape — how many slots, which inventory they
+	 * are over, what shift-clicking a hat does — is answerable here. What is not is the client's own
+	 * constructor, which takes a buffer instead of a block and is where the first version of this
+	 * crashed.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void theStationMenuIsBuiltOverTheRack(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		// A mock player is made wherever the framework likes, which is not at the block under test.
+		BlockPos standing = helper.absolutePos(BESIDE_STATION);
+		player.setPos(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D);
+
+		ItemStack spare = new ItemStack(CWItems.HARD_HAT.get());
+		HardHatItem.setProgram(spare, programme(helper));
+		player.getInventory()
+			.add(spare);
+
+		WorkerStationMenu menu = WorkerStationMenu.create(1, player.getInventory(), station(helper));
+		helper.assertTrue(menu.slots.size() == WorkerStationBlockEntity.MAX_SLOTS + 36,
+			"every place on the rack plus the player's own inventory, and it has " + menu.slots.size());
+		helper.assertTrue(menu.getSlot(0)
+			.hasItem(), "the first slot is the first job");
+		helper.assertTrue(!menu.getSlot(1)
+			.hasItem(), "and the second is the empty place after it");
+
+		// Shift-clicking the spare out of the player's inventory: the rack has exactly one index that
+		// will take it, so this is also the check that quickMoveStack finds it rather than giving up.
+		int playerSlot = -1;
+		for (int i = WorkerStationBlockEntity.MAX_SLOTS; i < menu.slots.size(); i++)
+			if (menu.getSlot(i)
+				.hasItem()) {
+				playerSlot = i;
+				break;
+			}
+		helper.assertTrue(playerSlot >= 0, "precondition: the player is holding a hat somewhere");
+
+		// The one thing the roster packet checks before it lets a client reorder a rack or toggle a
+		// shift -- which hires and fires villagers. MenuBase.stillValid answers true for any content
+		// holder that does not implement Create's IInteractionChecker, so this is a test that ours
+		// does: without it the check is not a weak check, it is no check.
+		helper.assertTrue(menu.stillValid(player), "a player at the station may use its rack");
+		player.setPos(player.getX() + 40, player.getY(), player.getZ());
+		helper.assertTrue(!menu.stillValid(player), "a player forty blocks away may not");
+		player.setPos(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D);
+
+		menu.quickMoveStack(player, playerSlot);
+		helper.assertTrue(station(helper).slots()
+			.size() == 2, "shift-clicking a hat in should rack it, and the rack holds "
+				+ station(helper).slots()
+					.size());
+		helper.assertTrue(menu.getSlot(1)
+			.hasItem(), "in the place that was empty");
 		helper.succeed();
 	}
 

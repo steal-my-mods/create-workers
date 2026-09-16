@@ -16,6 +16,7 @@ import com.createworkers.registry.CWPoiTypes;
 import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.Workers;
+import com.simibubi.create.foundation.utility.IInteractionChecker;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -28,6 +29,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -67,7 +69,7 @@ import net.neoforged.neoforge.items.IItemHandlerModifiable;
  * chain, at deliberate redundancy or at several unrelated jobs — it only fills in an order that is
  * defensible under all three.
  */
-public class WorkerStationBlockEntity extends BlockEntity {
+public class WorkerStationBlockEntity extends BlockEntity implements IInteractionChecker {
 
 	/**
 	 * The most slots any station can ever have.
@@ -705,13 +707,19 @@ public class WorkerStationBlockEntity extends BlockEntity {
 	 */
 	private void changed() {
 		setChanged();
-		// The screen reads the rack straight off the block entity, so the rack has to be on the client
+		// Everything past here is the server's. This also runs on the client, where the menu's own slot
+		// sync writes into the rack through setStackInSlot -- and a client that answered by setting
+		// blocks would be inventing a world the server has not agreed to, only to have it corrected on
+		// the next update.
+		if (level == null || level.isClientSide())
+			return;
+
+		if (getBlockState().getValue(WorkerStationBlock.HAS_JOB) != hasJob())
+			level.setBlock(worldPosition, getBlockState().setValue(WorkerStationBlock.HAS_JOB, hasJob()), 3);
+		// The screen reads the rack straight off the block entity, so the rack has to reach the client
 		// at all. Cheap enough to send whole: a station changes when somebody is hired, dies or moves a
 		// hat, which is a handful of times an hour, not a handful of times a tick.
-		if (level != null && !level.isClientSide())
-			level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
-		if (level != null && getBlockState().getValue(WorkerStationBlock.HAS_JOB) != hasJob())
-			level.setBlock(worldPosition, getBlockState().setValue(WorkerStationBlock.HAS_JOB, hasJob()), 3);
+		level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
 	}
 
 	@Override
@@ -723,6 +731,23 @@ public class WorkerStationBlockEntity extends BlockEntity {
 	@Override
 	public ClientboundBlockEntityDataPacket getUpdatePacket() {
 		return ClientboundBlockEntityDataPacket.create(this);
+	}
+
+	/**
+	 * Whether this player may still have the rack open.
+	 *
+	 * <p>Not optional, and not decoration. {@code MenuBase.stillValid} returns <b>true unconditionally</b>
+	 * for a content holder that does not implement this — so without it the station's menu would never
+	 * close on its own, and the roster packet's one check, which is exactly this call, would be no check
+	 * at all: the order of the rack and its shift toggles hire and fire villagers, and a client could
+	 * drive them from anywhere in the world or after the block had been broken.
+	 */
+	@Override
+	public boolean canPlayerUse(Player player) {
+		if (level == null || level.getBlockEntity(worldPosition) != this)
+			return false;
+		return player.distanceToSqr(worldPosition.getX() + 0.5D, worldPosition.getY() + 0.5D,
+			worldPosition.getZ() + 0.5D) <= 64.0D;
 	}
 
 	// --- serialization -------------------------------------------------------------------
