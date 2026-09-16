@@ -57,8 +57,10 @@ The hat stays in the station and the worker wears a copy, so **if that worker di
 there** and the next villager along picks it up. And if one stops turning up — walled in by a build,
 fallen somewhere it cannot climb out of — the station gives the job away after `absenteeTimeout` and
 hires a replacement, so a line never quietly runs short over one lost villager. A factory built on
-stations repairs its own workforce. To end the job, take the hat back out with an empty hand or break the block; either one
-hands the hat back and puts the villager out of work.
+stations repairs its own workforce.
+
+To end the job, take the hat back out with an empty hand or break the block; either one hands the hat
+back and puts the villager out of work.
 
 Two things a station will not do. A villager that already has a job of its own will never take one —
 break its workstation first, the same way vanilla makes you — and children are never hired, because a
