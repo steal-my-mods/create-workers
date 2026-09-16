@@ -308,11 +308,23 @@ conspicuously *less* of a villager than a fletcher. Leisure makes `ShowTradesToP
 `GiveGiftToHero` fire for the first time, so trades are also the thing that makes the middle window
 visible to a player walking past.
 
-**The constraint is the trade list, and it is easy to satisfy: stay inside our own namespace.** A
-worker selling **hard hats** is thematically perfect — the person wearing one will sell you one — and
-it is our item, so it is our progression to set rather than Create's. Buying raw materials for
-emeralds fits the fiction of labourers with wages and adds a sink rather than a source. What a worker
-must never do is sell the components Create expects you to build a factory to make.
+**The constraint is the trade list — and "stay inside our own namespace" was still too broad.** The
+line that actually matters is *progression gates*, not who registered the item.
+
+A shaft is andesite alloy and a plank. A cog is the same. They are available from the first hour, they
+are not gated behind anything, and mass-producing them by hand is exactly the tedium Create wants you
+to automate your way out of. A worker selling shafts and cogs skips nothing — and it is thematically
+ideal, because what a labourer has to sell is the product of labour: cheap fabricated parts, made by
+the person who made them.
+
+What stays off the list is what a factory is the *answer* to: precision mechanisms, brass casings,
+sturdy sheets. Selling those would let a player buy their way past the build Create set as the puzzle,
+which is not this addon's call to make.
+
+So the rule is **"nothing that skips a gate"**, and under it: shafts, cogs, andesite alloy and our own
+hard hats are all fine to sell; raw materials and food are fine to buy; the tier-defining components
+are not. (Worth checking whether Create has a stated position on addons adding villager trades for its
+items — a courtesy question rather than a technical one.)
 
 Mechanically it is one event: `VillagerTrades.TRADES` is a plain mutable map keyed by profession, and
 NeoForge's `VillagerTradesEvent` is the supported way in.

@@ -36,9 +36,28 @@ that *is* the mod's identity on a project page. Against that, the station gains 
 already get from holding hats — a station with three hats in it **is** a crew of three, with no new
 concepts and no new state.
 
-So: **manual hiring stays.** Right-clicking a villager with a programmed hat is still the small-build
-path and still the tutorial path. The station is the automated path, for when a base has outgrown
-doing it by hand.
+### So does direct assignment, and it is worth naming what it produces
+
+Right-clicking a villager with a programmed hat stays. But rather than "the same thing, done by
+hand", it is better understood as producing a different *kind* of worker — an **unmanaged** one:
+
+| | Hired from a station | Hired by hand |
+|---|---|---|
+| Belongs to a crew | Yes | No |
+| Keeps a shift | Yes | No — always on |
+| Replaced when lost | Yes | No |
+| Eats | Yes, on its own | Yes, but the player feeds it |
+
+That is not a second-class citizen so much as the only kind of worker an **enderman** can ever be:
+no profession, no point of interest, nothing for a job board to hire. So the hand-hired villager and
+the enderman converge on one idea — the unmanaged worker, always on, no crew, no self-healing — which
+is a coherent thing to have rather than an awkward leftover.
+
+It also keeps the small build small. One worker between two depots should not need a block, a shaft
+and a power source, and both Ponder scenes still teach the thing the player does first.
+
+The honest cost of keeping it: the `RESET_PROOF_LEVEL` trick stays alive for that path, because a
+hand-hired worker still has no job site. See [What it lets us delete](#what-it-lets-us-delete).
 
 ## How hiring works
 
@@ -71,30 +90,55 @@ Two details worth knowing before building it:
   goes back to being unemployed. Self-correcting, and mildly wasteful in that a villager may walk
   over for nothing.
 
-## Filling shifts: whole shifts, never thin ones
+## Filling shifts: whole shifts, because a partial one is a broken factory
 
-Fill a shift completely before opening the next. The rule is easy; the reason it is right is the part
-worth writing down.
+Fill a shift completely before opening the next. An earlier draft justified that on legibility —
+a half-staffed shift "runs at half rate while looking like it works". **That is wrong, and the real
+reason is much stronger: a half-staffed shift mostly does not work at all.**
 
-**Degrade by dropping whole shifts, never by thinning every shift.** A half-staffed shift is a window
-that runs at half rate while still *looking* like it is working — the machines turn, items move,
-nothing is obviously wrong, and the player has no way to see that they are down a villager. An
-unstaffed shift is visibly off. So when the village is short of people, the player should lose *hours
-of the day*, not *rate across the whole day*, because hours are legible and rate is not.
+Workers in a factory are a *chain*, not a pool. Worker 1 feeds machine A, worker 2 carries A's output
+to machine B, worker 3 carries B's output onward. Take worker 2 away and nothing degrades gracefully:
 
-That makes the station's screen the diagnostic:
+- Worker 1 fills A's output depot, which never drains. Then it **stops entirely**, because the arm
+  rule this mod is built on says take nothing you have nowhere to put.
+- Worker 3 stands at an input that never fills.
+- The line produces nothing, while two of its three workers are visibly walking about.
+
+So the throughput of a shift missing one worker is not a fraction, it is usually **zero** — and a
+zero that looks busy, which is the worst state a factory can be in. That makes filling whole shifts a
+correctness rule rather than a preference.
+
+### Which means a station is a line's roster, not a single job
+
+That chain argument only works if one station knows about the whole chain. So: **a station holds the
+hats for a production line**, and its slots are the roles in that line — worker 1's programme,
+worker 2's, worker 3's — each of which needs filling on every shift the line runs.
+
+This is the answer to "should stations talk to each other over the stress network". They should not
+need to, because a line that depends on three workers is *one* station with three slots. Coordination
+inside a station is a loop over its own slots; coordination between stations would be a distributed
+problem, and the way to avoid a distributed problem is not to create one.
+
+### What a station does with a crew it cannot complete
+
+It should **hold the shift closed**. A shift it cannot fully staff does not run: the hats stay in
+their slots, no villager is hired into it, and the screen says so.
 
 ```
-Shift 1 (day)      ██  2/2
-Shift 2 (evening)  █·  1/2
-Shift 3 (night)    ··  0/2
+Shift 1 (day)      ███  3/3   running
+Shift 2 (evening)  ██·  2/3   short one worker -- not running
+Shift 3 (night)    ···  0/3   no crew
 ```
 
-and "I am two villagers short" is readable at a glance.
+Two refinements that fall out of the chain argument:
 
-**Fill the daytime shift first**, so an understaffed factory runs during the hours the player is most
-likely to be standing in it. A factory that only works while you are asleep is a factory you cannot
-debug.
+- **Do not fire a crew that becomes incomplete mid-shift.** If a worker dies at noon, the remaining
+  two will back their own line up and stop on their own within a few minutes, and the station will
+  usually have refilled the slot before that matters. Tearing down a running shift the instant
+  somebody dies would be a far more violent failure than the one it prevents.
+- **Fill the daytime shift first**, so an understaffed factory runs during the hours the player is
+  most likely to be standing in it. A factory that only works while you are asleep is one you cannot
+  debug.
 
 ## Coming back: the self-healing part, and its limit
 
@@ -119,47 +163,64 @@ is idle, not absent, and firing it for a quiet shift would be wrong.
 
 ## Stress
 
-**Yes, it should cost SU**, and it should be the primary cost. Two arguments:
+An earlier draft said the station's stress should **scale with the number of active workers**, on the
+fiction that "a worker is an arm with legs, and an arm costs stress for its motion, so you are paying
+for the motion you did not have to build".
 
-- The fiction already works. "A worker is an arm with legs" is the design rule the whole mod is built
-  on, and an arm costs stress for its motion. Paying stress for a worker is paying for the motion you
-  did not have to build.
-- A block in a Create addon that never touches a shaft is an oddity. This is the one place the mod
-  can join the kinetic network without inventing anything.
+**That does not survive the obvious question: why would ten villagers carrying boxes draw more
+rotational force than one?** They are walking. Nothing in the kinetic network is moving them. The
+scaling cost was a balance lever wearing a simulation costume — the same mistake this document made
+about trades one section over, and it should be named as such rather than quietly fixed.
 
-**Scale it with active workers, not with slots**, so an unstaffed shift costs nothing and the bill
-grows exactly as the player staffs up. That is the Create loop: more output, more stress, go and
-build more power.
+So, honestly:
 
-**Cut the power and the crew clocks off.** An unpowered or overstressed station stops advertising
-jobs and sends its workers home — which is a legible Create failure and, incidentally, a factory
-off-switch that costs nothing to implement.
+**A flat, small stress impact, or none at all.** The station is a machine — a job board, a time clock,
+whatever the model ends up being — and "this block is powered" is a claim that survives scrutiny in a
+way that "ten employees are heavier than one" does not. It buys three things worth having:
 
-### This is not double-taxing with food
+- The block joins the kinetic network, which an addon block arguably should.
+- It has to be *sited* near your power, which is a real build constraint and a thematic one: the
+  factory office is part of the factory.
+- **Cutting the power sends the crew home.** A stopped station stops advertising jobs and clocks its
+  workers off, which is a factory off-switch that costs nothing to implement and needs *some* power
+  dependency to exist at all.
 
-SU and food do different jobs, and the design only works if they stay separate:
+None of those need the cost to scale, and none of them are hurt by it being small.
+
+### Headcount costs food, because eating is the thing that actually scales
+
+The cost that *should* grow with the size of a workforce is the one that grows with it in the world:
+ten people eat ten times as much bread as one. That is simulation which happens to also be balance,
+rather than balance dressed as simulation, and it is already the design in
+[shift-rotation.md](shift-rotation.md).
+
+Which gives a clean split with nothing invented:
 
 | | |
 |---|---|
-| **Stress** | *Capacity.* The right to keep N slots staffed at all. Global, continuous, paid in power |
-| **Food** | *Availability.* Whether one worker actually turns up. Local, recoverable, paid in bread |
+| **Stress** | *This block runs.* Flat, small, and the reason a factory has an off-switch |
+| **Food** | *These people work.* Scales with headcount, because that is what feeding people does |
 
-Stress answers "how big can my workforce be". Food answers "is Bob at his post". Making either one
-do both jobs is what would feel like being taxed twice.
+If playtesting says workers still feel too free, the lever to reach for is the food drain, not the
+stress curve.
 
 ## Should stations be networked?
 
-**No.** Create's kinetic network is a force network, not a data bus, and using it to share a labour
-pool would be inventing semantics Create does not have — two stations on one shaft are no more
-related than two Mechanical Arms are.
+**No, and the roster framing above is why.** The coordination problem is real — a line with three
+roles must staff all three or produce nothing — but it is solved by scope, not by wiring: those three
+roles live in one station, so completing a crew is a loop over one block's own slots.
 
-The shared resource is **villagers**, and the village is already that pool. Stations compete for
-unemployed villagers exactly as vanilla workstations do, and the player's lever when they are short
-is the one they already know: breed more villagers, or build another bunkhouse.
+Create's kinetic network would be the wrong tool for it even if the problem survived. It is a force
+network, not a data bus, and two stations on one shaft are no more related than two Mechanical Arms
+are.
 
-The real need behind the question is different and worth answering separately: *what is the state of
-all my stations?* That is a read-only overview, and Create's Clipboard is the precedent for how an
-addon does one. Later, and not as part of this.
+The remaining shared resource is **villagers**, and the village is already that pool. Stations compete
+for unemployed villagers exactly as vanilla workstations do, and the player's lever when short is the
+one they already know: breed more, or build another bunkhouse.
+
+What is genuinely unanswered is a line too big for one station's slots, which would put two stations
+back in a dependency. Options when it comes up: raise the slot count, or let a station name another
+it depends on — an explicit link, not an inferred one. Not worth building before someone hits it.
 
 ## Where the station sits in the geometry
 

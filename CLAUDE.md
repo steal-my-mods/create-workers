@@ -546,9 +546,10 @@ if the thinking changes — the point is that the analysis is not redone from sc
   `WALK_TARGET` absent and so a pinned worker can never feed itself. Not built. Holds the correction
   to the one thing `working-hours.md` got wrong (a worker **can** be given its own `Schedule`), the
   canteen block nothing in vanilla provides, and the revised case *for* giving workers trades
-- `docs/worker-station.md` — the block that hires workers: a rack of programmed hats, filled through
-  the vanilla point-of-interest route, so a lost worker's job refills itself. Not built. Also the two
-  pieces of existing complexity it would let us delete
+- `docs/worker-station.md` — the block that hires workers: a rack of programmed hats for one
+  production *line*, filled through the vanilla point-of-interest route, so a lost worker's job
+  refills itself. Not built. Holds the argument that a part-staffed shift produces nothing rather
+  than less, and the two pieces of existing complexity the block would let us delete
 - `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,
   and the things a shared server still wants that this mod deliberately does not do
 
