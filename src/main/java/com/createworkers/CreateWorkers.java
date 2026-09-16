@@ -2,6 +2,9 @@ package com.createworkers;
 
 import com.createworkers.net.CWNetwork;
 import com.createworkers.registry.CWAttachments;
+import com.createworkers.registry.CWBlockEntities;
+import com.createworkers.registry.CWBlocks;
+import com.createworkers.registry.CWPoiTypes;
 import com.createworkers.registry.CWComponents;
 import com.createworkers.registry.CWItems;
 import com.createworkers.registry.CWProfessions;
@@ -28,6 +31,9 @@ public class CreateWorkers {
 	public static final Logger LOGGER = LoggerFactory.getLogger("Create: Workers");
 
 	public CreateWorkers(IEventBus modBus, ModContainer container) {
+		CWBlocks.BLOCKS.register(modBus);
+		CWBlockEntities.REGISTER.register(modBus);
+		CWPoiTypes.REGISTER.register(modBus);
 		CWComponents.REGISTER.register(modBus);
 		CWAttachments.REGISTER.register(modBus);
 		CWItems.ARMOR_MATERIALS.register(modBus);

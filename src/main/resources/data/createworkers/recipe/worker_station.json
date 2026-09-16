@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "P": {
+      "tag": "minecraft:planks"
+    },
+    "A": {
+      "item": "create:andesite_alloy"
+    },
+    "H": {
+      "item": "createworkers:hard_hat"
+    }
+  },
+  "pattern": [
+    "PHP",
+    "PAP"
+  ],
+  "result": {
+    "count": 1,
+    "id": "createworkers:worker_station"
+  }
+}

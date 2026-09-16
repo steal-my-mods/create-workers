@@ -49,6 +49,9 @@ public class CWItems {
 			.title(Component.translatable("itemGroup.createworkers"))
 			.icon(() -> HARD_HAT.get()
 				.getDefaultInstance())
-			.displayItems((params, output) -> output.accept(HARD_HAT.get()))
+			.displayItems((params, output) -> {
+				output.accept(HARD_HAT.get());
+				output.accept(CWBlocks.WORKER_STATION_ITEM.get());
+			})
 			.build());
 }

@@ -3,6 +3,7 @@ package com.createworkers.registry;
 import com.createworkers.CreateWorkers;
 import com.google.common.collect.ImmutableSet;
 
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.entity.npc.VillagerProfession;
@@ -16,13 +17,16 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  * profession it arrived with comes off and this one goes on — which is also what hands the
  * workstation it was sitting on back to the village.
  *
- * <p>Both job-site predicates are {@link PoiType#NONE}, which matches nothing, so a worker never
- * claims a workstation. That is the whole reason this profession exists rather than simply clearing
- * the villager's profession to {@code NONE}: an unemployed villager's <em>acquirable</em> predicate
- * is {@code ALL_ACQUIRABLE_JOBS}, and {@code AcquirePoi} takes a workstation's ticket the moment a
- * path to it merely exists — it never has to arrive. A worker's walk target is pinned every tick by
- * its job goal, so arriving is exactly what it would never do, and the ticket would sit taken for
- * the rest of the villager's life.
+ * <p>Both job-site predicates match the {@link CWPoiTypes#WORKER_STATION worker station} and nothing
+ * else. The property that matters has not changed: a worker never claims a <em>village</em>
+ * workstation. That is the whole reason this profession exists rather than simply clearing the
+ * villager's profession to {@code NONE} — an unemployed villager's <em>acquirable</em> predicate is
+ * {@code ALL_ACQUIRABLE_JOBS}, and {@code AcquirePoi} takes a workstation's ticket the moment a path
+ * to it merely exists, never having to arrive. A worker's walk target is pinned every tick by its job
+ * goal, so arriving is exactly what it would never do, and the ticket would sit taken for the rest of
+ * the villager's life. Pointing the predicates at one block of our own keeps that guarantee and buys
+ * the thing it used to cost: a worker with a real job site, which vanilla will let it walk to, hold,
+ * and release on death.
  *
  * <p>Vanilla's own never-works profession, {@code NITWIT}, is registered exactly like this and
  * would have done the mechanical job. A profession of our own was chosen because it reads as
@@ -41,8 +45,12 @@ public class CWProfessions {
 	public static final DeferredRegister<VillagerProfession> REGISTER =
 		DeferredRegister.create(Registries.VILLAGER_PROFESSION, CreateWorkers.ID);
 
-	/** Claims no workstation, works no job site, and has no trades of its own. */
+	/** Works at a worker station and nowhere else, and has no trades of its own. */
 	public static final DeferredHolder<VillagerProfession, VillagerProfession> WORKER =
-		REGISTER.register("worker", id -> new VillagerProfession(id.getPath(), PoiType.NONE, PoiType.NONE,
-			ImmutableSet.of(), ImmutableSet.of(), null));
+		REGISTER.register("worker", id -> new VillagerProfession(id.getPath(), CWProfessions::isWorkerStation,
+			CWProfessions::isWorkerStation, ImmutableSet.of(), ImmutableSet.of(), null));
+
+	private static boolean isWorkerStation(Holder<PoiType> poi) {
+		return poi.is(CWPoiTypes.WORKER_STATION_KEY);
+	}
 }

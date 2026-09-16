@@ -15,6 +15,7 @@ import com.simibubi.create.content.kinetics.mechanicalArm.ArmBlockEntity;
 import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint.Mode;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -47,6 +48,16 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	private Phase phase = Phase.SEARCH_INPUTS;
 	/** Derived from the programme, not from wherever the hat was handed over. Not persisted. */
 	private BlockPos jobSite = BlockPos.ZERO;
+	/**
+	 * The station that hired this worker, if one did.
+	 *
+	 * <p>Its presence is what says the hat on this worker's head is a copy of one still sitting in a
+	 * block — so the worker must not drop it when it dies, or every death mints a second hat. Cleared
+	 * when the station is broken or the hat taken out of it, after which the worker is indistinguishable
+	 * from one hired by hand.
+	 */
+	@Nullable
+	private GlobalPos station;
 	private int targetIndex = -1;
 	private int lastInputIndex = -1;
 	private int lastOutputIndex = -1;
@@ -163,6 +174,21 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		return offers;
 	}
 
+	/** @return where this worker was hired from, or null if a player handed it the hat. */
+	@Nullable
+	public GlobalPos getStation() {
+		return station;
+	}
+
+	public void rememberStation(GlobalPos pos) {
+		this.station = pos;
+	}
+
+	/** Un-enrols a worker whose station has gone, leaving it exactly like a hand-hired one. */
+	public void forgetStation() {
+		this.station = null;
+	}
+
 	/** Puts the entity to work with the given hat. */
 	public void employ(ItemStack hatStack, WorkerProgram program) {
 		this.hat = hatStack.copyWithCount(1);
@@ -173,6 +199,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		this.lastInputIndex = -1;
 		this.lastOutputIndex = -1;
 		this.cooldown = 0;
+		this.station = null;
 		invalidatePoints();
 	}
 
@@ -182,7 +209,9 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	 */
 	public List<ItemStack> dismiss() {
 		List<ItemStack> drops = new ArrayList<>();
-		if (!hat.isEmpty())
+		// A station worker's hat is a copy of one still in the block, so dropping it would mint a
+		// second. The cargo is the worker's own either way.
+		if (!hat.isEmpty() && station == null)
 			drops.add(hat);
 		if (!held.isEmpty())
 			drops.add(held);
@@ -192,6 +221,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		jobSite = BlockPos.ZERO;
 		phase = Phase.SEARCH_INPUTS;
 		targetIndex = -1;
+		station = null;
 		releasePoints();
 		return drops;
 	}
@@ -659,6 +689,10 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		tag.putInt("LastInput", lastInputIndex);
 		tag.putInt("LastOutput", lastOutputIndex);
 		tag.putInt("Cooldown", cooldown);
+		if (station != null)
+			GlobalPos.CODEC.encodeStart(NbtOps.INSTANCE, station)
+				.resultOrPartial(CreateWorkers.LOGGER::error)
+				.ifPresent(encoded -> tag.put("Station", encoded));
 		if (formerJob != null)
 			VillagerData.CODEC.encodeStart(NbtOps.INSTANCE, formerJob)
 				.resultOrPartial(CreateWorkers.LOGGER::error)
@@ -681,6 +715,11 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		lastInputIndex = tag.getInt("LastInput");
 		lastOutputIndex = tag.getInt("LastOutput");
 		cooldown = tag.getInt("Cooldown");
+		station = null;
+		if (tag.contains("Station"))
+			GlobalPos.CODEC.parse(NbtOps.INSTANCE, tag.get("Station"))
+				.resultOrPartial(CreateWorkers.LOGGER::error)
+				.ifPresent(pos -> station = pos);
 		formerJob = null;
 		formerOffers = null;
 		if (tag.contains("FormerJob"))

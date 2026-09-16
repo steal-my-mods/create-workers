@@ -44,6 +44,20 @@ hundred from the far end of the run is refused, because one worker would have to
 Both limits tell you as you click, rather than letting you discover later that a target quietly went
 missing.
 
+**3a. Or let them hire themselves.** Put a programmed hat into a **Worker Station** and an unemployed
+villager will come and take the job, exactly as one takes a lectern or a composter. The hat stays in
+the station and the worker wears a copy — so if that worker dies, the job is still there and the next
+villager along picks it up. A factory built on stations repairs its own workforce.
+
+```
+P H P      P = any planks
+P A P      H = Hard Hat, programmed
+           A = Andesite Alloy
+```
+
+Take the hat back out with an empty hand to end the job. Breaking the block hands the hat back and
+leaves the worker running as though you had hired it by hand.
+
 **3. Hire someone.** Right-click a villager or an enderman with the programmed hat. They put it on
 and get to work. Sneak + empty-hand right-click to retire them and get the hat (and any cargo) back.
 

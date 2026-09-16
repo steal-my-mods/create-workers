@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "has_job=false": {
+      "model": "createworkers:block/worker_station"
+    },
+    "has_job=true": {
+      "model": "createworkers:block/worker_station_staffed"
+    }
+  }
+}

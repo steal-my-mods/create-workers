@@ -1,0 +1,52 @@
+package com.createworkers.registry;
+
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import com.createworkers.CreateWorkers;
+import com.createworkers.block.WorkerStationBlock;
+
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.ai.village.poi.PoiType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.registries.DeferredHolder;
+import net.neoforged.neoforge.registries.DeferredRegister;
+
+/**
+ * The worker station as a village workstation.
+ *
+ * <p>Registering it is what makes hiring vanilla's problem rather than ours: an unemployed villager's
+ * own {@code AcquirePoi} finds the block, paths to it, takes a ticket and walks over, and
+ * {@code AssignProfessionFromJobSite} turns it into a Worker on arrival. The one thing that has to be
+ * arranged for that is membership of {@code minecraft:acquirable_job_site}, which is the tag an
+ * unemployed villager actually searches — see this mod's tag file under {@code data/minecraft}.
+ */
+public class CWPoiTypes {
+
+	public static final DeferredRegister<PoiType> REGISTER =
+		DeferredRegister.create(Registries.POINT_OF_INTEREST_TYPE, CreateWorkers.ID);
+
+	public static final ResourceKey<PoiType> WORKER_STATION_KEY =
+		ResourceKey.create(Registries.POINT_OF_INTEREST_TYPE, CreateWorkers.asResource("worker_station"));
+
+	/**
+	 * One ticket, so vanilla itself refuses a second claimant while the first is alive — "one station,
+	 * one worker" is then a rule the game enforces rather than one this mod polices. The valid range
+	 * is a block, as every other workstation's is.
+	 *
+	 * <p>Registered only over the states that have a hat in them. A station holding none is not a job
+	 * site, so nobody walks to it and nobody arrives to find there is nothing to do.
+	 */
+	public static final DeferredHolder<PoiType, PoiType> WORKER_STATION =
+		REGISTER.register("worker_station", () -> new PoiType(staffableStates(), 1, 1));
+
+	private static Set<BlockState> staffableStates() {
+		return CWBlocks.WORKER_STATION.get()
+			.getStateDefinition()
+			.getPossibleStates()
+			.stream()
+			.filter(state -> state.getValue(WorkerStationBlock.HAS_JOB))
+			.collect(Collectors.toUnmodifiableSet());
+	}
+}

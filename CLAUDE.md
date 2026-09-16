@@ -15,6 +15,7 @@ endermen haul items between inventories the way a Mechanical Arm does.
 python3 tools/generate_logo.py         # the in-jar badge at 256
 python3 tools/generate_logo.py branding/icon-512.png --size 512   # ...and the 512 CurseForge wants
 python3 tools/generate_ponder_structure.py   # both Ponder scenes' structure NBT
+python3 tools/generate_station_textures.py   # the Worker Station's block textures
 python3 tools/generate_worker_profession.py  # the worker profession's clothing, both variants
 ```
 
@@ -131,7 +132,10 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/ponder/HardHatScene` | The hat's first scene: programme, hire, haul, clock off |
 | `client/ponder/WorkingHoursScene` | The second: last delivery of the day, walk to bed, sleep, the enderman night shift, morning |
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
-| `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own |
+| `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own. Its job-site predicates match the worker station **and nothing else** |
+| `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over |
+| `block/WorkerStationBlockEntity` | Holds one programmed hat and notices when a villager has claimed the block |
+| `registry/CWPoiTypes` | The station as a village workstation — one ticket, so vanilla enforces one worker per station |
 | `recipe/ClearProgramRecipe` | Crafting a hat by itself blanks its program, the way a Create filter clears |
 
 ## Things that will bite you
@@ -409,6 +413,26 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   leniently and degrades to an unemployed villager if the mod is removed; a nitwit stays a nitwit
   forever) and why it is named for the role rather than for hauling (a profession id is permanent
   save state, so a rename strands every worker in every world).
+- **Hiring from a station is almost entirely vanilla, and the wiring is three things.** The point of
+  interest must be in `minecraft:acquirable_job_site` — that tag, not our profession, is what an
+  *unemployed* villager searches, since `VillagerProfession.NONE` acquires `ALL_ACQUIRABLE_JOBS`. The
+  profession's `heldJobSite` must match our POI, because `AssignProfessionFromJobSite` picks the
+  profession by looking up whose held predicate matches the POI it found. And `maxTickets` is 1, so
+  "one station, one worker" is a rule vanilla enforces rather than one this mod polices.
+  `anUnemployedVillagerTakesTheJob` covers the lot, mutation-checked by putting the predicates back to
+  `PoiType.NONE`.
+- **An empty station must not be a job site, and `HAS_JOB` is how.** The POI is registered only over
+  the states with a hat in them. Register it over all of them and a villager crosses a village, is
+  turned into a Worker on arrival, finds nothing to do — and can then never take another job, because
+  a Worker's only workstation is the block it is standing at. There is no `ResetProfession` escape
+  either: that needs `absent(JOB_SITE)`, and it is holding one.
+  (`onlyAStationWithAJobInItIsAJobSite`, mutation-checked.)
+- **A station worker's hat stays in the block and it must never drop one.** The worker wears a copy,
+  which is the whole self-healing property — nothing is handed back when it dies, because the job
+  never left. `WorkerData.dismiss` therefore withholds the hat whenever `station` is set, and
+  `theJobOutlivesTheWorker` asserts no hat entity appears; without that guard every death mints a
+  second hat. The station is forgotten when the block is broken or the hat taken out, after which the
+  worker is indistinguishable from a hand-hired one and drops its hat as usual.
 - **Sleeping and waking must agree with vanilla's `WakeUp`, and a worker's own `Schedule` is how.**
   `WakeUp` (villager CORE, priority 0) stands up any sleeping villager whose brain is not in
   `Activity.REST`, on every tick — so a worker whose hours are not the village's could never sleep.
