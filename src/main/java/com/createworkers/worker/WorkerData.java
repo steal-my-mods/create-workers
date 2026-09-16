@@ -68,6 +68,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	private int validityChecks;
 	private int slotProbes;
 	private int deliveryProbes;
+	private int bedSearches;
 	@Nullable
 	private ArmBlockEntity host;
 
@@ -396,6 +397,23 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	/** Simulated deliveries the last search priced. */
 	public int deliveryProbes() {
 		return deliveryProbes;
+	}
+
+	/**
+	 * Bed searches this worker has made in its life.
+	 *
+	 * <p>A lifetime tally rather than a per-search one, because what needs bounding here is a rate:
+	 * a bed hunt is a point-of-interest query and, for a bed nobody assigned, a pathfind, and the
+	 * worker that wants one most often is the one that can never find it. Counted for the whole life
+	 * so a test can watch a hopeless worker through a night and assert it looked a handful of times
+	 * rather than three hundred.
+	 */
+	public int bedSearches() {
+		return bedSearches;
+	}
+
+	void countBedSearch() {
+		bedSearches++;
 	}
 
 	private void resetCostAccount() {

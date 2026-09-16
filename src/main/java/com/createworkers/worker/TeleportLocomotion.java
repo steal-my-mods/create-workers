@@ -3,7 +3,6 @@ package com.createworkers.worker;
 import org.jetbrains.annotations.Nullable;
 
 import com.createworkers.CWConfig;
-import com.createworkers.worker.target.WorkerTarget;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -52,13 +51,13 @@ public class TeleportLocomotion implements WorkerLocomotion {
 	private int cooldown;
 
 	@Override
-	public void approach(Mob mob, WorkerTarget target) {
+	public void approach(Mob mob, BlockPos destination) {
 		if (cooldown > 0) {
 			cooldown--;
 			return;
 		}
 
-		BlockPos landing = chooseLanding(mob, target.getPos());
+		BlockPos landing = chooseLanding(mob, destination);
 		if (landing == null) {
 			// Nowhere safe to stand. Wait rather than rescanning every tick or taking damage.
 			cooldown = BLOCKED_RETRY_TICKS;
@@ -76,18 +75,12 @@ public class TeleportLocomotion implements WorkerLocomotion {
 
 		cooldown = CWConfig.TELEPORT_COOLDOWN.get();
 		mob.getLookControl()
-			.setLookAt(Vec3.atCenterOf(target.getPos()));
+			.setLookAt(Vec3.atCenterOf(destination));
 
 		// Vanilla plays this at both ends of an enderman's teleport.
 		Level level = mob.level();
 		level.playSound(null, fromX, fromY, fromZ, SoundEvents.ENDERMAN_TELEPORT, mob.getSoundSource(), 1.0F, 1.0F);
 		mob.playSound(SoundEvents.ENDERMAN_TELEPORT, 1.0F, 1.0F);
-	}
-
-	@Override
-	public boolean canReach(Mob mob, WorkerTarget target) {
-		double reach = CWConfig.REACH_DISTANCE.get();
-		return mob.distanceToSqr(Vec3.atCenterOf(target.getPos())) <= reach * reach;
 	}
 
 	/**

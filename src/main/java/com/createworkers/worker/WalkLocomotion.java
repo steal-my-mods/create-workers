@@ -1,7 +1,6 @@
 package com.createworkers.worker;
 
 import com.createworkers.CWConfig;
-import com.createworkers.worker.target.WorkerTarget;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Mob;
@@ -11,7 +10,6 @@ import net.minecraft.world.entity.ai.behavior.VillagerPanicTrigger;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
-import net.minecraft.world.phys.Vec3;
 
 /**
  * Villagers walk. They are brain-driven rather than goal-driven, so rather than choosing a
@@ -32,6 +30,12 @@ public class WalkLocomotion implements WorkerLocomotion {
 	private static final int STATION_CLOSE_ENOUGH = 1;
 	/** How close counts as having reached a stop on the rounds. */
 	static final int PATROL_ARRIVED = 2;
+	/**
+	 * How close a worker walks to its bed. Deliberately tighter than working reach: the arrival test
+	 * on the other side is vanilla's own two blocks, and a walk that stopped further out than that
+	 * would be a worker standing in the doorway all night, never quite home.
+	 */
+	private static final int BEDSIDE_CLOSE_ENOUGH = 1;
 
 	/**
 	 * Walks a worker to the block it is about to use.
@@ -42,22 +46,8 @@ public class WalkLocomotion implements WorkerLocomotion {
 	 * that memory every tick is competing with the flight rather than deferring to it.
 	 */
 	@Override
-	public void approach(Mob mob, WorkerTarget target) {
-		if (isPanicking(mob))
-			return;
-
-		BlockPos pos = target.getPos();
-		int closeEnough = Math.max(1, (int) Math.floor(CWConfig.REACH_DISTANCE.get()));
-
-		mob.getBrain()
-			.setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(pos));
-		walkTo(mob, pos, workingSpeed(), closeEnough);
-	}
-
-	@Override
-	public boolean canReach(Mob mob, WorkerTarget target) {
-		double reach = CWConfig.REACH_DISTANCE.get();
-		return mob.distanceToSqr(Vec3.atCenterOf(target.getPos())) <= reach * reach;
+	public void approach(Mob mob, BlockPos destination) {
+		walkWatching(mob, destination, Math.max(1, (int) Math.floor(CWConfig.REACH_DISTANCE.get())));
 	}
 
 	/**
@@ -109,8 +99,37 @@ public class WalkLocomotion implements WorkerLocomotion {
 		walkTo(mob, destination, amblingSpeed(), PATROL_ARRIVED);
 	}
 
+	/** Walks the worker to the bedside, looking at the bed on the way in. */
+	@Override
+	public void commuteTo(Mob mob, BlockPos bed) {
+		walkWatching(mob, bed, BEDSIDE_CLOSE_ENOUGH);
+	}
+
+	/**
+	 * A trip at working pace with the worker looking where it is going, stopping {@code closeEnough}
+	 * blocks short.
+	 *
+	 * <p>The two journeys a worker makes on the clock differ only in how close they stop: at an
+	 * inventory, within reach of it; at a bed, at the bedside. Everything else about them — the panic
+	 * deferral, the look target, the pace — is one thing said once, so a change to what it means to
+	 * walk somewhere cannot land on the haul and miss the commute.
+	 */
+	private static void walkWatching(Mob mob, BlockPos destination, int closeEnough) {
+		if (isPanicking(mob))
+			return;
+
+		mob.getBrain()
+			.setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(destination));
+		walkTo(mob, destination, workingSpeed(), closeEnough);
+	}
+
 	@Override
 	public boolean makesRounds() {
+		return true;
+	}
+
+	@Override
+	public boolean keepsWorkingHours() {
 		return true;
 	}
 

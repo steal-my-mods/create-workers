@@ -377,21 +377,21 @@ public class WorkerGameTests {
 		TeleportLocomotion locomotion = new TeleportLocomotion();
 
 		Vec3 home = enderman.position();
-		locomotion.approach(enderman, target);
+		locomotion.approach(enderman, target.getPos());
 		helper.assertTrue(enderman.position()
 			.distanceToSqr(home) > 1.0D, "the first approach should teleport the enderman");
 
 		int cooldown = CWConfig.TELEPORT_COOLDOWN.get();
 		for (int tick = 1; tick <= cooldown; tick++) {
 			enderman.teleportTo(home.x, home.y, home.z);
-			locomotion.approach(enderman, target);
+			locomotion.approach(enderman, target.getPos());
 			helper.assertTrue(enderman.position()
 				.distanceToSqr(home) < 1.0D,
 				"teleported again after only " + tick + " of " + cooldown + " cooldown ticks");
 		}
 
 		enderman.teleportTo(home.x, home.y, home.z);
-		locomotion.approach(enderman, target);
+		locomotion.approach(enderman, target.getPos());
 		helper.assertTrue(enderman.position()
 			.distanceToSqr(home) > 1.0D, "should teleport again once the cooldown has elapsed");
 		helper.succeed();
@@ -1027,7 +1027,7 @@ public class WorkerGameTests {
 				"the rounds should be walked at idle pace, got " + travelSpeed(villager));
 
 			// Work turns up, at that very block.
-			locomotion.approach(villager, work);
+			locomotion.approach(villager, work.getPos());
 			navigation.tick();
 			helper.assertTrue(Math.abs(travelSpeed(villager) - working) < TOLERANCE,
 				"a worker that finds work mid-amble should walk to it at working pace, got " + travelSpeed(villager));
@@ -1099,7 +1099,7 @@ public class WorkerGameTests {
 			brain.setMemory(MemoryModuleType.HURT_BY, villager.damageSources()
 				.generic());
 
-			locomotion.approach(villager, work);
+			locomotion.approach(villager, work.getPos());
 			navigation.tick();
 			helper.assertTrue(brain.getMemory(MemoryModuleType.WALK_TARGET)
 				.map(target -> target.getTarget()

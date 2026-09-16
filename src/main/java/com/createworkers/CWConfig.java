@@ -41,6 +41,14 @@ public class CWConfig {
 	public static final ModConfigSpec.IntValue WANDER_RADIUS;
 	/** What a worker does when it has nothing to haul. */
 	public static final ModConfigSpec.EnumValue<IdleBehaviour> IDLE_BEHAVIOUR;
+	/** Whether workers knock off at the end of the day and go to bed. */
+	public static final ModConfigSpec.BooleanValue WORKING_HOURS;
+	/** The time of day a worker downs tools. */
+	public static final ModConfigSpec.IntValue CLOCK_OFF;
+	/** The time of day it picks them up again. */
+	public static final ModConfigSpec.IntValue CLOCK_ON;
+	/** How far from the job site a worker may look for a bed nobody gave it. */
+	public static final ModConfigSpec.IntValue BED_SEARCH_RADIUS;
 
 	static {
 		ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -113,6 +121,37 @@ public class CWConfig {
 				"WANDER: leaves idling to vanilla, which strolls up to ten blocks at a time, repeatedly.",
 				"  Livelier, but an idle villager can stroll off a catwalk and have to find its way back.")
 			.defineEnum("idleBehaviour", IdleBehaviour.PATROL);
+
+		WORKING_HOURS = builder
+			.comment("Whether workers keep hours: down tools at the end of the day, walk to a bed and",
+				"sleep until morning. A sleeping worker moves nothing, so a line fed only by workers",
+				"stops overnight -- turn this off and they work around the clock as they always did.",
+				"Endermen are exempt whatever this says. They have no beds and no schedule.")
+			.define("workingHours", true);
+
+		CLOCK_OFF = builder
+			.comment("The time of day a worker downs tools, in ticks: 0 is dawn, 6000 noon, 12000 dusk,",
+				"18000 midnight. The default is the moment the village itself turns in.",
+				"A worker clocked off earlier than that walks to its bed and stands beside it until",
+				"the village's own bedtime comes, because lying down before then is undone by the same",
+				"vanilla behaviour that gets a villager up in the morning.")
+			.defineInRange("clockOff", 12000, 0, 23999);
+
+		CLOCK_ON = builder
+			.comment("The time of day a worker starts again, in ticks. The default is first light.",
+				"Setting this later than clockOff inverts the two, which is how a night shift is made --",
+				"but a night shift rests standing rather than sleeping. A villager cannot sleep by day:",
+				"vanilla stands up any villager in a bed outside the village's own resting hours, every",
+				"tick, and that is not a fight worth picking. Off-shift workers walk to their bed and",
+				"wait beside it whenever the hours they keep are not the village's.")
+			.defineInRange("clockOn", 0, 0, 23999);
+
+		BED_SEARCH_RADIUS = builder
+			.comment("How far from the job site a worker may look for a bed of its own, for workers whose",
+				"hat names no bed. Only beds it can prove a path to are taken, so this is a bound on the",
+				"search rather than a promise about the walk. 0 turns the search off entirely: a worker",
+				"then sleeps only in a bed assigned on its hat, and stands its ground all night without.")
+			.defineInRange("bedSearchRadius", 16, 0, 64);
 
 		builder.pop();
 		SPEC = builder.build();

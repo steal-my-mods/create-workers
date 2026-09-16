@@ -226,6 +226,19 @@ public class Workers {
 	}
 
 	/**
+	 * Gets a worker out of bed.
+	 *
+	 * <p>A bed keeps the {@code OCCUPIED} flag it was given when somebody lay down in it, and clearing
+	 * it is the sleeper's job on the way out. Dying does that for itself — {@code LivingEntity.die}
+	 * wakes the entity first — but being <em>replaced</em> does not, so a worker bitten in its sleep
+	 * would leave a bed nobody could ever use again. Cheap to call when the worker is already up.
+	 */
+	public static void wake(Entity entity) {
+		if (entity instanceof LivingEntity living && living.isSleeping())
+			living.stopSleeping();
+	}
+
+	/**
 	 * Updates anything the mob itself draws for its cargo. Endermen already have a vanilla layer for
 	 * a carried block, so a block cargo is handed to that rather than drawn twice.
 	 *

@@ -14,7 +14,7 @@ endermen haul items between inventories the way a Mechanical Arm does.
 ./gradlew publishMods -PdryRun=true   # ...or rehearse it without uploading anything
 python3 tools/generate_logo.py         # the in-jar badge at 256
 python3 tools/generate_logo.py branding/icon-512.png --size 512   # ...and the 512 CurseForge wants
-python3 tools/generate_ponder_structure.py   # the Ponder scene's structure NBT
+python3 tools/generate_ponder_structure.py   # both Ponder scenes' structure NBT
 python3 tools/generate_worker_profession.py  # the worker profession's clothing, both variants
 ```
 
@@ -22,11 +22,19 @@ JDK 21 required. `gradle/gradle-daemon-jvm.properties` pins the daemon to it, so
 without setting `JAVA_HOME` even when the default `java` is newer — don't delete that file, or
 `./gradlew build` dies with "Could not create task ':test' ... Type T not present" on a newer JVM.
 There is no unit-test suite;
-correctness is covered by GameTests in `com.createworkers.test.WorkerGameTests`, and cost by
-`com.createworkers.test.WorkerCostGameTests`. Run them after any change to worker behaviour, targets
-or serialization — and after anything that touches what a search does per target, which the cost
-tests bound. Both run under `runGameTestServer`; the cost ones log what they measured, so
-`grep '\[cost\]'` over a run reads as a report.
+correctness is covered by GameTests in `com.createworkers.test.WorkerGameTests`, working hours by
+`WorkerShiftGameTests`, and cost by `WorkerCostGameTests`. Run them after any change to worker
+behaviour, targets or serialization — and after anything that touches what a search does per target,
+which the cost tests bound. All run under `runGameTestServer`; the cost ones log what they measured,
+so `grep '\[cost\]'` over a run reads as a report.
+
+**A test that changes the time of day, or the config, belongs in a batch of its own.** Both are one
+value for the whole server, and game test batches are the only isolation there is — the framework
+runs them strictly one after another, while the tests *inside* one run side by side. `@BeforeBatch`
+sets the world up for the batch and `@AfterBatch` puts it back for whatever runs next. The same
+parallelism is why a test about the bed hunt may not assert "no bed was found": the tests running
+beside it have laid out real beds in the same world, well within a worker's search radius. Name the
+bed that must not be chosen.
 
 ## Build quirk worth knowing
 
@@ -105,10 +113,11 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 
 | Path | Role |
 |---|---|
-| `program/WorkerProgram` | The hat's inventory list. Data component; **absolute** positions (anchor `BlockPos.ZERO`) because workers move. Also owns the geometry: `centre()` (job site) and `firstTooFar`/`exceedsSpread` (the diameter rule) |
+| `program/WorkerProgram` | The hat's inventory list, plus the bed under `Bed`. Data component; **absolute** positions (anchor `BlockPos.ZERO`) because workers move. Also owns the geometry: `centre()` (job site, inventories only) and `firstTooFar`/`exceedsSpread` over `allPositions()` (the diameter rule, bed included) |
 | `worker/target/WorkerTarget` | What a worker can use — a thin wrapper over Create's `ArmInteractionPoint`, holding the host so it stays out of upstream signatures |
 | `worker/WorkerData` | Per-entity state (NeoForge attachment). Holds the port of `ArmBlockEntity`'s transfer algorithm |
-| `worker/WorkerJobGoal` | Phase machine: search input → travel → collect → search output → travel → deposit. Also owns the stall clocks that stop a hopeless walk costing a pathfind a tick |
+| `worker/WorkerJobGoal` | Phase machine: search input → travel → collect → search output → travel → deposit. Also owns the stall clocks that stop a hopeless walk costing a pathfind a tick, and the night: `clockOff` → `goToBed` → `turnIn` → `clockOn` |
+| `worker/WorkerShift` | Working hours. Both clocks (the operator's and the village's), the bed hunt, and what makes a bed usable |
 | `worker/WalkLocomotion` | Villagers. Also owns `returnTo`, the wander leash |
 | `worker/TeleportLocomotion` | Endermen. Holds the teleport cooldown, so locomotion instances are **per-worker**, not shared |
 | `worker/WorkerEvents` | Hiring, retiring, drops, conversion, client sync, cleanup, and the vetoes that stop vanilla's own enderman AI from undoing the job |
@@ -118,8 +127,9 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/model/HardHatArmorModel` | The same hat geometry as a `HumanoidModel`, for the hat worn by a player |
 | `client/HardHatClientExtensions` | Feeds that model to the armour renderer; re-baked on resource reload |
 | `client/WorkerCargoLayer` | Visible cargo — in the hand when the model has one, against the chest when it does not |
-| `client/ponder/CWPonderPlugin` | Hands the scenes to Ponder. A scene is filed under an **item id**, which is what the "hold W" prompt keys off |
-| `client/ponder/HardHatScene` | The hat's scene: programme, hire, haul, clock off |
+| `client/ponder/CWPonderPlugin` | Hands the scenes to Ponder. A scene is filed under an **item id**, which is what the "hold W" prompt keys off; both scenes are filed under the hat, so they are consecutive pages |
+| `client/ponder/HardHatScene` | The hat's first scene: programme, hire, haul, clock off |
+| `client/ponder/WorkingHoursScene` | The second: last delivery of the day, walk to bed, sleep, the enderman night shift, morning |
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
 | `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own |
 | `recipe/ClearProgramRecipe` | Crafting a hat by itself blanks its program, the way a Create filter clears |
@@ -203,6 +213,14 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   things resolution does hold back are not range filters and not silent: a point whose chunk it
   cannot read is deferred and retried, and a programme past `maxTargets` is truncated with a warning
   in the log.)
+
+  **The bed is inside that rule and outside the job site, and the asymmetry is deliberate.** It is one
+  more place the worker walks, so `exceedsSpread` and `within` measure `allPositions()` — leave it out
+  and the commute becomes the one unbounded trip in a programme built to bound them. But `centre()`
+  reads `positions()`, because the job site is where the *work* is: a bed that moved it would drag an
+  on-shift worker's anchor, and the leash hanging off it, towards the bedroom. It is also not a stop
+  on the idle rounds and never an inventory — `size()` and `hasTargets()` count inventories, and a hat
+  carrying nothing but a bed cannot be assigned.
 - **The `hireChildren` gate belongs on hiring, never on the job goal.** `WorkerEvents` gives the goal
   to every villager as it spawns, and `Workers.isOldEnoughToWork` is checked only where a hat changes
   hands. Move the check up into `onEntityJoinLevel` and a villager born as a child is one that can
@@ -213,7 +231,10 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   `WalkLocomotion` pins the `WALK_TARGET` memory every tick and lets `MoveToTargetSink` (villager
   CORE package, priority 1) path. Keeping that memory occupied is also what stops them wandering
   off — the idle and job-site behaviours require it to be *absent* to start. `Mob.serverAiStep()` is
-  `final` and runs goals *before* the brain, so a goal setting the memory is seen the same tick.
+  `final` and runs goals *before* the brain, so a goal setting the memory is seen the same tick. That
+  ordering cuts both ways: a villager hurt earlier in the same tick's entity loop has already had
+  `stopSleeping` called on it while its brain still reads as `REST`, which is why
+  `WorkerShift.isBedtime` refuses a `LAST_WOKEN` of *this* tick rather than only an older one.
 - **`WorkerData` owns a detached `ArmBlockEntity`.** Create's interaction points take one only to
   ask `isRemoved()` — it is the liveness token for their `BlockCapabilityCache`. Always
   `releasePoints()` when a worker unloads or the caches outlive the entity.
@@ -250,9 +271,16 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   (it snapshots `xOld/yOld/zOld`, which is a different set of fields, for the render
   interpolation), so left alone the measured step is "distance from where it spawned", growing all
   the way across the plate with the legs at a flat-out run from the second stride.
-- **The ponder scene's plate is generated, not built in a creative world.**
-  `tools/generate_ponder_structure.py` writes it. The two Depot positions live in both that script
-  and `HardHatScene`, and nothing ties them together — move one and move the other.
+- **The ponder scenes' plates are generated, not built in a creative world.**
+  `tools/generate_ponder_structure.py` writes both of them, from one shared `yard()` so the two
+  scenes are visibly the same place. Every position in them lives twice — in that script and in the
+  scene class — with nothing tying the two together, so move one and move the other.
+  **The bed is the only thing in either plate with block-state properties**, and a palette entry
+  written without them is two bed *feet*: a bed with no head is no `home` point of interest, and it
+  erases itself the moment anything updates it. That is invisible until a player opens Ponder, so
+  `theWorkingHoursPlateHasABedInIt` parses the file with Minecraft's own `StructureTemplate` and
+  checks the halves — the only headless check there is on a scene, since Ponder itself does not load
+  on a dedicated server. Mutation-checked by dropping the properties from the palette.
 - **Armour is not just a texture on a head box.** A helmet normally renders as the vanilla head
   geometry with the armour sheet stretched over it, which looks like a painted scalp.
   `HardHatArmorModel` swaps in the real hat cubes via `IClientItemExtensions.getHumanoidArmorModel`.
@@ -381,6 +409,47 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   leniently and degrades to an unemployed villager if the mod is removed; a nitwit stays a nitwit
   forever) and why it is named for the role rather than for hauling (a profession id is permanent
   save state, so a rename strands every worker in every world).
+- **Sleeping and waking must agree with vanilla's `WakeUp`, which is why there are two clocks.**
+  `WakeUp` (villager CORE, priority 0) stands up any sleeping villager whose brain is not in
+  `Activity.REST`, on every tick. So `WorkerShift.isOffShift` — the operator's clock, `clockOff` and
+  `clockOn` in the config — decides only when the *work* stops, and `WorkerShift.isBedtime` — the
+  villager's own schedule — decides when it may lie down. Collapse them into one and a `clockOff`
+  earlier than 12000 is a worker lying down and being stood up again, every tick, until the village
+  turns in. A worker that has clocked off but may not sleep yet stands at the bedside.
+- **A sleeping worker still has to be pinned.** `LivingEntity.isImmobile` is `isDeadOrDying()` for
+  everything but a player, so goals, the brain and the navigation all keep running on a sleeping
+  villager — and `Villager.startSleeping` *erases* `WALK_TARGET`, which is exactly the memory the
+  brain's own bed-hunting behaviours need absent before they will walk it somewhere. `goToBed`
+  therefore keeps holding the sleeping position. It costs nothing: `MoveToTargetSink` erases a walk
+  target it has already arrived at without ever asking for a path, which is the same reason
+  `holdStation` is free.
+- **A sleeper that vanishes leaves the bed `OCCUPIED` forever.** Dying wakes the entity on its own
+  (`LivingEntity.die`), but being *replaced* does not — a worker bitten in its sleep would leave a bed
+  no villager could ever use again, with nothing in the world to show why. Hence `Workers.wake` on
+  the conversion and retire paths.
+- **A bed's point of interest is its head, and only its head — but a bed is two blocks.**
+  `PoiTypes.HOME` matches bed states with `PART == HEAD`, so a foot-end position is a bed no search
+  will ever match and no villager will recognise as theirs, and `WorkerShift.bedHead` normalises a
+  click exactly as vanilla does when a player clicks the foot of one. Everything mechanical therefore
+  stores the head alone. **Anything a player looks at has to undo that**, because to them a bed is one
+  object two blocks long: the assignment outline drew a box around the stored position and so drew a
+  box around half a bed. `WorkerShift.otherHalfOfBed` pairs them up — `FACING` runs foot-to-head, so
+  each half steps along it in the opposite direction, which is vanilla's private
+  `getNeighbourDirection` restated. `bothHalvesOfABedKnowAboutEachOther` covers it, and was
+  mutation-checked by stepping both halves the same way.
+- **The bed hunt is paced, and it has to be.** It is a point-of-interest query over every section in
+  `bedSearchRadius` and then an A* across the candidates, and the worker that wants it most is the one
+  that will never find it. Unpaced that is a pathfind per sleepless worker per tick for the length of
+  a night; `aWorkerWithNowhereToSleepDoesNotHuntForABedEveryTick` bounds it as a rate and was
+  mutation-checked by removing the interval, which measured exactly 400 hunts in 400 ticks.
+- **The wander leash does not run off shift.** A bed is inside the programme's spread but need not be
+  inside `wanderRadius` of anything, so leaving the leash on would have it hauling the worker back off
+  its own commute. Nothing is needed to undo that at dawn — the leash resumes and walks the worker
+  home from the bed by itself.
+- **Walking home stops closer than walking to work.** `approach` gets within `reachDistance`, which is
+  configurable up to six blocks; the arrival test at the bed is vanilla's two. A commute that used
+  `approach` is a worker standing in the doorway all night, never quite home, and then a stall clock
+  writing the bed off — hence `WorkerLocomotion.commuteTo`.
 - **Idle rounds must only visit programmed targets** (`Workers.patrolStops`). That is the entire
   safety argument for `PATROL`: those positions are ones the worker already paths to while working,
   so idling cannot strand it anywhere it could not already get back from. Never widen the stop list
@@ -459,12 +528,15 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 
 ## Design notes
 
-`docs/` holds write-ups of features that were thought through but not built, including the reasoning
-against building them. Read the relevant one before starting such a feature, and update it if the
-thinking changes — the point is that the analysis is not redone from scratch.
+`docs/` holds write-ups of the thinking behind features — including, for the ones not built, the
+reasoning against building them, and for the ones since built, what the design turned out to be and
+where it departed from the plan. Read the relevant one before touching such a feature, and update it
+if the thinking changes — the point is that the analysis is not redone from scratch.
 
-- `docs/working-hours.md` — night shifts, designating a bed on the hat, and why the whole idea may be
-  an annoyance
+- `docs/working-hours.md` — working hours as built: the two clocks, the three places a bed comes from
+  and why they are trusted differently, what happens to a worker caught mid-haul at dusk, and the
+  standing argument that the whole feature may be an annoyance (kept, because it is what to weigh if
+  it ever needs undoing)
 - `docs/professions.md` — what hiring does to a villager's village job, and the several ways of
   doing it that look equivalent and are not
 - `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,

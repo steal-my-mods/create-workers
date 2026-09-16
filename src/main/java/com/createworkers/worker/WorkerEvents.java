@@ -83,7 +83,7 @@ public class WorkerEvents {
 			return;
 
 		WorkerProgram program = HardHatItem.getProgram(stack);
-		if (program.isEmpty()) {
+		if (!program.hasTargets()) {
 			player.displayClientMessage(Component.translatable("createworkers.message.hat_not_programmed")
 				.withStyle(ChatFormatting.RED), true);
 			return;
@@ -139,6 +139,7 @@ public class WorkerEvents {
 		if (level.isClientSide())
 			return;
 
+		Workers.wake(target);
 		List<ItemStack> returned = data.dismiss();
 		for (ItemStack drop : returned)
 			if (!player.getInventory()
@@ -261,6 +262,7 @@ public class WorkerEvents {
 		if (data == null || !data.isEmployed())
 			return;
 
+		Workers.wake(entity);
 		if (entity instanceof Mob mob) {
 			// Before dismiss, for the same reason onLivingDeath does it: a block cargo an enderman is
 			// holding is loot of its own.

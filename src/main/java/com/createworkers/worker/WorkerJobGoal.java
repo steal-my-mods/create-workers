@@ -44,6 +44,18 @@ public class WorkerJobGoal extends Goal {
 	private static final int IDLE_GRACE_TICKS = 60;
 	/** How long the leash stands down after failing to get a worker home. */
 	private static final int LEASH_REST_TICKS = 600;
+	/** How long a worker keeps trying to hand over what is already in its hands after the whistle. */
+	private static final int KNOCK_OFF_GRACE_TICKS = 200;
+	/** How long between bed hunts for a worker that has nowhere to sleep. */
+	private static final int BED_SEARCH_TICKS = 200;
+	/** How long the commute stands down after failing to get a worker to its bed. */
+	private static final int BED_REST_TICKS = 600;
+	/**
+	 * How close counts as at the bedside. Vanilla's own figure for being able to lie down, and the
+	 * reason this is not {@code reachDistance}: that is configurable up to six blocks, and a worker
+	 * that thought it had arrived from there would stand across the room all night.
+	 */
+	private static final double BEDSIDE = 2.0D;
 
 	private final Mob mob;
 	private final WorkerLocomotion locomotion;
@@ -53,6 +65,15 @@ public class WorkerJobGoal extends Goal {
 	private final Progress rounds = new Progress();
 	/** The trip back onto the patch. */
 	private final Progress homeward = new Progress();
+	/** The commute to bed. */
+	private final Progress commute = new Progress();
+	/** Where the worker is sleeping tonight; null whenever it is on the clock. */
+	@Nullable
+	private BlockPos bed;
+	/** Ticks left before the worker looks for a bed again, having had none or given up on one. */
+	private int bedWait;
+	/** How long the worker has been trying to put down what it was holding when the whistle went. */
+	private int knockOffTicks;
 	/** Where the worker was standing when it ran out of work; null whenever it has somewhere to be. */
 	@Nullable
 	private BlockPos station;
@@ -97,6 +118,7 @@ public class WorkerJobGoal extends Goal {
 		locomotion.stop(mob);
 		travel.reset();
 		forgetIdling();
+		clockOn();
 	}
 
 	@Override
@@ -110,6 +132,14 @@ public class WorkerJobGoal extends Goal {
 		long now = mob.level()
 			.getGameTime();
 		locomotion.tickEmployed(mob);
+
+		if (isOffShift()) {
+			if (clockOff(data))
+				return;
+		} else {
+			clockOn();
+		}
+
 		keepNearPost(data, now);
 
 		if (data.tickCooldown())
@@ -136,6 +166,147 @@ public class WorkerJobGoal extends Goal {
 			}
 			case MOVE_TO_INPUT, MOVE_TO_OUTPUT -> travel(data, now);
 		}
+	}
+
+	private boolean isOffShift() {
+		return CWConfig.WORKING_HOURS.get() && locomotion.keepsWorkingHours()
+			&& WorkerShift.isOffShift(mob.level());
+	}
+
+	/**
+	 * The end of the shift.
+	 *
+	 * <p>The delivery already in a worker's hands is the one thing that outlives the whistle. A worker
+	 * that downed tools holding a stack would carry it until morning, which is items out of the
+	 * factory for the night with nothing on the machines to say where they went — so a full-handed
+	 * worker plays out the phases it is already in, and only those, since nothing here starts a new
+	 * pickup. That is bounded too: an output that will not take the stack would otherwise keep a
+	 * worker on the clock all night, so after {@link #KNOCK_OFF_GRACE_TICKS} it goes to bed carrying
+	 * the load and delivers it in the morning, which is visible on the worker rather than lost.
+	 *
+	 * @return whether the night has taken charge of this tick.
+	 */
+	private boolean clockOff(WorkerData data) {
+		if (!data.getHeld()
+			.isEmpty() && knockOffTicks++ < KNOCK_OFF_GRACE_TICKS)
+			return false;
+
+		if (data.getTargetPoint() != null) {
+			data.abandonTarget();
+			locomotion.stop(mob);
+			travel.reset();
+		}
+		// The rounds, but not the station. Clearing the station every tick would re-anchor it to
+		// wherever the worker is standing on each of them, which is the drifting anchor the whole
+		// remembered-station idea exists to avoid: a worker shoved by a mob, or one that fled a zombie
+		// while holdAt was standing down, would hold wherever it ended up and never walk back -- and
+		// the wander leash, which would normally catch that, is deliberately off for the night.
+		forgetRounds();
+		forgetLeash();
+		goToBed(data);
+		return true;
+	}
+
+	/**
+	 * Morning. Everything the night left behind is cleared before the first scan of the day.
+	 *
+	 * <p>Getting the worker out of bed is this side's job rather than vanilla's, even though vanilla
+	 * would do it eventually: {@code WakeUp} only fires once the villager's brain leaves {@code REST},
+	 * and the operator's clock may well start the shift before the village's own morning.
+	 */
+	private void clockOn() {
+		if (mob.isSleeping())
+			mob.stopSleeping();
+		bed = null;
+		commute.reset();
+		bedWait = 0;
+		knockOffTicks = 0;
+	}
+
+	/**
+	 * Off the clock: find somewhere to sleep, walk there, and turn in.
+	 *
+	 * <p>A worker with nowhere to sleep — no bed on its hat, none it can prove a path to, or one it
+	 * could not get to tonight — holds its station instead. That is deliberately the same thing an
+	 * idle worker does: off shift with nowhere to go is idling that does not haul, so it takes on no
+	 * new risk and needs no setup before the feature stops being an irritation.
+	 *
+	 * <p>The wander leash is not run while any of this is happening. A bed is within the programme's
+	 * spread but need not be within {@code wanderRadius} of anything, so the leash would spend the
+	 * night hauling the worker back off its own commute. Nothing is needed to undo that in the
+	 * morning: the leash resumes on its own and walks the worker back from the bed.
+	 */
+	private void goToBed(WorkerData data) {
+		if (mob.isSleeping()) {
+			// Asleep, and staying that way. Occupying WALK_TARGET is what stops the brain's own
+			// bed-hunting behaviours walking a sleeping worker out of the bed it is already in --
+			// they all require that memory to be absent. It costs nothing: MoveToTargetSink erases a
+			// walk target it has already arrived at without ever asking for a path.
+			locomotion.holdAt(mob, mob.getSleepingPos()
+				.orElseGet(mob::blockPosition));
+			return;
+		}
+
+		if (bed == null) {
+			if (bedWait > 0) {
+				bedWait--;
+				holdStation();
+				return;
+			}
+			// Paced whether or not it finds anything: a bed hunt is a point-of-interest query and, for
+			// a bed nobody assigned, a pathfind, and the worker that wants one most is the one with
+			// nowhere to sleep. Asking every tick would put an A* on every such worker, all night.
+			bedWait = BED_SEARCH_TICKS;
+			bed = WorkerShift.findBed(mob, data);
+			commute.reset();
+			if (bed == null) {
+				holdStation();
+				return;
+			}
+		}
+
+		if (bed.closerToCenterThan(mob.position(), BEDSIDE)) {
+			turnIn();
+			return;
+		}
+
+		if (commute.stalled(mob, bed, CWConfig.PATH_TIMEOUT.get())) {
+			// Could not get there. Same reasoning as the leash: there is nothing above this to give up
+			// to, so it has to give up on the clock, or a bed behind a door somebody bricked up is a
+			// pathfind every few ticks until dawn. Holding station puts it back where it knocked off,
+			// which is somewhere it was standing an hour ago and can therefore certainly stand again.
+			bed = null;
+			commute.reset();
+			bedWait = BED_REST_TICKS;
+			holdStation();
+			return;
+		}
+
+		locomotion.commuteTo(mob, bed);
+	}
+
+	/**
+	 * At the bedside: lie down if the village has turned in, otherwise stand by the bed and wait for
+	 * it to. See {@link WorkerShift#isBedtime} for why those are two different questions.
+	 */
+	private void turnIn() {
+		if (!WorkerShift.isBedtime(mob)) {
+			// Home early. Stand by it until the village turns in -- and ask nothing of the bed itself
+			// yet, because that is a block read and this can be a long wait.
+			locomotion.holdAt(mob, bed);
+			return;
+		}
+
+		if (WorkerShift.isUsableBed(mob.level(), bed, mob)) {
+			mob.startSleeping(bed);
+			return;
+		}
+
+		// Taken, or torn down, since the walk began. Look for another rather than standing over it
+		// all night; a designated bed has nowhere else to look, so that worker holds station instead.
+		bed = null;
+		bedWait = BED_SEARCH_TICKS;
+		holdStation();
 	}
 
 	/**
@@ -294,6 +465,11 @@ public class WorkerJobGoal extends Goal {
 
 	private void forgetIdling() {
 		station = null;
+		forgetRounds();
+	}
+
+	/** Gives up the idle rounds while keeping the station — see {@link #clockOff}. */
+	private void forgetRounds() {
 		patrolStop = null;
 		rounds.reset();
 		dwellTicks = 0;
@@ -346,7 +522,7 @@ public class WorkerJobGoal extends Goal {
 			return;
 		}
 
-		if (locomotion.canReach(mob, point)) {
+		if (locomotion.canReach(mob, point.getPos())) {
 			boolean collecting = data.getPhase() == Phase.MOVE_TO_INPUT;
 			ItemStack before = data.getHeld()
 				.copy();
@@ -367,7 +543,7 @@ public class WorkerJobGoal extends Goal {
 			return;
 		}
 
-		locomotion.approach(mob, point);
+		locomotion.approach(mob, point.getPos());
 
 		if (travel.stalled(mob, point.getPos(), CWConfig.PATH_TIMEOUT.get())) {
 			// Cannot get there -- set it aside and try something else rather than standing still.

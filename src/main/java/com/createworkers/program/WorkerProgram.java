@@ -31,6 +31,17 @@ public record WorkerProgram(CompoundTag tag) {
 
 	public static final String POINTS_KEY = "Points";
 
+	/**
+	 * Where the worker sleeps, if the player named somewhere.
+	 *
+	 * <p>Kept in the same component as the inventories, and not as one of them, because it is a
+	 * different kind of place: a worker never takes anything out of it, it is not a stop on the idle
+	 * rounds, and it must not drag the job site towards the bedroom. What it does share with them is
+	 * the spread rule — see {@link #allPositions} — because the commute is part of the beat one
+	 * worker walks.
+	 */
+	public static final String BED_KEY = "Bed";
+
 	public static final WorkerProgram EMPTY = new WorkerProgram(new CompoundTag());
 
 	public static final Codec<WorkerProgram> CODEC =
@@ -69,12 +80,36 @@ public record WorkerProgram(CompoundTag tag) {
 		return tag.getList(POINTS_KEY, Tag.TAG_COMPOUND);
 	}
 
+	/** How many inventories the hat names. The bed is not one of them. */
 	public int size() {
 		return points().size();
 	}
 
+	/** @return whether the hat names nothing at all — no inventories and no bed. */
 	public boolean isEmpty() {
-		return size() == 0;
+		return size() == 0 && bed() == null;
+	}
+
+	/** @return whether there is work here: a bed alone is somewhere to sleep, not a job. */
+	public boolean hasTargets() {
+		return size() > 0;
+	}
+
+	/** @return the bed this hat's worker sleeps in, or null if it is left to find its own. */
+	@Nullable
+	public BlockPos bed() {
+		return NbtUtils.readBlockPos(tag, BED_KEY)
+			.orElse(null);
+	}
+
+	/** @return a copy of this programme sleeping at {@code pos}, or nowhere in particular if null. */
+	public WorkerProgram withBed(@Nullable BlockPos pos) {
+		CompoundTag copy = tag.copy();
+		if (pos == null)
+			copy.remove(BED_KEY);
+		else
+			copy.put(BED_KEY, NbtUtils.writeBlockPos(pos));
+		return new WorkerProgram(copy);
 	}
 
 	public WorkerProgram copy() {
@@ -82,8 +117,8 @@ public record WorkerProgram(CompoundTag tag) {
 	}
 
 	/**
-	 * The stored positions, read straight out of NBT. No level needed, so this works before a worker
-	 * exists and on either side.
+	 * The stored inventory positions, read straight out of NBT. No level needed, so this works before
+	 * a worker exists and on either side. The bed is not among them — see {@link #allPositions}.
 	 */
 	public List<BlockPos> positions() {
 		List<BlockPos> positions = new ArrayList<>();
@@ -91,6 +126,24 @@ public record WorkerProgram(CompoundTag tag) {
 			if (entry instanceof CompoundTag compound)
 				NbtUtils.readBlockPos(compound, "Pos")
 					.ifPresent(positions::add);
+		return positions;
+	}
+
+	/**
+	 * Everywhere the programme sends a worker: its inventories, and its bed if it has one.
+	 *
+	 * <p>This is what the spread rule measures, and the asymmetry with {@link #positions} is the
+	 * point. The commute is part of the beat one worker walks, so leaving the bed out of the spread
+	 * would make it the one unbounded trip in a programme whose whole shape exists to bound them. But
+	 * the job site is where the <em>work</em> is, so the bed must not drag {@link #centre} towards the
+	 * bedroom — an on-shift worker would find its anchor, and its wander leash, creeping away from the
+	 * machines it serves.
+	 */
+	public List<BlockPos> allPositions() {
+		List<BlockPos> positions = positions();
+		BlockPos bed = bed();
+		if (bed != null)
+			positions.add(bed);
 		return positions;
 	}
 
@@ -157,15 +210,15 @@ public record WorkerProgram(CompoundTag tag) {
 	 * they are what a worker later reads blocks at.
 	 */
 	public boolean within(BlockPos pos, int radius) {
-		for (BlockPos target : positions())
+		for (BlockPos target : allPositions())
 			if (!target.closerThan(pos, radius))
 				return false;
 		return true;
 	}
 
-	/** @return true if any two targets are further apart than {@code maxSpread}. */
+	/** @return true if any two of the places this programme names are further apart than {@code maxSpread}. */
 	public boolean exceedsSpread(int maxSpread) {
-		List<BlockPos> positions = positions();
+		List<BlockPos> positions = allPositions();
 		for (int i = 0; i < positions.size(); i++)
 			for (int j = i + 1; j < positions.size(); j++)
 				if (!positions.get(i)

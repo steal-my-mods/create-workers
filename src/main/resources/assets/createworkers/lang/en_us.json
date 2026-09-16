@@ -6,6 +6,7 @@
   "createworkers.hard_hat.hint": "Right-click belts, depots, funnels and other Arm-compatible blocks to assign them",
   "createworkers.hard_hat.summary": "%1$s input(s), %2$s output(s)",
   "createworkers.hard_hat.assign_hint": "Right-click a villager or enderman to put them to work",
+  "createworkers.hard_hat.bed": "Sleeps at %1$s, %2$s, %3$s",
   "createworkers.message.hat_not_programmed": "Assign some Arm-compatible blocks to the hard hat first",
   "createworkers.message.already_employed": "They are already on the clock",
   "createworkers.message.too_young": "Far too young for a job — come back when they have grown up",
@@ -15,6 +16,9 @@
   "createworkers.message.too_many_targets": "That is one inventory too many — a hard hat holds %1$s",
   "createworkers.message.target_too_far": "Too far from another assigned block (%1$s blocks apart, limit %2$s)",
   "createworkers.message.too_far_from_job": "Too far from the job site at %1$s, %2$s, %3$s — hire them nearer the work",
+  "createworkers.message.bed_assigned": "They will sleep here",
+  "createworkers.message.bed_cleared": "Bed cleared — they will find their own",
+  "createworkers.message.bed_too_far": "Too far from the work to walk home (%1$s blocks, limit %2$s)",
 
   "createworkers.ponder.hard_hat.header": "Putting Workers to Work",
   "createworkers.ponder.hard_hat.text_1": "Workers carry items between inventories, much like a Mechanical Arm that can walk",
@@ -23,5 +27,13 @@
   "createworkers.ponder.hard_hat.text_4": "One worker walks between all of them, so every assigned block has to stay within reach of every other",
   "createworkers.ponder.hard_hat.text_5": "Right-Click a Villager or an Enderman with the programmed Hat to put them to work",
   "createworkers.ponder.hard_hat.text_6": "They will carry items from the assigned Inputs to the assigned Outputs, and keep at it",
-  "createworkers.ponder.hard_hat.text_7": "Sneak and Right-Click them with an empty hand to clock them out — the Hat and anything they are carrying come back"
+  "createworkers.ponder.hard_hat.text_7": "Sneak and Right-Click them with an empty hand to clock them out — the Hat and anything they are carrying come back",
+
+  "createworkers.ponder.working_hours.header": "Working Hours",
+  "createworkers.ponder.working_hours.text_1": "At the end of the day, Workers down tools and sleep until morning",
+  "createworkers.ponder.working_hours.text_2": "Whatever is already in their hands is delivered first — nobody clocks off holding a stack",
+  "createworkers.ponder.working_hours.text_3": "Sneak and Right-Click a Bed while holding the Hat to say where that Worker sleeps",
+  "createworkers.ponder.working_hours.text_4": "Given no Bed, they find an unclaimed one near their work — but only one they can walk to",
+  "createworkers.ponder.working_hours.text_5": "Endermen keep no hours — a line staffed with them runs through the night",
+  "createworkers.ponder.working_hours.text_6": "At first light they are up and back at work"
 }

@@ -65,15 +65,33 @@ public class HardHatItem extends ArmorItem {
 		return !WorkerTarget.isTargetable(level, pos, state);
 	}
 
+	/**
+	 * Where the worker sleeps, and only when one has been chosen.
+	 *
+	 * <p>State, like the input and output counts above it — not an instruction. There is deliberately
+	 * no line telling a player that beds can be assigned at all, and none telling them workers keep
+	 * hours: Create and its addons put that in Ponder and keep their tooltips to what the item
+	 * currently holds, and a hat that grew a second hint line every time the mod learned a trick would
+	 * be a hat nobody reads.
+	 */
+	private static Component bedLine(BlockPos bed) {
+		return Component.translatable("createworkers.hard_hat.bed", bed.getX(), bed.getY(), bed.getZ())
+			.withStyle(ChatFormatting.GRAY);
+	}
+
 	@Override
 	public void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip,
 		TooltipFlag flag) {
 		super.appendHoverText(stack, context, tooltip, flag);
 
 		WorkerProgram program = getProgram(stack);
-		if (program.isEmpty()) {
+		BlockPos bed = program.bed();
+
+		if (!program.hasTargets()) {
 			tooltip.add(Component.translatable("createworkers.hard_hat.unprogrammed")
 				.withStyle(ChatFormatting.GRAY));
+			if (bed != null)
+				tooltip.add(bedLine(bed));
 			tooltip.add(Component.translatable("createworkers.hard_hat.hint")
 				.withStyle(ChatFormatting.DARK_GRAY));
 			return;
@@ -83,6 +101,8 @@ public class HardHatItem extends ArmorItem {
 		int outputs = program.countWithMode(Mode.DEPOSIT);
 		tooltip.add(Component.translatable("createworkers.hard_hat.summary", inputs, outputs)
 			.withStyle(ChatFormatting.GRAY));
+		if (bed != null)
+			tooltip.add(bedLine(bed));
 		tooltip.add(Component.translatable("createworkers.hard_hat.assign_hint")
 			.withStyle(ChatFormatting.DARK_GRAY));
 	}

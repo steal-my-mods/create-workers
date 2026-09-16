@@ -29,6 +29,11 @@ left-clicking removes it. Selections are outlined in the world while you hold th
 Unlike the arm, a programmed hat can be picked back up and edited — the existing selection is
 restored rather than starting from scratch.
 
+Sneak + right-click a **bed** to say where that worker sleeps. The bed is outlined in pale blue
+alongside the inventories, and the same click on it again takes the assignment off. Optional — a
+worker with no bed on its hat finds one for itself — but it is how you put a particular worker in a
+particular room.
+
 Crafting a programmed hat on its own blanks it, the way a Create filter clears. The same hat comes
 back, keeping its damage and its enchantments, rather than a factory-fresh one.
 
@@ -52,7 +57,8 @@ painted on your head.
 **Or let the game explain it.** Hold **W** over a Hard Hat in your inventory and Create's own Ponder
 screen walks through the whole job: assigning one Depot as an input, right-clicking a second twice to
 make it an output, hiring a villager, and watching them carry an ingot across the yard and clock off
-again.
+again. A second page covers working hours — the last delivery of the day, the walk to bed, and the
+enderman that carries on through the night.
 
 ### The job site
 
@@ -114,6 +120,7 @@ from an extracting funnel on one is emptying the mailbox.
 | Safety | — | Refuses to land in water, rain, fire or lava |
 | Cargo shown | Held in front of the chest | The vanilla carrying pose for blocks, in front of the chest for anything else |
 | Idling | Unhurried rounds between its assigned blocks | Stands by; does not teleport idly |
+| Hours | Knocks off at dusk and sleeps in a bed | Works around the clock |
 
 Endermen are fast but not free: each teleport is followed by a cooldown, and one hop only covers
 `teleportRange`, so moving goods across a base takes several hops and visibly longer than working a
@@ -153,6 +160,46 @@ lives.
 Workers keep their job across save/reload, and drop the hat and their cargo if they die. Employed
 endermen stop being hostile — they are on the clock.
 
+### Working hours
+
+At the end of the day a villager worker downs tools, walks to a bed and sleeps until morning. It
+clocks back on at first light and carries on where it left off. `workingHours` turns the whole thing
+off, and `clockOff` / `clockOn` move the hours — including past each other, which gives you a night
+shift.
+
+**Endermen are exempt.** They have no bed and no schedule, and they are creatures of the night
+everywhere else in the game, so a line staffed by endermen runs around the clock. That is the reason
+to staff it with them — and it is not free, because an enderman still will not land anywhere the sky
+is falling on. An outdoor enderman line stops in the rain the way a villager line stops at night.
+
+Where a worker sleeps, in order of preference:
+
+1. **The bed on its hat**, if you gave it one. Taken as given: you clicked it, so you decided the
+   route, the same way you do for every inventory you assign.
+2. **The bed the village has already put down as theirs** — workers acquire a home like any other
+   villager, and that one came with a path and a claim on it.
+3. **The nearest unclaimed bed within `bedSearchRadius` of the job site that it can prove a path
+   to.** Proximity alone is never enough: a bed six blocks away across a gap is further, in the only
+   sense that matters, than one forty blocks along a corridor. Set `bedSearchRadius` to 0 and workers
+   sleep only where you tell them to.
+
+A worker with nowhere to sleep — no bed given, none it can get to — just stands where it is until
+morning. Nothing wanders off in the dark.
+
+Two details you might otherwise read as bugs:
+
+- **A worker caught mid-haul finishes the delivery first.** It will not start a new one, but the
+  stack already in its hands goes where it was going before the worker turns in — so items are never
+  parked in a pocket overnight for no visible reason.
+- **A worker that clocked off early stands beside its bed rather than getting in.** Lying down is the
+  village's business, not the factory's: villagers get up when their own schedule says morning, so a
+  worker that lay down before the village's bedtime would simply be stood up again. Set `clockOff`
+  before 12000 and you get a worker waiting to turn in, which is what it looks like anyway.
+- **A night shift rests standing, and never sleeps at all.** Its off-shift hours are daylight, and no
+  villager can sleep through those — so a worker on inverted hours walks to its bed each morning and
+  waits beside it. The bed is still worth assigning: it is where the worker spends the day, rather
+  than standing in the middle of the factory floor.
+
 ## Configuration
 
 `config/createworkers-server.toml`:
@@ -171,6 +218,10 @@ endermen stop being hostile — they are on the clock.
 | `pathTimeout` | 200 | Ticks spent failing to reach a target before skipping it |
 | `wanderRadius` | 12 | How far a worker may stray from its post or targets before being sent back |
 | `idleBehaviour` | `PATROL` | What a worker does between jobs: `PATROL`, `HOLD_STATION` or `WANDER` |
+| `workingHours` | `true` | Whether workers knock off at the end of the day and sleep. Endermen are exempt whatever this says |
+| `clockOff` | 12000 | Time of day the tools go down: 0 is dawn, 6000 noon, 12000 dusk. The default is when the village itself turns in |
+| `clockOn` | 0 | Time of day work starts again. Later than `clockOff` inverts the two, which is how you get a night shift |
+| `bedSearchRadius` | 16 | How far from the job site a worker may look for a bed of its own. 0 means it sleeps only in a bed assigned on its hat |
 
 ## Development
 
@@ -219,12 +270,14 @@ The little diorama the Ponder scene plays out on is generated as well, rather th
 creative world and saved:
 
 ```bash
-python3 tools/generate_ponder_structure.py   # assets/createworkers/ponder/hard_hat.nbt
+python3 tools/generate_ponder_structure.py   # assets/createworkers/ponder/*.nbt
 ```
 
 It writes the NBT directly, gzipped with `mtime=0` so an unchanged scene produces a byte-identical
-file. The two Depot positions live in both that script and `HardHatScene` with nothing tying them
-together — move one and move the other.
+file. Both scenes' plates come out of one shared `yard()`, so they are visibly the same place — the
+working-hours one is that yard with a bed in the corner the Depots leave free. Every position lives
+twice, in the script and in the scene class, with nothing tying them together: move one and move the
+other.
 
 Both CI workflows re-run this and the logo script and fail on any diff. A generated file that has
 gone stale would otherwise ship in the jar with nothing to notice it, so regenerating has to be a
@@ -238,7 +291,7 @@ no-op.
 ./gradlew runGameTestServer
 ```
 
-Twenty-nine in-world GameTests, headless, under a minute, non-zero exit on failure. They cover
+Fifty-six in-world GameTests, headless, under a minute, non-zero exit on failure. They cover
 target parity with the Mechanical Arm (a depot is accepted, a chest is not), the transfer algorithm
 on its own, program serialization round-tripping, the clearing recipe, round-robin wrap-around, the
 job site and the spread rule being derived from the programme (and an over-spread programme refused),
@@ -249,11 +302,22 @@ patrol stops along with the pace a worker ambles and then walks at, address-base
 (including that an undeliverable package is left alone), and both a villager and an enderman moving a
 stack between two depots end to end.
 
+Working hours get a set of their own: the shift clock wrapping midnight, a worker walking to the bed
+on its hat and sleeping in it, nothing being hauled while it does, the delivery already in its hands
+being finished first, a worker with nowhere to sleep standing its ground, endermen working straight
+through, waking and going back to work at dawn, and `workingHours = false` keeping everyone on the
+job. The bed hunt is pinned branch by branch — the bed on the hat, the bed the village already gave
+them, and a discovered one, which must come with a path that reaches it and is refused without.
+Anything that needs the world to be dark runs in its own batch, because the time of day is one clock
+for the whole server and game test batches are the only isolation there is.
+
 The rest are the guards a shared server depends on: that a programme past `maxTargets` is not
 honoured in full and that one must arrive from inside the beat it describes, that resolving a
 programme never loads a chunk to read a block in it and retries the targets it could not read, that a
-target the worker failed to reach is set aside rather than walked at again immediately, and that an
-idle enderman is not sent on rounds it has no way to walk.
+target the worker failed to reach is set aside rather than walked at again immediately, that an
+idle enderman is not sent on rounds it has no way to walk, and that a worker with nowhere to sleep
+does not hunt for a bed every tick — a hunt is a point-of-interest query and a pathfind, and unpaced
+it would be one per worker per tick for the length of a night.
 
 Run these after any change to worker behaviour, targets or serialization.
 
@@ -369,6 +433,8 @@ HardHatItem ──── WorkerProgram (data component, absolute positions)
   WorkerLocomotion
   ├── WalkLocomotion      (villagers: brain WALK_TARGET memory)
   └── TeleportLocomotion  (endermen: safe-spot search + randomTeleport)
+
+  WorkerShift  ──  when the shift ends, and which bed to spend it in
 ```
 
 A few decisions worth knowing about:
@@ -402,10 +468,6 @@ Ideas deliberately left out of the MVP. Anything worked through in detail lives 
 - **Energy.** Workers should not be strictly better free Mechanical Arms. Give them an inventory to
   fetch "fuel" from — chorus fruit for endermen, any food for villagers — and have them stop when
   they run out.
-- **Working hours.** Villagers knock off at night, or keep to set hours, and go somewhere to wait it
-  out. Designed out in [docs/working-hours.md](docs/working-hours.md), including the argument that it
-  might only be an annoyance — it is the one idea here that makes workers *less* predictable, so it is
-  written up rather than queued.
 - **Bots.** A third worker type, hired by right-clicking a block with the hat the way Steam 'n' Rails
   does with conductors. They would run on backtanks: when empty, go to an inventory, drop the spent
   backtank and pick up the fullest one available.

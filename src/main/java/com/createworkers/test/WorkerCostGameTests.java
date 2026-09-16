@@ -10,12 +10,15 @@ import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWComponents;
 import com.createworkers.registry.CWItems;
 import com.createworkers.worker.WorkerData;
+import com.createworkers.worker.WorkerShift;
 import com.createworkers.worker.Workers;
 import com.createworkers.worker.target.WorkerTarget;
 import com.simibubi.create.AllBlocks;
 
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.AfterBatch;
+import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -65,6 +68,10 @@ public class WorkerCostGameTests {
 	private static final List<BlockPos> OUTPUTS =
 		List.of(new BlockPos(1, 1, 9), new BlockPos(3, 1, 9), new BlockPos(5, 1, 9));
 	private static final int STOCK = 64;
+
+	/** Midday, which is what the world is put back to for whatever runs next. */
+	private static final int WORKING_HOURS_TIME = 1000;
+	private static final int NIGHT_TIME = 13000;
 
 	/**
 	 * A search prices each output once, not once per slot of every input.
@@ -341,6 +348,68 @@ public class WorkerCostGameTests {
 				.length() / large.size())
 			+ " bytes a target)");
 		helper.succeed();
+	}
+
+	/**
+	 * A worker with nowhere to sleep does not hunt for a bed every tick.
+	 *
+	 * <p>This is the one expensive thing the night adds, and the worker that pays it most is the one
+	 * that gets nothing for it: a bed hunt is a point-of-interest query over every section within the
+	 * search radius and then an A* across the whole candidate set, and a worker that finds nothing
+	 * wants to ask again on the very next tick. Left unpaced that is a pathfind per worker per tick
+	 * for the length of a night — twelve thousand of them apiece — out of mobs that are standing
+	 * still.
+	 *
+	 * <p>The bound is a rate rather than a count, so it says the same thing however the interval is
+	 * tuned: at most one hunt per hundred ticks. Asking every tick would be four hundred over the
+	 * window below.
+	 *
+	 * <p>Runs at night in a batch of <em>its own</em>. Night, because a worker on the clock never
+	 * looks for a bed at all; alone, because the tests of one batch run side by side on a grid and the
+	 * working-hours tests lay real beds well inside a worker's search radius. Sharing a batch with
+	 * them would leave this measuring a worker that found somewhere to sleep, which is the one thing
+	 * it is not about.
+	 */
+	@BeforeBatch(batch = "night_alone")
+	public static void nightFallsOnAnEmptyWorld(ServerLevel level) {
+		level.setDayTime(NIGHT_TIME);
+	}
+
+	@AfterBatch(batch = "night_alone")
+	public static void morningComes(ServerLevel level) {
+		level.setDayTime(WORKING_HOURS_TIME);
+	}
+
+	@GameTest(template = "work_site", timeoutTicks = 600, batch = "night_alone")
+	public static void aWorkerWithNowhereToSleepDoesNotHuntForABedEveryTick(GameTestHelper helper) {
+		layFloor(helper);
+		for (BlockPos pos : INPUTS)
+			helper.setBlock(pos, AllBlocks.DEPOT.getDefaultState());
+		for (BlockPos pos : OUTPUTS)
+			helper.setBlock(pos, AllBlocks.DEPOT.getDefaultState());
+		// Deliberately no bed within reach, and none anywhere in the test world.
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = employ(helper, villager, INPUTS, OUTPUTS);
+
+		helper.assertTrue(WorkerShift.isOffShift(helper.getLevel()),
+			"precondition: this batch is the one that runs at night");
+
+		int window = 400;
+		int allowed = window / 100 + 1;
+		helper.runAfterDelay(window, () -> {
+			helper.assertTrue(!villager.isSleeping(),
+				"precondition: there is nothing here to sleep in, so the worker should still be looking");
+			helper.assertTrue(data.bedSearches() > 0,
+				"precondition: a worker off the clock with no bed should have looked for one at least once");
+
+			record("bed hunts over " + window + " ticks with nowhere to sleep: " + data.bedSearches() + " (bound "
+				+ allowed + ", once per tick would be " + window + ")");
+			helper.assertTrue(data.bedSearches() <= allowed,
+				"a bed hunt is a query and a pathfind and has to be paced: expected at most " + allowed + " over "
+					+ window + " ticks, made " + data.bedSearches());
+			helper.succeed();
+		});
 	}
 
 	// --- helpers ---------------------------------------------------------------------------
