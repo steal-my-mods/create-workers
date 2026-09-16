@@ -44,10 +44,8 @@ hundred from the far end of the run is refused, because one worker would have to
 Both limits tell you as you click, rather than letting you discover later that a target quietly went
 missing.
 
-**3a. Or let them hire themselves.** Put a programmed hat into a **Worker Station** and an unemployed
-villager will come and take the job, exactly as one takes a lectern or a composter. The hat stays in
-the station and the worker wears a copy — so if that worker dies, the job is still there and the next
-villager along picks it up. A factory built on stations repairs its own workforce.
+**3. Let them hire themselves.** Put the programmed hat into a **Worker Station** and an unemployed
+villager will come and take the job, exactly as one takes a lectern or a composter.
 
 ```
 P H P      P = any planks
@@ -55,21 +53,18 @@ P A P      H = Hard Hat, programmed
            A = Andesite Alloy
 ```
 
-Take the hat back out with an empty hand to end the job. Breaking the block hands the hat back and
-leaves the worker running as though you had hired it by hand.
+The hat stays in the station and the worker wears a copy, so **if that worker dies the job is still
+there** and the next villager along picks it up. A factory built on stations repairs its own
+workforce. To end the job, take the hat back out with an empty hand or break the block; either one
+hands the hat back and puts the villager out of work.
 
-**3. Hire someone.** Put the hat in a **Worker Station** and an unemployed villager will come and take
-the job. To fire one, take the hat back out or break the block.
+Two things a station will not do. A villager that already has a job of its own will never take one —
+break its workstation first, the same way vanilla makes you — and children are never hired, because a
+child will not take a workstation of any kind.
 
-Endermen cannot use a station — they have no profession and no interest in workstations — so they are
-still hired by right-clicking one with the programmed hat, and retired with a sneak + empty-hand
-right-click. That is now the only hiring anyone does by hand.
-
-Note that a villager with a job of its own will never take a station: break its workstation first, the
-same way vanilla makes you.
-
-Children are never hired — a child villager will not take a workstation of any kind, so it simply
-never turns up for the job.
+**Endermen cannot use a station** at all: they have no profession and no interest in workstations. So
+they are hired by right-clicking one with the programmed hat and retired with a sneak + empty-hand
+right-click, which is the only hiring anyone still does by hand.
 
 **4. Wear it yourself.** It is a real helmet — two points of armour, the same as an iron one, and
 rather more durable — and it renders as the same 3D hat the workers wear rather than as a texture
