@@ -542,9 +542,10 @@ if the thinking changes — the point is that the analysis is not redone from sc
   it ever needs undoing)
 - `docs/professions.md` — what hiring does to a villager's village job, and the several ways of
   doing it that look equivalent and are not
-- `docs/shift-rotation.md` — two crews on one programme, so a line runs round the clock. Not built.
-  Holds the correction to the one thing `working-hours.md` got wrong: a worker **can** be given its
-  own `Schedule`, so a shift whose off-hours are daylight can sleep after all
+- `docs/shift-rotation.md` — shifts, food and leisure as one feature, because `GoToWantedItem` needs
+  `WALK_TARGET` absent and so a pinned worker can never feed itself. Not built. Holds the correction
+  to the one thing `working-hours.md` got wrong (a worker **can** be given its own `Schedule`), the
+  case for a worker station block, and the case against giving workers trades
 - `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,
   and the things a shared server still wants that this mod deliberately does not do
 
