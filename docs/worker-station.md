@@ -36,39 +36,39 @@ that *is* the mod's identity on a project page. Against that, the station gains 
 already get from holding hats — a station with three hats in it **is** a crew of three, with no new
 concepts and no new state.
 
-### Direct assignment stays, for villagers as much as for endermen
+### Direct assignment stays, but it produces the same kind of worker
 
-Nothing here removes a hiring route. Right-clicking a villager with a programmed hat keeps working
-exactly as it does today, and both Ponder scenes keep teaching it. The station is the path a base
-takes when it has outgrown doing that by hand — not a replacement for it.
+Nothing here removes a hiring route. Right-clicking a villager with a programmed hat keeps working,
+and both Ponder scenes keep teaching it. The station is the path a base takes when it has outgrown
+doing that by hand.
 
-What differs is only whether the worker belongs to a **crew**:
+**Shifts and food are universal.** Every villager worker keeps a shift and eats, however it was
+hired — there is no second class of worker exempt from the mechanics, and no compatibility path
+preserving the behaviour of a pre-1.0 build. `workingHours` and a matching `requireFood` are the
+escape hatches for a server that wants the old shape; carrying it in the code would be debt paid
+forever for a design nobody is running.
+
+So the shift lives **on the hat**, always. The station sets it when it fills a slot; a hand-hired hat
+carries whatever it was set to, defaulting to the day shift. One mechanism, one place to look, and
+the station becomes a convenience for setting it rather than the only thing that can.
+
+What actually differs between the routes is narrower than an earlier draft claimed — only crew
+membership and what happens when a worker is lost:
 
 | | Station-hired villager | Hand-hired villager | Enderman |
 |---|---|---|---|
-| Keeps working hours | Yes, its crew's shift | **Yes, the server's hours** | No — exempt |
-| Sleeps, eats | Yes | Yes | No |
+| Keeps a shift | Yes, its crew's | Yes, the hat's | No — exempt |
+| Sleeps | Yes | Yes | No |
+| Eats | Yes | Yes | See [the food question](shift-rotation.md#do-endermen-eat) |
 | Belongs to a crew | Yes | No | No |
 | Replaced when lost | Yes, automatically | No | No |
 
-An earlier draft of this table had a hand-hired villager as "always on, no hours", lumped in with
-endermen under one idea called the unmanaged worker. **That was wrong, and it would have been a
-regression**: hand-hired villagers keep hours *today*, and they sleep in beds *today*. Introducing a
-station must not quietly take that away from every worker hired before it existed.
+The enderman column differs for a reason unrelated to this block: no profession and no point of
+interest means no job board could ever hire one. That is why it stays a hand-hire, and it is the same
+reason it is exempt from hours.
 
-So "unmanaged" means no crew and no automatic replacement. It does not mean no schedule. The hours a
-hand-hired villager keeps are the server's, from `clockOff`/`clockOn` — which is exactly what ships
-now, and becomes the default shift once shifts exist.
-
-The enderman column is different for a reason that has nothing to do with this block: it has no
-profession and no point of interest, so there is no job board that could ever hire it. That is why it
-stays a hand-hire, and it is the same reason it is exempt from hours.
-
-It also keeps the small build small. One worker between two depots should not need a block, a shaft
-and a power source.
-
-The honest cost of keeping the route: the `RESET_PROOF_LEVEL` trick stays alive for it, because a
-hand-hired worker still has no job site. See [What it lets us delete](#what-it-lets-us-delete).
+Keeping the route also keeps the small build small. One worker between two depots should not need a
+block, a shaft and a power source.
 
 ## How hiring works
 
@@ -200,6 +200,48 @@ Physical hats rather than stored programmes, deliberately. The hat is a real ite
 wears, comes back when they die, and had to be crafted — so a station's capacity is bounded by
 something the player actually built, and every existing behaviour (the drop, the clearing recipe, the
 tooltip) keeps working with no special case for "a job that has no hat".
+
+## Naming a job, and reading a factory floor
+
+Both notes keep running into the same problem from different directions: **when something goes wrong,
+which villager is it?** A stuck worker, a slot that will not fill, a crew that is one short. Two cheap
+answers, and they compose.
+
+### Name the hat, name the worker
+
+A hard hat can already be renamed — `CUSTOM_NAME` is a data component, it survives the drop and the
+return to a slot, and it shows in the tooltip — so an anvil already half-solves this. Two small
+additions make it real:
+
+- **A rename field in the station screen.** No anvil, no experience cost, and it is right there while
+  you are arranging slots. Naming a job "Smelting feed" is a label, not an enchantment, and should not
+  cost a level. Create names its Frogports and Train Stations in-block for the same reason.
+- **A named hat names its wearer.** Copy the hat's custom name onto the villager when it is employed,
+  and clear it on retirement. Villagers never despawn, so there is no persistence side effect, and the
+  payoff is large: "Smelting feed" floats over the villager standing in a hole, which is the whole
+  diagnostic problem solved with a component copy.
+
+### A uniform that can be read across a room
+
+The gear is already generated from `worker_gear.png`, so it is cheap to put information on it — and
+there are two things worth showing:
+
+- **Shift as a colour.** A different hi-vis trim per shift, which
+  [shift rotation](shift-rotation.md) already wanted, and which costs a change to the generator
+  script rather than to any render code.
+- **Slot number on the back of the vest.** A flat quad on the torso's back face with UVs picked from
+  a digit strip — the gear layer already builds geometry, so this is one more box and a small texture,
+  not a new rendering approach. Two digits for a station with more than nine slots. Real hi-vis vests
+  carry markings, so it reads as a uniform rather than as a debug overlay.
+
+Together those make a factory floor legible at a glance: *orange 3 is missing* is a sentence a player
+can form by looking, without opening anything.
+
+Two caveats worth knowing before building it. The slot number is a property of the **station**, not of
+the hat, so it changes when a hat moves slots and has to reach the client — a byte on
+`WorkerStatePacket`, which is nothing, but that packet has a documented rule about staying small and
+it should stay honoured. And the *name* is the more valuable half: it solves the same problem better,
+works with no render work at all, and should be built first.
 
 ## How many jobs one station holds
 

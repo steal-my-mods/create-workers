@@ -19,6 +19,16 @@ second crew, a bunkhouse, a bread supply. That is the Create idiom — a constra
 around — and it turns working hours into a reason to build more rather than a reason to edit a config
 file.
 
+## Universal, with a config to turn it off
+
+**Every villager worker keeps a shift and eats**, however it was hired. There is no exempt second
+class and no compatibility path preserving how a pre-1.0 build behaved: that would be debt paid
+forever to support a design nobody is running. The shift lives on the hat, so a hand-hired worker
+carries one the same way a station-hired one does, defaulting to the day shift.
+
+Servers that want the old shape get it from config, not from code — `workingHours` already exists and
+`requireFood` joins it. Both default on.
+
 ## Three questions that turn out to be one
 
 They were raised separately and they cannot be built separately, because of one line in the villager
@@ -124,6 +134,30 @@ number that already survives a save.
 Tie the drain to *work done* rather than to time. A worker that hauled two hundred items should cost
 more than one that stood at an empty depot all shift — that is the right economics, it makes a busy
 line the expensive one, and it means an idle worker cannot starve for having had nothing to do.
+
+### Do endermen eat?
+
+An open question, and a real one, because "all workers eat" and "endermen are exempt from hours" pull
+against each other. An enderman with neither hours nor hunger is free labour again, which is the
+thing the exemption was nearly excused by the difficulty of getting one into a factory at all.
+
+Nothing in the villager food machinery reaches them: `foodLevel` is a `Villager` field, and an
+enderman has no inventory, no `wantsToPickUp`, and no leisure window in which to go and find anything.
+So their hunger would have to be ours — a counter on `WorkerData` and an item that suits them, which
+the roadmap already guessed at as **chorus fruit**.
+
+The pleasing part is that they need no leisure window to use it. Eating costs an enderman almost no
+time: it blinks to the canteen, eats, and blinks back, which is a few seconds out of a shift rather
+than a third of a day. So the shape would be:
+
+| | Villager | Enderman |
+|---|---|---|
+| Pays for its labour with | Hours off, and bread | Chorus fruit, and being hard to acquire |
+| Needs a window to eat in | Yes — that is what leisure is for | No; it teleports |
+
+That keeps the hours exemption, which is the thing that makes endermen interesting, while stopping it
+being free. **Worth confirming before building**, because it is a change to a decision already made
+deliberately, and because a chorus fruit farm is a real ask of a player who just wanted a night shift.
 
 ## Where food comes from, and the night crew
 
@@ -362,7 +396,10 @@ are the decoration on top — and after the station, because that is what makes 
 5. **Shift visible on the gear?** A base with a dozen workers needs the crew readable across a room.
    The gear textures are generated already, so a different hi-vis trim per shift costs a script
    change — and it should ship *with* the mechanic, not after it. A shift you cannot see is the same
-   feature as no shift, plus confusion.
+   feature as no shift, plus confusion. See
+   [the uniform](worker-station.md#a-uniform-that-can-be-read-across-a-room), which pairs the colour
+   with a slot number on the back of the vest, and the cheaper half of the same idea: naming a hat
+   names the villager wearing it.
 
 ## Suggested ordering
 
