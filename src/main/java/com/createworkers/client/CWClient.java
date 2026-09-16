@@ -23,6 +23,7 @@ public class CWClient {
 		modBus.addListener(CWClient::addEntityLayers);
 		modBus.addListener(CWClient::registerClientExtensions);
 		modBus.addListener(CWClient::registerPonderScenes);
+		modBus.addListener(CWClient::registerScreens);
 	}
 
 	/**
@@ -32,6 +33,10 @@ public class CWClient {
 	 */
 	private static void registerPonderScenes(FMLClientSetupEvent event) {
 		event.enqueueWork(() -> PonderIndex.addPlugin(new CWPonderPlugin()));
+	}
+
+	private static void registerScreens(net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
+		event.register(com.createworkers.registry.CWMenuTypes.WORKER_STATION.get(), WorkerStationScreen::new);
 	}
 
 	private static void registerLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {

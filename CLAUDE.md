@@ -136,6 +136,11 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own. Its job-site predicates match the worker station **and nothing else** |
 | `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over |
 | `block/WorkerStationBlockEntity` | A line's roster: an ordered rack of hats, the shifts each runs on, who is wearing them, and the point-of-interest tickets it holds back |
+| `block/WorkerStationMenu` | The rack as real slots, over Create's `MenuBase`. Its geometry constants are shared with the screen, because slots are placed before any screen exists |
+| `client/WorkerStationScreen` | The rack arranged: shift toggles, order arrows, staffing readout. Reads the block entity, never its own copy |
+| `net/StationRosterPacket` | The two edits that are not an item — which shifts a job runs, and where it sits |
+| `registry/CWMenuTypes` | Screens this mod opens |
+| `registry/CWCapabilities` | What other machines can reach into: the station's rack, and nothing else |
 | `registry/CWPoiTypes` | The station as a village workstation. `maxTickets` is the largest roster the mod allows, because it belongs to the *type*; the block holds back the difference |
 | `recipe/ClearProgramRecipe` | Crafting a hat by itself blanks its program, the way a Create filter clears |
 
@@ -658,6 +663,25 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   coordinate by talking to each other, which is a distributed problem invented to avoid a list. Slot
   order breaks ties within a shift, which is what makes the order of the rack the player's priority
   lever. (`shortCrewsFillWholeShiftsBeforeDeepOnes`, mutation-checked by swapping the loops.)
+- **A menu's slots are placed once, before any screen exists, and a `Slot`'s position is final.** Both
+  halves bite. The menu is built on the server *and* on the client from the payload, so anything its
+  layout depends on must be true on both sides at that moment — which is why the rack's `getSlots()`
+  returns the hard `MAX_SLOTS` and never the configured capacity, the config being a server setting
+  that merely usually reaches a client in time. And since `Slot.x`/`y` are final in 1.21, a window that
+  grew and shrank with the number of jobs would mean rebuilding the menu every time a hat moved; the
+  screen draws every row instead. The row count is the number to revisit after playtesting, not the
+  mechanism.
+- **The screen reads the block entity, not a copy threaded through the menu.** `WorkerStationBlockEntity`
+  overrides `getUpdateTag`/`getUpdatePacket` and sends itself whole whenever its rack changes, so shift
+  toggles, who is wearing what and the staffing readout are all live — a worker hired or lost while
+  somebody has the screen open appears without a menu packet. It is only affordable because a rack
+  changes a handful of times an hour rather than a handful of times a tick, so `changed()` sends and
+  the bookkeeping-only `setChanged()` does not.
+- **An edit from the screen is checked against the menu, not against the position it names.** A packet
+  carrying a block position is a packet a client can aim anywhere; `StationRosterPacket` instead reads
+  the station out of the sender's open menu and gates on `stillValid`, which is the same check that
+  closes the menu when the player walks away or the block is broken. The rack's order is a priority
+  lever and its shift toggles hire and fire villagers, so neither may be driven from across the world.
 - **A death has to be followed by a promotion, or the fill order only holds while a roster grows.**
   `nextVacancy` puts new workers in the right place; it cannot move the ones already there. Three jobs
   on two shifts with four villagers gives a complete day crew and one evening worker, and losing a day

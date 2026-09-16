@@ -464,6 +464,58 @@ public class WorkerStationGameTests {
 			.thenSucceed();
 	}
 
+
+	/**
+	 * The rack is an inventory, and it is a <b>list</b> wearing an inventory's clothes.
+	 *
+	 * <p>The difference matters because the order of the rack is the player's priority lever: index
+	 * {@code i} has to be the {@code i}th job and can never be a hole, or the fill order stops meaning
+	 * what the screen shows. So a hat goes in at the end and nowhere else, and taking one out closes
+	 * the gap behind it — which is also what makes a funnel or an arm stocking a station do something
+	 * predictable rather than scattering jobs down a grid.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void theRackIsAnInventoryThatKeepsItsOrder(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		putHatIn(helper, STATION);
+
+		IItemHandler rack = helper.getLevel()
+			.getCapability(Capabilities.ItemHandler.BLOCK, helper.absolutePos(STATION), null);
+		helper.assertTrue(rack != null, "a station should be an inventory other machines can reach");
+
+		ItemStack first = rack.getStackInSlot(0);
+		helper.assertTrue(!first.isEmpty() && rack.getStackInSlot(1)
+			.isEmpty() == false, "its first two slots are its first two jobs");
+		helper.assertTrue(rack.getStackInSlot(2)
+			.isEmpty(), "and nothing is in the third");
+
+		ItemStack spare = new ItemStack(CWItems.HARD_HAT.get());
+		HardHatItem.setProgram(spare, programme(helper));
+
+		helper.assertTrue(!rack.insertItem(0, spare.copy(), false)
+			.isEmpty(), "a hat may not be pushed into a job somebody else's hat is already doing");
+		helper.assertTrue(!rack.insertItem(5, spare.copy(), false)
+			.isEmpty(), "nor parked past the end, which would leave a hole in the order");
+		helper.assertTrue(station(helper).slots()
+			.size() == 2, "so neither refusal should have racked anything");
+
+		helper.assertTrue(rack.insertItem(2, spare.copy(), false)
+			.isEmpty(), "the one free index is the end of the list, and that one takes it");
+		helper.assertTrue(station(helper).slots()
+			.size() == 3, "leaving three jobs");
+
+		helper.assertTrue(!rack.insertItem(2, spare.copy(), false)
+			.isEmpty(), "after which that index is a job of its own and refuses too");
+
+		ItemStack pulled = rack.extractItem(0, 1, false);
+		helper.assertTrue(ItemStack.isSameItem(pulled, first), "taking slot zero gives back the first job's hat");
+		helper.assertTrue(station(helper).slots()
+			.size() == 2, "and the list closes up behind it");
+		helper.succeed();
+	}
+
 	/**
 	 * A station advertises exactly as many openings as it has, and no more.
 	 *

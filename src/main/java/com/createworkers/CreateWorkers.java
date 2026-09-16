@@ -4,9 +4,11 @@ import com.createworkers.net.CWNetwork;
 import com.createworkers.registry.CWAttachments;
 import com.createworkers.registry.CWBlockEntities;
 import com.createworkers.registry.CWBlocks;
+import com.createworkers.registry.CWCapabilities;
 import com.createworkers.registry.CWPoiTypes;
 import com.createworkers.registry.CWComponents;
 import com.createworkers.registry.CWItems;
+import com.createworkers.registry.CWMenuTypes;
 import com.createworkers.registry.CWProfessions;
 import com.createworkers.registry.CWRecipes;
 
@@ -41,8 +43,10 @@ public class CreateWorkers {
 		CWItems.TABS.register(modBus);
 		CWProfessions.REGISTER.register(modBus);
 		CWRecipes.REGISTER.register(modBus);
+		CWMenuTypes.REGISTER.register(modBus);
 
 		modBus.addListener(CWNetwork::register);
+		modBus.addListener(CWCapabilities::register);
 
 		if (FMLEnvironment.dist == Dist.CLIENT)
 			com.createworkers.client.CWClient.init(modBus);

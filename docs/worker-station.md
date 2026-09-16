@@ -1,9 +1,10 @@
 # The Worker Station
 
-**Status: built, except the screen.** The block hires, holds a rack of up to twelve jobs, runs each
-of them on any of the three shifts, replaces workers that die and reclaims jobs from workers that stop
-turning up. What is not built is the arrangement UI — see [How hats get in and out](#how-hats-get-in-and-out)
-and open question 1.
+**Status: built.** The block hires, holds a rack of up to twelve jobs, runs each of them on any of the
+three shifts, promotes workers up the order when one is lost, replaces workers that die and reclaims
+jobs from workers that stop turning up. The screen is built too — slots, shift toggles, order arrows
+and the staffing readout — though nobody has looked at it in a running game yet, and its shape (a
+fixed twelve rows) is the first thing to revisit when somebody does.
 
 ## In one sentence
 
@@ -445,12 +446,10 @@ Which is a genuinely interesting choice rather than a strictly-better option on 
 
 ## Open questions
 
-1. **The screen.** The only part of this note not built. Slot order is load-bearing — it is how a
-   player says which roles matter most when the village is short — so it has to be shown as an order
-   and be rearrangeable, alongside the shift toggles per slot, the readout and the rename field. That
-   is more than a plain container, which is the whole of its risk. Until it exists, a hat goes in with
-   a right-click and the last one comes back out with an empty hand, which covers a one- or two-job
-   station and nothing larger.
+1. **The screen's shape.** Built, but sized before anyone used it: it draws all twelve rows whether
+   or not the rack holds twelve jobs, because a `Slot`'s position is final once the menu is built and
+   a window that grew with the rack would mean rebuilding the menu on every change. The rename field
+   is also still missing. Both are questions for after somebody has opened it.
 2. **How does a station cope with a line too big for its slots?** Raise the cap, or let a station name
    another it depends on — an explicit link, never an inferred one. Not worth building before someone
    hits it.

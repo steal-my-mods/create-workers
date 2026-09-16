@@ -8,6 +8,7 @@
   "createworkers.hard_hat.summary": "%1$s input(s), %2$s output(s)",
   "createworkers.hard_hat.assign_hint": "Right-click a villager or enderman to put them to work",
   "createworkers.hard_hat.bed": "Sleeps at %1$s, %2$s, %3$s",
+  "createworkers.station.empty_slot": "Add a programmed hard hat",
   "createworkers.shift.day": "Day",
   "createworkers.shift.evening": "Evening",
   "createworkers.shift.night": "Night",

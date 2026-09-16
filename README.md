@@ -65,10 +65,12 @@ fallen somewhere it cannot climb out of — the station gives the job away after
 hires a replacement, so a line never quietly runs short over one lost villager. A factory built on
 stations repairs its own workforce.
 
-To end a job, take its hat back out with an empty hand or break the block; either one hands the hat
-back and puts that job's workers out of work, leaving the rest of the rack running. (An empty hand
-currently takes the *last* hat out. Choosing which one, rearranging the rack and setting each job's
-shifts need the station screen, which is not built yet.)
+Right-click the station empty-handed to open the rack. Each job shows its hat, three shift toggles —
+dark for off, green for wanted, bright green for covered — and arrows to move it up or down the order.
+Underneath is the count for each crew. Taking a hat out ends that job and puts its workers out of work,
+leaving the rest of the rack running; breaking the block does the same to all of them.
+
+A station is also an ordinary inventory, so a funnel or a Mechanical Arm can stock it with hats.
 
 Two things a station will not do. A villager that already has a job of its own will never take one —
 break its workstation first, the same way vanilla makes you — and children are never hired, because a

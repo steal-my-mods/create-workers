@@ -11,6 +11,7 @@ import net.minecraft.world.Containers;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -94,21 +95,26 @@ public class WorkerStationBlock extends BaseEntityBlock {
 		return ItemInteractionResult.SUCCESS;
 	}
 
-	/** An empty hand takes the last hat back out, and the jobs on it with it. */
+	/**
+	 * An empty hand opens the rack.
+	 *
+	 * <p>Which is also how a job is ended, there being no other way to fire a villager: take its hat
+	 * out of the rack. A hat in hand still goes straight in without opening anything, the way a
+	 * lectern takes a book — a one-job station should not need a screen to set up.
+	 */
 	@Override
 	protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
 		BlockHitResult hit) {
-		if (!(level.getBlockEntity(pos) instanceof WorkerStationBlockEntity station) || !station.hasJob())
+		if (!(level.getBlockEntity(pos) instanceof WorkerStationBlockEntity station))
 			return InteractionResult.PASS;
+		if (level.isClientSide())
+			return InteractionResult.SUCCESS;
 
-		if (!level.isClientSide()) {
-			ItemStack hat = station.removeHat(station.slots()
-				.size() - 1);
-			if (!player.getInventory()
-				.add(hat))
-				player.drop(hat, false);
-		}
-		return InteractionResult.sidedSuccess(level.isClientSide());
+		player.openMenu(new SimpleMenuProvider((id, inventory, opener) ->
+			WorkerStationMenu.create(id, inventory, station), state.getBlock()
+				.getName()),
+			buffer -> buffer.writeBlockPos(pos));
+		return InteractionResult.CONSUME;
 	}
 
 	/**

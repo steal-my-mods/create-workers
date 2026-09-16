@@ -11,6 +11,9 @@ public class CWNetwork {
 		registrar.playToServer(ConfigureHatPacket.TYPE, ConfigureHatPacket.STREAM_CODEC,
 			ConfigureHatPacket::handle);
 
+		registrar.playToServer(StationRosterPacket.TYPE, StationRosterPacket.STREAM_CODEC,
+			StationRosterPacket::handle);
+
 		registrar.playToClient(WorkerStatePacket.TYPE, WorkerStatePacket.STREAM_CODEC,
 			WorkerStatePacket::handle);
 	}

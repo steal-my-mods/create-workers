@@ -30,9 +30,12 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
 
 /**
  * A line's roster: an ordered rack of programmed hard hats, each of which may run on any of the three
@@ -137,8 +140,92 @@ public class WorkerStationBlockEntity extends BlockEntity {
 
 	private int untilNextLook;
 
+	/**
+	 * The rack as an inventory, so a funnel or an arm can stock it and the station screen can have
+	 * real slots rather than a picture of some.
+	 *
+	 * <p>It is a <b>list</b> wearing an inventory's clothes, and the two disagree in one place that
+	 * matters: the order of the rack is the player's priority lever, so index {@code i} has to be the
+	 * {@code i}th job and cannot be a hole. A hat therefore goes in at the end and nowhere else —
+	 * {@link #isItemValid} admits only the first free index — and taking one out closes the gap behind
+	 * it, moving everything below up a place exactly as pulling it out by hand does.
+	 */
+	private final IItemHandlerModifiable rack = new IItemHandlerModifiable() {
+
+		/**
+		 * Always the hard ceiling, never the configured one. A menu's slots are laid out when it is
+		 * built, on both sides, so letting their number follow a setting would make the screen's shape
+		 * depend on a config having reached the client. Capacity is enforced where a hat goes in
+		 * instead, which is the only place it can be disobeyed.
+		 */
+		@Override
+		public int getSlots() {
+			return MAX_SLOTS;
+		}
+
+		@Override
+		public ItemStack getStackInSlot(int index) {
+			return index >= 0 && index < slots.size() ? slots.get(index).hat : ItemStack.EMPTY;
+		}
+
+		@Override
+		public ItemStack insertItem(int index, ItemStack stack, boolean simulate) {
+			if (!isItemValid(index, stack))
+				return stack;
+			if (!simulate)
+				addHat(stack);
+			return stack.copyWithCount(stack.getCount() - 1);
+		}
+
+		@Override
+		public ItemStack extractItem(int index, int amount, boolean simulate) {
+			if (amount < 1 || index < 0 || index >= slots.size())
+				return ItemStack.EMPTY;
+			if (simulate)
+				return slots.get(index).hat.copy();
+			// Not a quiet extraction: this hat is somebody's job, and the crew wearing copies of it
+			// goes with it. Exactly what taking it out by hand does.
+			return removeHat(index);
+		}
+
+		@Override
+		public int getSlotLimit(int index) {
+			return 1;
+		}
+
+		@Override
+		public boolean isItemValid(int index, ItemStack stack) {
+			return index == slots.size() && index < capacity() && stack.getItem() instanceof HardHatItem;
+		}
+
+		/**
+		 * Only a menu calls this — nothing in the world sets a slot outright — and on the client it is
+		 * how the server's view of the rack lands. It stays honest about the list underneath: emptying
+		 * a slot removes the job, and a slot past the end can only be the next one.
+		 */
+		@Override
+		public void setStackInSlot(int index, ItemStack stack) {
+			if (index < 0 || index > slots.size() || index >= capacity())
+				return;
+			if (stack.isEmpty()) {
+				if (index < slots.size())
+					removeHat(index);
+			} else if (index < slots.size()) {
+				slots.get(index).hat = stack.copyWithCount(1);
+				changed();
+			} else {
+				addHat(stack);
+			}
+		}
+	};
+
 	public WorkerStationBlockEntity(BlockPos pos, BlockState state) {
 		super(CWBlockEntities.WORKER_STATION.get(), pos, state);
+	}
+
+	/** @return the rack as an inventory, for the menu's slots and for anything piping hats in. */
+	public IItemHandlerModifiable rack() {
+		return rack;
 	}
 
 	// --- the rack ------------------------------------------------------------------------
@@ -618,8 +705,24 @@ public class WorkerStationBlockEntity extends BlockEntity {
 	 */
 	private void changed() {
 		setChanged();
+		// The screen reads the rack straight off the block entity, so the rack has to be on the client
+		// at all. Cheap enough to send whole: a station changes when somebody is hired, dies or moves a
+		// hat, which is a handful of times an hour, not a handful of times a tick.
+		if (level != null && !level.isClientSide())
+			level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
 		if (level != null && getBlockState().getValue(WorkerStationBlock.HAS_JOB) != hasJob())
 			level.setBlock(worldPosition, getBlockState().setValue(WorkerStationBlock.HAS_JOB, hasJob()), 3);
+	}
+
+	@Override
+	public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+		return saveWithoutMetadata(registries);
+	}
+
+	@Nullable
+	@Override
+	public ClientboundBlockEntityDataPacket getUpdatePacket() {
+		return ClientboundBlockEntityDataPacket.create(this);
 	}
 
 	// --- serialization -------------------------------------------------------------------
