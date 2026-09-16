@@ -6,6 +6,7 @@ import net.createmod.ponder.foundation.PonderScene;
 import net.createmod.ponder.foundation.instruction.TickingInstruction;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -19,7 +20,7 @@ import net.minecraft.world.phys.Vec3;
  *
  * <p>Only the position is set. The facing and the leg swing fall out of it, because
  * {@code LivingEntity.tick} derives both from how far the entity has moved since {@code xo/yo/zo}
- * — see the note in {@link #tick}.
+ * — see the note in {@link #tick}, and {@link #settle} for what has to be undone when it stops.
  */
 public class WalkInstruction extends TickingInstruction {
 
@@ -73,7 +74,29 @@ public class WalkInstruction extends TickingInstruction {
 			// gravity through travel(), and an entity that believes it is falling does not
 			// animate a walk.
 			entity.setOnGround(true);
+			if (remainingTicks <= 0)
+				settle(entity);
 		}));
+	}
+
+	/**
+	 * Stops the legs.
+	 *
+	 * <p>Two separate things keep them going, and both outlive the walk.
+	 *
+	 * <p>The first is that {@code xo/yo/zo} are left a step behind. This class snapshots them just
+	 * before each move so that one tick's step measures as one tick's step — but on the last tick
+	 * nothing takes a final snapshot, so the entity is left reading as one step out of date forever,
+	 * and every tick after the walk measures that same phantom step.
+	 *
+	 * <p>The second is that {@code WalkAnimationState} holds its speed until somebody updates it, and
+	 * a worker that has stopped is not being updated by anything. So it is zeroed rather than left to
+	 * decay — a villager asleep in a bed with its legs swinging is the symptom, and it is not subtle.
+	 */
+	public static void settle(Entity entity) {
+		entity.setOldPosAndRot();
+		if (entity instanceof LivingEntity living)
+			living.walkAnimation.setSpeed(0);
 	}
 
 	private float bearing() {
@@ -86,5 +109,8 @@ public class WalkInstruction extends TickingInstruction {
 		entity.setYHeadRot(yRot);
 		entity.setYBodyRot(yRot);
 		entity.setOnGround(true);
+		// moveTo takes the position snapshot for us; what it does not do is put down the stride an
+		// entity arrived with, and something set down is something that has stopped.
+		settle(entity);
 	}
 }

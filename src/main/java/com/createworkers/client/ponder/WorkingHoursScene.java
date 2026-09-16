@@ -156,6 +156,11 @@ public class WorkingHoursScene {
 			.modifyEntity(worker, entity -> {
 				if (entity instanceof LivingEntity sleeper)
 					sleeper.startSleeping(BED_HEAD);
+				// startSleeping moves the sleeper onto the bed through setPosToBed, which does not
+				// take a position snapshot -- so without this the worker reads as stepping the
+				// bedside-to-bed distance every tick for the rest of the night, and lies there
+				// pedalling. A large step, too, so it is a sprint rather than a shuffle.
+				WalkInstruction.settle(entity);
 			});
 		scene.idle(25);
 

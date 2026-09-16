@@ -285,6 +285,15 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   be checked automatically is only the plate: `theHiringPlateHasAnEmptyStationInIt` and
   `theWorkingHoursPlateHasABedInIt` parse the NBT with Minecraft's own `StructureTemplate`, since
   Ponder itself does not load on a dedicated server.
+- **Anything that moves a ponder entity without a position snapshot leaves its legs running.** The
+  leg swing is derived from the distance between the entity and `xo/yo/zo`, and `WalkAnimationState`
+  keeps whatever speed it was last given until something updates it — so a move that does not refresh
+  the snapshot is read as *that same step, every tick, forever*. Three ways in: the last tick of a
+  walk (which snapshots before each move and so ends one step out of date), `LivingEntity.startSleeping`
+  (whose `setPosToBed` shifts the sleeper about a block, making it a sprint rather than a shuffle), and
+  any hand-placement that is not `moveTo`. `WalkInstruction.settle` does both halves — `setOldPosAndRot`
+  and zeroing the walk animation — and every one of those paths calls it. The symptom is a villager
+  asleep in a bed pedalling, and nothing can catch it but looking.
 - **A ponder level reports itself as client-side, so a worker in a scene is a puppet.** No brain,
   no `serverAiStep`, nothing that would move it — hence `WalkInstruction`, which sets the position
   every tick. The facing and the leg swing then come for free out of `LivingEntity.tick`, which
