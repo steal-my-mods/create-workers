@@ -252,22 +252,40 @@ factory becomes a village on its own terms. `VillageBoundRandomStroll` then has 
 and outside the village it pulls *toward* the nearest village section, which is the bunkhouse. The
 leash and the stroll end up pointing the same way instead of fighting.
 
-## The leash has to escalate, not give up
+## The leash is not broken — it is silent
 
-One change is needed before any of this is safe, and it is the honest answer to "don't let them get
-stuck". Today `walkHome` tries for `pathTimeout`, then stands down for `LEASH_REST_TICKS`, then holds
-station — **forever**. That is right for a worker fifteen blocks off its patch. It is wrong for one
-that fell in a hole during leisure: it stands at the bottom until the world ends.
+An earlier draft said the leash "tries for `pathTimeout`, stands down for `LEASH_REST_TICKS`, then
+holds station **forever**", and proposed making it escalate rather than give up. **Reading the code
+rather than remembering it: that is wrong.** `walkHome` counts `leashRest` down and then tries again.
+It never permanently gives up, and a worker in a hole goes on attempting to walk home for as long as
+it lives.
 
-For a leisure window that has to escalate. Try again on a longer clock, and after N failures the only
-option that *guarantees* no worker is ever silently lost is a recall teleport to the job site.
-Unpalatable, so it should be a config toggle with a name that admits what it does.
+So the real picture is milder in one way and worse in another:
 
-**Getting stuck is the failure to design against; dying is not.** A dead worker drops its hat where
-it fell — visible, recoverable, and the player learns something happened. A stuck worker is
-invisible: the line quietly underperforms and nothing says which villager to go looking for. So
-whatever is permitted, a worker that has been unable to get home for a long time should stop being
-silent. The angry-villager particle on a slow clock would do it, and costs nothing.
+- **It does recover** whenever recovery is possible. A worker knocked fifteen blocks off its patch
+  gets itself back with no help.
+- **It costs more than it looks.** During each 200-tick attempt the goal pins `WALK_TARGET` every
+  tick and `MoveToTargetSink` re-paths whenever it is not already following a path, so a permanently
+  stuck worker is pathfinding hard for 200 ticks out of every 800 — a 25% duty cycle on exactly the
+  failure mode CLAUDE.md calls the mod's most expensive, forever.
+- **Nothing ever says so.** This is the actual gap. The line underperforms, one villager is at the
+  bottom of a hole, and there is no signal of any kind.
+
+Which makes the work smaller and differently shaped than the earlier draft claimed:
+
+1. **Report it.** The important one. A worker that has failed to get home for several minutes should
+   stop being invisible — the angry-villager particle on a slow clock costs nothing, and the name
+   floating over it (see [the station note](worker-station.md#name-the-hat-name-the-worker)) turns
+   that into "go and look for Smelting feed".
+2. **Back off progressively.** Lengthen the rest after repeated failures rather than holding the duty
+   cycle at 25% for the rest of the world's life. A few lines, and it bounds the cost properly.
+3. **An optional recall**, config-gated, for players who would rather a stuck worker were teleported
+   home than left as a puzzle. The only thing that *guarantees* no worker is ever lost, and
+   unpalatable enough that it should be opt-in and named honestly.
+
+**Getting stuck is still the failure to design against; dying is not.** A dead worker drops its hat
+where it fell — visible, recoverable, and the player learns something happened. A stuck worker is
+invisible, which is why (1) matters more than (2) and (3) together.
 
 ## Does the designated bed survive all this?
 
@@ -403,8 +421,9 @@ are the decoration on top — and after the station, because that is what makes 
    inverted hours produce workers that stand beside beds they never get into — and independently
    testable: give a worker a custom schedule, set the world to noon, assert it sleeps. Everything
    else rests on it.
-2. **The leash change**, also alone: escalate rather than give up, and stop being silent about it.
-   Worth having whether or not any of the rest happens.
+2. **Make a stuck worker visible**, also alone — plus the progressive back-off behind it. Worth
+   having whether or not any of the rest happens, and smaller than it first looked: the leash already
+   retries, it just never tells anyone.
 3. **The leisure window**, which is then just "let go of the pin during `MEET`/`IDLE` and leave the
    leash on".
 4. **Food**, which only becomes fair once 3 exists.
