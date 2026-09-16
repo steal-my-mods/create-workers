@@ -725,6 +725,29 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   move, `stack.isEmpty()` means `slot.setByPlayer(ItemStack.EMPTY)`, never `setChanged()` alone.
   `shiftClickingAHatOutEndsItsJob` reproduces it end to end, saving the block entity at the finish
   because that is where the crash actually was, and is mutation-checked by dropping the clear.
+- **A station must reconcile its tickets *after* it hires, never before.** Reconciling first leaves it
+  advertising, for the rest of that tick, the openings it is about to fill — and a villager that claims
+  one, walks over and is turned away does not simply try again. `AcquirePoi.JitteredLinearRetry` puts
+  that position on a backoff growing to **400 ticks**, so a station that over-advertises even
+  occasionally teaches the village to stop applying, and the symptom is "I added more shifts and
+  nobody came". `aJobOnThreeShiftsTakesThreeVillagers` samples free tickets against `vacancies()` every
+  tick across a hiring and was mutation-checked by putting the reconcile back in front — the window is
+  one tick wide, so an assertion at the end of the sequence does not see it.
+- **Anything that changes who is on the rack must say so, and `setChanged` does not.** It saves the
+  block and tells no client. Hiring, striking off, sacking and promoting all did exactly that, so a
+  screen showed a job as unstaffed until something the player did happened to call `changed()` — and a
+  shift toggled against that stale view wrote the client's fiction back over the truth. They set
+  `rosterChanged` now and the tick syncs once at the end, which is also why it is a flag rather than a
+  packet per worker.
+- **A promotion keeps the worker's cargo; only a sacking drops it.** Dismissing and re-hiring scattered
+  a half-finished delivery on the floor mid-shift — items out of the player's own machines, for a
+  reason nothing in the world explains. `WorkerData.reassign` keeps `held` and starts the new job in
+  `SEARCH_OUTPUTS`, so the worker delivers what is in its hands before it picks anything up.
+  (`aPromotedWorkerCarriesItsLoadIntoTheNewJob`, mutation-checked by putting the drop back.)
+- **A test that waits for "somebody is on that shift" after killing a worker passes instantly.** The
+  dead worker's record stays on the rack until the next audit strikes it off, so the wait has to name
+  the villager it expects — `carrierId.equals(jobAt(0).worker(DAY))` — not merely check for non-null.
+  Two tests have now been written the wrong way round.
 - **A death has to be followed by a promotion, or the fill order only holds while a roster grows.**
   `nextVacancy` puts new workers in the right place; it cannot move the ones already there. Three jobs
   on two shifts with four villagers gives a complete day crew and one evening worker, and losing a day

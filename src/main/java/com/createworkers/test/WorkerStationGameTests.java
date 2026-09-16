@@ -707,6 +707,120 @@ public class WorkerStationGameTests {
 			.thenSucceed();
 	}
 
+
+	/**
+	 * One job set to run all three shifts is staffed by three villagers, and advertises exactly the
+	 * openings it has at every step along the way.
+	 *
+	 * <p>The free-ticket count is the thing real villagers actually consult — {@code AcquirePoi} only
+	 * looks at points of interest with space — so a station whose reserve arithmetic drifted would look
+	 * perfectly correct on its own roster while no villager in the world could ever claim it. Checked
+	 * after every change rather than only at the end, because "it advertised nothing for a while" is
+	 * exactly the shape of that failure.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 600)
+	public static void aJobOnThreeShiftsTakesThreeVillagers(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		BlockPos pos = helper.absolutePos(STATION);
+		boolean[] overAdvertised = new boolean[1];
+
+		claimant(helper);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1,
+				"the day shift should be covered"))
+			.thenWaitUntil(() -> helper.assertTrue(freeTickets(helper, pos) == 0,
+				"a fully staffed job should advertise nothing, and it advertises " + freeTickets(helper, pos)))
+			.thenExecute(() -> station(helper).setShifts(0, Set.of(Shift.DAY, Shift.EVENING, Shift.NIGHT)))
+			.thenWaitUntil(() -> helper.assertTrue(freeTickets(helper, pos) == 2,
+				"opening two more shifts should advertise two more openings, and it advertises "
+					+ freeTickets(helper, pos)))
+			.thenExecute(() -> {
+				claimant(helper);
+				claimant(helper);
+			})
+			// Sampled every tick across the hiring, because the failure is a single tick wide: a
+			// station that reconciles its tickets before it hires spends the rest of that tick still
+			// advertising the openings it has just filled.
+			.thenExecuteFor(60, () -> {
+				if (freeTickets(helper, pos) > station(helper).vacancies())
+					overAdvertised[0] = true;
+			})
+			.thenExecute(() -> {
+				helper.assertTrue(station(helper).staffed(Shift.EVENING) == 1, "the evening shift is covered");
+				helper.assertTrue(station(helper).staffed(Shift.NIGHT) == 1, "and the night shift");
+				helper.assertTrue(station(helper).jobCount() == 1, "all of it one job");
+				helper.assertTrue(freeTickets(helper, pos) == 0, "with nothing left to advertise, and it has "
+					+ freeTickets(helper, pos));
+				// A villager sent to a station with nothing for it is not merely turned away: AcquirePoi
+				// puts that position on a backoff growing to four hundred ticks, so a station that
+				// over-advertises teaches the village to stop asking.
+				helper.assertTrue(!overAdvertised[0],
+					"a station should never advertise an opening it does not have, even for one tick");
+			})
+			.thenSucceed();
+	}
+
+
+	/**
+	 * A promoted worker carries its load into the new job rather than dropping it where it stood.
+	 *
+	 * <p>A promotion is not a sacking and should not look like one. Dismissing and re-hiring scattered
+	 * whatever the worker was holding on the floor — items out of the player's own machines, dropped in
+	 * the middle of a shift for a reason nothing in the world explains — and the player watching it
+	 * happen has no way to tell it from a bug.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void aPromotedWorkerCarriesItsLoadIntoTheNewJob(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		putHatIn(helper, STATION);
+		station(helper).setShifts(0, Set.of(Shift.DAY));
+		station(helper).setShifts(1, Set.of(Shift.DAY));
+
+		claimant(helper);
+		UUID[] carrierId = new UUID[1];
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1, "the first job"))
+			.thenExecute(() -> claimant(helper))
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 2, "and the second"))
+			.thenExecute(() -> {
+				// The worker on the less important job is the one that will be promoted, so it is the
+				// one given something to carry.
+				carrierId[0] = station(helper).jobAt(1)
+					.worker(Shift.DAY);
+				Villager carrier = (Villager) helper.getLevel()
+					.getEntity(carrierId[0]);
+				Workers.get(carrier)
+					.setHeld(new ItemStack(Items.COBBLESTONE, 4));
+
+				Villager victim = (Villager) helper.getLevel()
+					.getEntity(station(helper).jobAt(0)
+						.worker(Shift.DAY));
+				victim.setNoAi(false);
+				victim.hurt(helper.getLevel()
+					.damageSources()
+					.genericKill(), Float.MAX_VALUE);
+			})
+			// Named, not merely non-null: the dead worker's record is still on the rack until the audit
+			// strikes it off, so "somebody is on the day shift" is true from the moment it is killed.
+			.thenWaitUntil(() -> helper.assertTrue(carrierId[0].equals(station(helper).jobAt(0)
+				.worker(Shift.DAY)), "the carrier should have been promoted onto the more important job"))
+			.thenExecute(() -> {
+				Villager promoted = (Villager) helper.getLevel()
+					.getEntity(carrierId[0]);
+				helper.assertTrue(Workers.get(promoted)
+					.getHeld()
+					.getCount() == 4, "the promoted worker should still be carrying its load");
+				helper.assertItemEntityNotPresent(Items.COBBLESTONE);
+			})
+			.thenSucceed();
+	}
+
 	/**
 	 * A station advertises exactly as many openings as it has, and no more.
 	 *

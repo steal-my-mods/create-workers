@@ -162,6 +162,17 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	private int untilNextLook;
 
 	/**
+	 * Whether this tick changed who is on the rack.
+	 *
+	 * <p>Hiring, striking off, sacking and promoting all used to call {@code setChanged} alone, which
+	 * saves the block and tells nobody — so a screen showed a job as unstaffed until something the
+	 * player did happened to call {@code changed()}, and a shift toggled while that was stale wrote the
+	 * client's fiction back over the truth. They set this instead, and the tick syncs once at the end
+	 * rather than sending a packet per worker.
+	 */
+	private boolean rosterChanged;
+
+	/**
 	 * The rack as an inventory, so a funnel or an arm can stock it and the station screen can have
 	 * real slots rather than a picture of some.
 	 *
@@ -433,7 +444,8 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		return count;
 	}
 
-	private int vacancies() {
+	/** How many villagers this rack is short. What it advertises, and never more. */
+	public int vacancies() {
 		int count = 0;
 		for (Shift shift : Shift.VALUES)
 			count += positions(shift) - staffed(shift);
@@ -457,8 +469,26 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		auditRoster(server);
 		sackAbsentees(server);
 		rebalance(server);
-		reconcileTickets(server);
 		staffUp(server);
+		// Last, and the ordering is the whole of it. Reconciling before hiring leaves the station
+		// advertising the openings it is about to fill for the rest of that tick -- and a villager that
+		// claims one, walks over and is turned away does not simply try again: AcquirePoi puts that
+		// position on a backoff growing to four hundred ticks, so a station that over-advertises even
+		// occasionally teaches the village to stop asking.
+		reconcileTickets(server);
+
+		// Once, at the end. Everything above may have moved several workers, and the screen wants the
+		// answer rather than the working.
+		if (rosterChanged) {
+			rosterChanged = false;
+			changed();
+		}
+	}
+
+	/** Records that who is on the rack has changed, for the one sync at the end of the tick. */
+	private void rosterChanged() {
+		rosterChanged = true;
+		setChanged();
 	}
 
 	/**
@@ -498,7 +528,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 					knownAlive++;
 				} else {
 					slot.workers[shift.ordinal()] = null;
-					setChanged();
+					rosterChanged();
 				}
 			}
 		}
@@ -509,7 +539,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		for (int i = unknownSlots.size() - 1; i >= 0 && gone > 0; i--, gone--) {
 			unknownSlots.get(i).workers[unknownShifts.get(i)
 				.ordinal()] = null;
-			setChanged();
+			rosterChanged();
 		}
 	}
 
@@ -649,9 +679,10 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * works. If no villager is spare it is the difference between a running factory and a stopped one.
 	 *
 	 * <p>The worker that moves is the last one in the fill order, which is a rule a player can predict
-	 * and which the rack's own order already expresses. It is re-employed rather than edited: a
-	 * promotion is usually a different hat as well as different hours, so it wakes up, puts down
-	 * whatever it was carrying and starts the new job clean.
+	 * and which the rack's own order already expresses. It keeps whatever it is carrying: a promotion
+	 * is not a sacking, and dropping a half-finished delivery on the floor in the middle of a shift is
+	 * items out of the player's machines scattered for a reason nothing in the world explains. The new
+	 * job takes delivery of it first — see {@code WorkerData.reassign}.
 	 */
 	private void rebalance(ServerLevel server) {
 		// lastStaffed strictly decreases on every successful move, so this cannot run away -- but a
@@ -681,11 +712,11 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 		from.workers[last.shift()
 			.ordinal()] = null;
-		drop(worker);
-		Workers.employ(worker, to.hat, programme, GlobalPos.of(server.dimension(), worldPosition), vacancy.shift());
+		Workers.reassign(worker, to.hat, programme, GlobalPos.of(server.dimension(), worldPosition),
+			vacancy.shift());
 		to.workers[vacancy.shift()
 			.ordinal()] = id;
-		setChanged();
+		rosterChanged();
 		return true;
 	}
 
@@ -701,7 +732,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 			vacancy.shift());
 		slot.workers[vacancy.shift()
 			.ordinal()] = villager.getUUID();
-		setChanged();
+		rosterChanged();
 	}
 
 	private void turnAway(Villager villager) {
@@ -748,7 +779,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 				turnAway(worker);
 				drop(worker);
 				slot.workers[shift.ordinal()] = null;
-				setChanged();
+				rosterChanged();
 			}
 		}
 	}

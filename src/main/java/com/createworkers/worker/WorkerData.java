@@ -195,6 +195,22 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	}
 
 	/**
+	 * Moves the worker to a different job without taking anything off it.
+	 *
+	 * <p>A promotion is not a sacking, and it should not look like one. Dismissing and re-hiring drops
+	 * whatever the worker was carrying on the floor — items that came out of the player's machines,
+	 * scattered in the middle of a shift for a reason invisible from anywhere in the world. Keeping the
+	 * cargo and starting in {@code SEARCH_OUTPUTS} means the worker delivers what is in its hands into
+	 * its new job before it picks anything else up, which is what a hand-over looks like.
+	 */
+	public void reassign(ItemStack hatStack, WorkerProgram program) {
+		ItemStack carried = held;
+		employ(hatStack, program);
+		held = carried;
+		phase = held.isEmpty() ? Phase.SEARCH_INPUTS : Phase.SEARCH_OUTPUTS;
+	}
+
+	/**
 	 * Takes the entity off the job and returns everything it should drop: the hat plus
 	 * whatever it was carrying.
 	 */

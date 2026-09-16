@@ -156,10 +156,19 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 			arrow(graphics, jx + ARROW_X, jy + ARROW_HEIGHT + 2, false);
 	}
 
+	/**
+	 * Drawn rather than typed. The font's triangles are glyphs on a nine-pixel line with a baseline
+	 * that has nothing to do with this button, so they sat low and overhung an eight-pixel face. Four
+	 * rectangles sit exactly where they are put.
+	 */
 	private void arrow(GuiGraphics graphics, int x, int y, boolean up) {
 		bevel(graphics, x, y, ARROW_WIDTH, ARROW_HEIGHT, FACE, true);
-		String glyph = up ? "▲" : "▼";
-		graphics.drawString(font, glyph, x + (ARROW_WIDTH - font.width(glyph)) / 2, y, LABEL, false);
+		for (int row = 0; row < 4; row++) {
+			int width = 1 + row * 2;
+			int ry = y + (up ? 2 + row : 5 - row);
+			int rx = x + (ARROW_WIDTH - width) / 2;
+			graphics.fill(rx, ry, rx + width, ry + 1, LABEL);
+		}
 	}
 
 	private void renderReadout(GuiGraphics graphics, int x, int y) {
