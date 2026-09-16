@@ -21,8 +21,10 @@ file.
 
 ## Universal, with a config to turn it off
 
-**Every villager worker keeps a shift and eats**, however it was hired. There is no exempt second
-class and no compatibility path preserving how a pre-1.0 build behaved: that would be debt paid
+**Every villager worker keeps a shift and eats**, however it was hired — endermen remain exempt from
+both, and are [out of scope](#endermen-do-not-eat-for-now) for the time being. There is no exempt
+second class among villagers, though, and no compatibility path preserving how a pre-1.0 build
+behaved: that would be debt paid
 forever to support a design nobody is running. The shift lives on the hat, so a hand-hired worker
 carries one the same way a station-hired one does, defaulting to the day shift.
 
@@ -135,31 +137,26 @@ Tie the drain to *work done* rather than to time. A worker that hauled two hundr
 more than one that stood at an empty depot all shift — that is the right economics, it makes a busy
 line the expensive one, and it means an idle worker cannot starve for having had nothing to do.
 
-### Do endermen eat?
+### Endermen do not eat, for now
 
-An open question, and a real one, because "all workers eat" and "endermen are exempt from hours" pull
-against each other. An enderman with neither hours nor hunger is free labour again, which is the
-thing the exemption was nearly excused by the difficulty of getting one into a factory at all.
+"Every worker eats" means **every villager worker**. Endermen are out of scope for food as well as for
+hours, and that is a deliberate scope line rather than an answer.
 
-Nothing in the villager food machinery reaches them: `foodLevel` is a `Villager` field, and an
-enderman has no inventory, no `wantsToPickUp`, and no leisure window in which to go and find anything.
-So their hunger would have to be ours — a counter on `WorkerData` and an item that suits them, which
-the roadmap already guessed at as **chorus fruit**.
+It leaves a known imbalance worth writing down so it is not rediscovered as a bug: an enderman exempt
+from both hours and hunger is close to free labour, and the only thing still paying for it is how hard
+one is to get into a factory in the first place. Acceptable while the mechanic is young; not a
+permanent resting place.
 
-The pleasing part is that they need no leisure window to use it. Eating costs an enderman almost no
-time: it blinks to the canteen, eats, and blinks back, which is a few seconds out of a shift rather
-than a third of a day. So the shape would be:
+The route to fixing it later is already half-built by this design. None of the villager food machinery
+reaches an enderman — `foodLevel` is a `Villager` field, and they have no inventory, no
+`wantsToPickUp` and no leisure window — so their hunger would have to be ours: a counter on
+`WorkerData` and an item that suits them, which the roadmap has long guessed at as **chorus fruit**.
+The [canteen](#nothing-in-vanilla-hands-food-to-a-villager-so-we-need-a-block) is the piece that makes
+it tractable, and it is worth building with that in mind even though nothing will use it yet: an
+enderman needs no leisure window to eat, because it can blink to a canteen, eat, and blink back in a
+few seconds rather than a third of a day.
 
-| | Villager | Enderman |
-|---|---|---|
-| Pays for its labour with | Hours off, and bread | Chorus fruit, and being hard to acquire |
-| Needs a window to eat in | Yes — that is what leisure is for | No; it teleports |
-
-That keeps the hours exemption, which is the thing that makes endermen interesting, while stopping it
-being free. **Worth confirming before building**, because it is a change to a decision already made
-deliberately, and because a chorus fruit farm is a real ask of a player who just wanted a night shift.
-
-## Where food comes from, and the night crew
+## Where food comes from, and the night crew## Where food comes from, and the night crew
 
 `TradeWithVillager` — the behaviour that makes villagers share food — is **initiated by the villager
 that has the excess**, not by the hungry one:
@@ -397,9 +394,8 @@ are the decoration on top — and after the station, because that is what makes 
    The gear textures are generated already, so a different hi-vis trim per shift costs a script
    change — and it should ship *with* the mechanic, not after it. A shift you cannot see is the same
    feature as no shift, plus confusion. See
-   [the uniform](worker-station.md#a-uniform-that-can-be-read-across-a-room), which pairs the colour
-   with a slot number on the back of the vest, and the cheaper half of the same idea: naming a hat
-   names the villager wearing it.
+   [the uniform](worker-station.md#a-uniform-that-can-be-read-across-a-room), which pairs it with the
+   cheaper and more useful half of the same idea: naming a hat names the villager wearing it.
 
 ## Suggested ordering
 

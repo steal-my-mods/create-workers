@@ -59,7 +59,7 @@ membership and what happens when a worker is lost:
 |---|---|---|---|
 | Keeps a shift | Yes, its crew's | Yes, the hat's | No — exempt |
 | Sleeps | Yes | Yes | No |
-| Eats | Yes | Yes | See [the food question](shift-rotation.md#do-endermen-eat) |
+| Eats | Yes | Yes | No — [out of scope for now](shift-rotation.md#endermen-do-not-eat-for-now) |
 | Belongs to a crew | Yes | No | No |
 | Replaced when lost | Yes, automatically | No | No |
 
@@ -223,25 +223,19 @@ additions make it real:
 
 ### A uniform that can be read across a room
 
-The gear is already generated from `worker_gear.png`, so it is cheap to put information on it — and
-there are two things worth showing:
+The gear is already generated from `worker_gear.png`, so putting information on it is cheap — and one
+thing is worth showing: **the shift, as a hi-vis trim colour.** A different trim per crew costs a
+change to the generator script rather than to any render code, and it is what
+[shift rotation](shift-rotation.md) already wanted.
 
-- **Shift as a colour.** A different hi-vis trim per shift, which
-  [shift rotation](shift-rotation.md) already wanted, and which costs a change to the generator
-  script rather than to any render code.
-- **Slot number on the back of the vest.** A flat quad on the torso's back face with UVs picked from
-  a digit strip — the gear layer already builds geometry, so this is one more box and a small texture,
-  not a new rendering approach. Two digits for a station with more than nine slots. Real hi-vis vests
-  carry markings, so it reads as a uniform rather than as a debug overlay.
+That, plus the name floating over the worker, is enough. *The evening crew is one short, and it is
+"Smelting feed" who is missing* is a sentence a player can form by looking, without opening anything.
 
-Together those make a factory floor legible at a glance: *orange 3 is missing* is a sentence a player
-can form by looking, without opening anything.
-
-Two caveats worth knowing before building it. The slot number is a property of the **station**, not of
-the hat, so it changes when a hat moves slots and has to reach the client — a byte on
-`WorkerStatePacket`, which is nothing, but that packet has a documented rule about staying small and
-it should stay honoured. And the *name* is the more valuable half: it solves the same problem better,
-works with no render work at all, and should be built first.
+**A slot number on the back of the vest was considered and cut** — a quad with UVs from a digit strip
+is perfectly buildable, and real vests do carry markings, but it is a third signal for a question the
+first two already answer, and the number is the weakest of the three: it belongs to the station rather
+than to the hat, so it changes when a hat moves slots and has to be pushed to the client, and unlike
+a name it tells the player nothing about what the worker *does*.
 
 ## How many jobs one station holds
 
