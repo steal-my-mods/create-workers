@@ -26,6 +26,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -166,15 +167,87 @@ public class WorkerStationGameTests {
 				WorkerData data = Workers.getOrCreate(villager);
 				helper.assertTrue(data.getStation() != null, "a station-hired worker should remember its station");
 
-				station(helper).releaseWorker();
+				station(helper).dismissWorker();
 				station(helper).setHat(ItemStack.EMPTY);
 
-				helper.assertTrue(data.getStation() == null, "and should be let go when the job is taken away");
-				helper.assertTrue(Workers.isEmployed(villager), "but should still be wearing the hat and working");
+				helper.assertTrue(!Workers.isEmployed(villager),
+					"and should be sacked when the job is taken away, there being no other way to fire one");
 			})
 			.thenExecute(() -> helper.assertTrue(!helper.getLevel()
 				.getBlockState(helper.absolutePos(STATION))
 				.getValue(WorkerStationBlock.HAS_JOB), "and the station should no longer offer a job"))
+			.thenSucceed();
+	}
+
+	/**
+	 * Vanilla tidies up after a sacked worker, which is the assumption the whole design rests on.
+	 *
+	 * <p>Nothing in this mod puts a fired villager's profession back any more. It does not have to:
+	 * losing the station loses the job site, and {@code ResetProfession} clears the profession of any
+	 * villager with no job site that has never traded and is still on trade level one — which a worker
+	 * now always is, since nothing raises it. The brain refresh that comes with it is also what puts
+	 * the village's schedule back.
+	 *
+	 * <p>If that ever stopped being true, a fired worker would be stuck as a Worker for good: its only
+	 * workstation would be a block it no longer has, so it could never take another job. Hence a test
+	 * on vanilla's behaviour rather than on ours.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void aSackedWorkerIsTidiedUpByVanilla(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(Workers.isEmployed(villager), "the villager should be hired"))
+			.thenExecute(() -> {
+				helper.assertTrue(villager.getVillagerData()
+					.getLevel() <= 1, "precondition: nothing should have raised its trade level");
+				station(helper).dismissWorker();
+				station(helper).setHat(ItemStack.EMPTY);
+			})
+			.thenWaitUntil(() -> {
+				helper.assertTrue(villager.getVillagerData()
+					.getProfession() == VillagerProfession.NONE,
+					"vanilla should have cleared the profession by now, and it is "
+						+ villager.getVillagerData()
+							.getProfession());
+				helper.assertTrue(villager.getBrain()
+					.getSchedule() == Schedule.VILLAGER_DEFAULT,
+					"and the brain refresh that comes with it should have restored the village's hours");
+			})
+			.thenSucceed();
+	}
+
+	/**
+	 * A child is never hired, and vanilla is what refuses it.
+	 *
+	 * <p>This mod used to turn children away itself, with a config to allow them. Both are gone,
+	 * because once hiring goes through a workstation the check has nothing to do: the job-site
+	 * {@code AcquirePoi} in the villager CORE package is built with {@code onlyIfAdult}, so a baby
+	 * never acquires one and never arrives at a station at all. A dial that cannot change anything is
+	 * worse than no dial, so this pins the guarantee that replaced it.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 600)
+	public static void aChildNeverTakesTheJob(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+
+		Villager baby = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+		baby.setBaby(true);
+
+		helper.startSequence()
+			.thenIdle(HIRING_TICKS)
+			.thenExecute(() -> {
+				helper.assertTrue(baby.isBaby(), "precondition: it should still be a child");
+				helper.assertTrue(baby.getBrain()
+					.getMemory(MemoryModuleType.JOB_SITE)
+					.isEmpty(), "a child should never have acquired the station as a job site");
+				helper.assertTrue(!Workers.isEmployed(baby), "and so should never have been hired");
+				helper.assertTrue(station(helper).hasJob(), "the job should still be waiting for an adult");
+			})
 			.thenSucceed();
 	}
 

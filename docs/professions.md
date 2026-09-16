@@ -1,3 +1,14 @@
+> **Superseded.** Hiring a villager by hand is gone: villagers are hired by a
+> [Worker Station](worker-station.md), which is a workstation like a lectern, so vanilla does the
+> profession change itself. Everything below describes machinery that no longer exists —
+> `clearVillageJob`, `restoreVillageJob`, the stashed trades, the trade level held above
+> `ResetProfession`'s reach — and it is kept because **it is the reason the replacement is safe**.
+> Each trap here is one the station route sidesteps rather than solves, and anyone tempted to hire a
+> villager directly again will need all of it back.
+>
+> What changed, in one line: a worker now holds a *real job site*, so `ResetProfession` never fires on
+> it while employed and does all the tidying up when the job goes away.
+
 # What hiring does to a villager's job
 
 A hired villager holds `createworkers:worker` for as long as it is employed, and gets its old

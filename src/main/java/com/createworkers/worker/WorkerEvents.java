@@ -64,10 +64,19 @@ public class WorkerEvents {
 			WorkerShift.applySchedule(mob);
 	}
 
+	/**
+	 * Hiring and firing by hand, which is now the enderman's path and only the enderman's.
+	 *
+	 * <p>Villagers are hired by a {@code WorkerStation}: you put a programmed hat in one and an
+	 * unemployed villager comes and takes it, the way one takes a lectern. Firing is taking the hat
+	 * back out. An enderman can do none of that — no profession, no point of interest, nothing for a
+	 * job board to hire — so it keeps the right-click, and having exactly one kind of worker on each
+	 * route is what let the whole village-job stash be deleted.
+	 */
 	@SubscribeEvent
 	public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
 		Entity target = event.getTarget();
-		if (!Workers.canBeEmployed(target))
+		if (!(target instanceof EnderMan))
 			return;
 
 		Player player = event.getEntity();
@@ -94,15 +103,7 @@ public class WorkerEvents {
 			return;
 		}
 
-		// Before getOrCreate, so a mob that cannot be hired is not left carrying an attachment.
-		if (!Workers.isOldEnoughToWork(target)) {
-			player.displayClientMessage(Component.translatable("createworkers.message.too_young")
-				.withStyle(ChatFormatting.RED), true);
-			return;
-		}
-
-		WorkerData data = Workers.getOrCreate(target);
-		if (data.isEmployed()) {
+		if (Workers.isEmployed(target)) {
 			player.displayClientMessage(Component.translatable("createworkers.message.already_employed")
 				.withStyle(ChatFormatting.RED), true);
 			return;
@@ -120,23 +121,16 @@ public class WorkerEvents {
 			return;
 		}
 
-		data.employ(stack, program);
+		Workers.employ((Mob) target, stack, program, null);
 		if (!player.getAbilities().instabuild)
 			stack.shrink(1);
 
-		if (target instanceof Mob mob) {
-			Workers.clearVillageJob(mob, data);
-			Workers.updateCargoAppearance(mob, data.getHeld());
-		}
-
-		WorkerStatePacket.sync(target, data);
 		player.displayClientMessage(Component.translatable("createworkers.message.hired", program.size())
 			.withStyle(ChatFormatting.GREEN), true);
 	}
 
 	private static void retire(PlayerInteractEvent.EntityInteract event, Entity target, Player player, Level level) {
-		WorkerData data = Workers.get(target);
-		if (data == null || !data.isEmployed())
+		if (!Workers.isEmployed(target))
 			return;
 
 		event.setCanceled(true);
@@ -144,22 +138,11 @@ public class WorkerEvents {
 		if (level.isClientSide())
 			return;
 
-		Workers.wake(target);
-		List<ItemStack> returned = data.dismiss();
-		for (ItemStack drop : returned)
+		for (ItemStack drop : Workers.dismiss((Mob) target))
 			if (!player.getInventory()
 				.add(drop))
 				player.drop(drop, false);
 
-		if (target instanceof Mob mob) {
-			Workers.restoreVillageJob(mob, data);
-			Workers.updateCargoAppearance(mob, ItemStack.EMPTY);
-			WorkerLocomotion locomotion = Workers.locomotionFor(mob);
-			if (locomotion != null)
-				locomotion.stop(mob);
-		}
-
-		WorkerStatePacket.sync(target, data);
 		player.displayClientMessage(Component.translatable("createworkers.message.retired")
 			.withStyle(ChatFormatting.YELLOW), true);
 	}
@@ -267,18 +250,12 @@ public class WorkerEvents {
 		if (data == null || !data.isEmployed())
 			return;
 
-		Workers.wake(entity);
-		if (entity instanceof Mob mob) {
-			// Before dismiss, for the same reason onLivingDeath does it: a block cargo an enderman is
-			// holding is loot of its own.
-			Workers.updateCargoAppearance(mob, ItemStack.EMPTY);
-			Workers.restoreVillageJob(mob, data);
-		}
-
-		for (ItemStack drop : data.dismiss())
-			entity.spawnAtLocation(drop);
-
-		WorkerStatePacket.sync(entity, data);
+		// Workers.dismiss wakes it, clears the cargo the enderman renderer would otherwise drop
+		// separately, and syncs. The profession needs nothing: a worker with no job site and no trades
+		// is what ResetProfession clears, so a cured villager comes back able to take a job again.
+		if (entity instanceof Mob mob)
+			for (ItemStack drop : Workers.dismiss(mob))
+				entity.spawnAtLocation(drop);
 	}
 
 	/** New viewers need to be told what a worker looks like. */

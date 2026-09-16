@@ -58,11 +58,18 @@ P A P      H = Hard Hat, programmed
 Take the hat back out with an empty hand to end the job. Breaking the block hands the hat back and
 leaves the worker running as though you had hired it by hand.
 
-**3. Hire someone.** Right-click a villager or an enderman with the programmed hat. They put it on
-and get to work. Sneak + empty-hand right-click to retire them and get the hat (and any cargo) back.
+**3. Hire someone.** Put the hat in a **Worker Station** and an unemployed villager will come and take
+the job. To fire one, take the hat back out or break the block.
 
-Child villagers are turned away — the hat comes straight back, and the same villager takes it once
-it has grown up. Set `hireChildren` if you would rather they didn't.
+Endermen cannot use a station — they have no profession and no interest in workstations — so they are
+still hired by right-clicking one with the programmed hat, and retired with a sneak + empty-hand
+right-click. That is now the only hiring anyone does by hand.
+
+Note that a villager with a job of its own will never take a station: break its workstation first, the
+same way vanilla makes you.
+
+Children are never hired — a child villager will not take a workstation of any kind, so it simply
+never turns up for the job.
 
 **4. Wear it yourself.** It is a real helmet — two points of armour, the same as an iron one, and
 rather more durable — and it renders as the same 3D hat the workers wear rather than as a texture
@@ -227,7 +234,6 @@ Two details you might otherwise read as bugs:
 
 | Option | Default | Meaning |
 |---|---|---|
-| `hireChildren` | `false` | Whether a child villager may be put to work. Off by default; a child refused now can be hired once it grows up |
 | `maxTargetSpread` | 48 | How far apart the furthest two blocks on one hat may be — the width of a worker's beat |
 | `maxTargets` | 24 | How many blocks one hat may be programmed with. The cost of a worker with nothing to do grows with inputs times outputs, so this is the ceiling on what an idle one costs a server |
 | `transferCooldown` | 10 | Ticks paused after moving an item |

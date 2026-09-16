@@ -336,7 +336,30 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 - Vanilla renders villager professions as *texture overlays re-rendered over the same mesh*
   (`VillagerProfessionLayer` → `renderColoredCutoutModel`), not as extra geometry — worth knowing if
   the vest ever needs to hug the robe rather than sit over it.
-- **Hiring takes the villager's village job, and the order of the two steps is load-bearing.**
+- **Villagers are hired by a station, and only by a station.** The right-click hire and the
+  sneak-click retire are the enderman's path now — it has no profession and no point of interest, so
+  no job board could ever employ one. Firing a villager is taking the hat out of its station or
+  breaking the block. That one restriction is what deleted `clearVillageJob`, `restoreVillageJob`,
+  `refreshBrain`, the stashed `VillagerData` and `MerchantOffers`, and `RESET_PROOF_LEVEL`: a station
+  only ever hires a villager that had *no* profession, because `AssignProfessionFromJobSite` refuses
+  to convert anything else, so there is no village job to take, preserve or give back.
+  **The corollary is that an employed villager can never become a worker** — break its workstation
+  first, exactly as vanilla makes you.
+- **Nothing puts a fired worker's profession back, because vanilla does.** Losing the station loses
+  the job site, and `ResetProfession` clears the profession of a villager with no job site that has
+  never traded and is still on trade level one — which a worker now always is, nothing having raised
+  it. The `refreshBrain` that comes with it is also what restores the village's schedule. If that ever
+  stopped holding, a fired worker would be stuck as a Worker for good, its only workstation being a
+  block it no longer has. `aSackedWorkerIsTidiedUpByVanilla` is a test on vanilla's behaviour for
+  exactly that reason.
+- **Children are refused by vanilla, not by us.** The job-site `AcquirePoi` in the villager CORE
+  package is built with `onlyIfAdult`, so a baby never acquires a station and never arrives at one.
+  The mod's own `isOldEnoughToWork` check and the `hireChildren` config that went with it are deleted:
+  a dial that cannot change anything is worse than no dial. `aChildNeverTakesTheJob` pins the
+  guarantee that replaced them.
+- **(Historic) Hiring took the villager's village job, and the order of the two steps was
+  load-bearing.** None of the following runs any more — see `docs/professions.md` — but it is what the
+  station route was designed to avoid, and it comes straight back if hand-hiring ever does.
   `Workers.clearVillageJob` releases the workstation *before* changing the profession, because
   `Villager.releasePoi` gates the release on `Villager.POI_MEMORIES`, whose `JOB_SITE` predicate is
   the villager's **current** profession's `heldJobSite`. Change the profession first and that

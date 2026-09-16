@@ -22,9 +22,7 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.npc.VillagerData;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.common.util.INBTSerializable;
 
@@ -136,42 +134,6 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 			return false;
 		cooldown--;
 		return true;
-	}
-
-	/**
-	 * The village job the worker held when it was hired, kept so that retiring can give it back.
-	 *
-	 * <p>Both halves are needed. {@code Villager.setVillagerData} throws the trade list away
-	 * whenever the profession changes, so a hire that only remembered the profession would hand back
-	 * a librarian whose trades had been rerolled — an expensive thing to lose to a right-click, and
-	 * invisible until the player next opened the trade screen.
-	 */
-	@Nullable
-	private VillagerData formerJob;
-
-	@Nullable
-	private MerchantOffers formerOffers;
-
-	/** Remembers the village job a villager is being hired out of. */
-	public void stashVillageJob(VillagerData job, MerchantOffers offers) {
-		this.formerJob = job;
-		this.formerOffers = offers.copy();
-	}
-
-	/** @return the stashed village job, forgetting it, or null if this worker never had one. */
-	@Nullable
-	public VillagerData takeStashedJob() {
-		VillagerData job = formerJob;
-		formerJob = null;
-		return job;
-	}
-
-	/** @return the trades that came with the stashed job, forgetting them. */
-	@Nullable
-	public MerchantOffers takeStashedOffers() {
-		MerchantOffers offers = formerOffers;
-		formerOffers = null;
-		return offers;
 	}
 
 	/** @return where this worker was hired from, or null if a player handed it the hat. */
@@ -693,14 +655,6 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 			GlobalPos.CODEC.encodeStart(NbtOps.INSTANCE, station)
 				.resultOrPartial(CreateWorkers.LOGGER::error)
 				.ifPresent(encoded -> tag.put("Station", encoded));
-		if (formerJob != null)
-			VillagerData.CODEC.encodeStart(NbtOps.INSTANCE, formerJob)
-				.resultOrPartial(CreateWorkers.LOGGER::error)
-				.ifPresent(encoded -> tag.put("FormerJob", encoded));
-		if (formerOffers != null && !formerOffers.isEmpty())
-			MerchantOffers.CODEC.encodeStart(provider.createSerializationContext(NbtOps.INSTANCE), formerOffers)
-				.resultOrPartial(CreateWorkers.LOGGER::error)
-				.ifPresent(encoded -> tag.put("FormerOffers", encoded));
 		return tag;
 	}
 
@@ -720,17 +674,6 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 			GlobalPos.CODEC.parse(NbtOps.INSTANCE, tag.get("Station"))
 				.resultOrPartial(CreateWorkers.LOGGER::error)
 				.ifPresent(pos -> station = pos);
-		formerJob = null;
-		formerOffers = null;
-		if (tag.contains("FormerJob"))
-			VillagerData.CODEC.parse(NbtOps.INSTANCE, tag.get("FormerJob"))
-				.resultOrPartial(CreateWorkers.LOGGER::error)
-				.ifPresent(job -> formerJob = job);
-		if (tag.contains("FormerOffers"))
-			MerchantOffers.CODEC.parse(provider.createSerializationContext(NbtOps.INSTANCE),
-				tag.get("FormerOffers"))
-				.resultOrPartial(CreateWorkers.LOGGER::error)
-				.ifPresent(offers -> formerOffers = offers);
 		invalidatePoints();
 	}
 

@@ -7,8 +7,6 @@ import org.jetbrains.annotations.Nullable;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWBlockEntities;
-import com.createworkers.worker.WorkerData;
-import com.createworkers.worker.WorkerShift;
 import com.createworkers.worker.Workers;
 
 import net.minecraft.core.BlockPos;
@@ -17,12 +15,10 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.npc.VillagerData;
-import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -86,17 +82,22 @@ public class WorkerStationBlockEntity extends BlockEntity {
 			level.setBlock(worldPosition, getBlockState().setValue(WorkerStationBlock.HAS_JOB, hasJob()), 3);
 	}
 
-	/** Lets go of whoever is wearing the hat, so they carry on as an ordinary hand-hired worker. */
-	public void releaseWorker() {
+	/**
+	 * Sacks whoever is wearing the hat, and hands back whatever they were carrying.
+	 *
+	 * <p>This is how a villager worker is fired, there being no other way now: take the hat out of the
+	 * station, or break it. The hat itself is not among the drops — it is the one in this block, which
+	 * goes back to the player who asked for it — but a half-finished delivery is the worker's and is
+	 * dropped where it stands rather than deleted.
+	 */
+	public void dismissWorker() {
 		if (!(level instanceof ServerLevel server) || workerId == null)
 			return;
 
 		Entity entity = server.getEntity(workerId);
-		if (entity != null) {
-			WorkerData data = Workers.get(entity);
-			if (data != null)
-				data.forgetStation();
-		}
+		if (entity instanceof Mob mob)
+			for (ItemStack drop : Workers.dismiss(mob))
+				mob.spawnAtLocation(drop);
 		workerId = null;
 	}
 
@@ -125,7 +126,7 @@ public class WorkerStationBlockEntity extends BlockEntity {
 
 		AABB nearby = new AABB(worldPosition).inflate(HIRING_RANGE);
 		for (Villager villager : server.getEntitiesOfClass(Villager.class, nearby, this::hasClaimedThis)) {
-			if (Workers.isEmployed(villager) || !Workers.isOldEnoughToWork(villager))
+			if (Workers.isEmployed(villager))
 				continue;
 
 			hire(server, villager, programme);
@@ -156,24 +157,13 @@ public class WorkerStationBlockEntity extends BlockEntity {
 	/**
 	 * Puts the hat on, without taking it out of the station.
 	 *
-	 * <p>The villager was unemployed a moment ago — {@code AssignProfessionFromJobSite} only ever
-	 * converts one whose profession is {@code NONE} — so that is what it goes back to when it retires.
-	 * Saying so explicitly is what stops a retired worker keeping a profession whose only workstation
-	 * is a block it no longer has.
+	 * <p>Nothing is done to the villager's profession, because vanilla has already done it: only a
+	 * villager with no profession is ever converted, and {@code AssignProfessionFromJobSite} made this
+	 * one a Worker on arrival. When the job goes away so does its job site, and a Worker with no job
+	 * site that has never traded is exactly what {@code ResetProfession} clears.
 	 */
 	private void hire(ServerLevel server, Villager villager, WorkerProgram programme) {
-		WorkerData data = Workers.getOrCreate(villager);
-		VillagerData asHired = villager.getVillagerData();
-		data.stashVillageJob(asHired.setProfession(VillagerProfession.NONE)
-			.setLevel(1), new MerchantOffers());
-
-		data.employ(hat, programme);
-		data.rememberStation(GlobalPos.of(server.dimension(), worldPosition));
-		// Vanilla gave it the profession, so clearVillageJob would bow out -- and take the schedule
-		// with it, since that is applied on the way through.
-		WorkerShift.applySchedule(villager);
-		Workers.updateCargoAppearance(villager, data.getHeld());
-
+		Workers.employ(villager, hat, programme, GlobalPos.of(server.dimension(), worldPosition));
 		workerId = villager.getUUID();
 		setChanged();
 	}

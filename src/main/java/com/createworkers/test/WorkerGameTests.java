@@ -9,6 +9,7 @@ import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.recipe.ClearProgramRecipe;
 import com.createworkers.registry.CWItems;
+import com.createworkers.registry.CWPoiTypes;
 import com.createworkers.registry.CWProfessions;
 import com.createworkers.worker.TeleportLocomotion;
 import com.createworkers.worker.WalkLocomotion;
@@ -654,164 +655,6 @@ public class WorkerGameTests {
 	}
 
 	/**
-	 * Children are turned away at the hiring desk, and only there. The hat comes back unspent, and
-	 * the very same villager grown up is hired with it — which is the whole reason the age is checked
-	 * where a hat changes hands rather than where the job goal is handed out. A goal withheld from a
-	 * child would still be missing the day it grew up, and that villager would never work again.
-	 *
-	 * <p>Driven through the interact event itself, because a check that is not on the path a
-	 * right-click takes is not a check.
-	 */
-	@GameTest(template = "work_site", timeoutTicks = 200)
-	public static void childVillagersAreNotHired(GameTestHelper helper) {
-		prepareWorkSite(helper);
-		helper.assertTrue(!CWConfig.HIRE_CHILDREN.get(), "child labour should be off by default");
-
-		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
-		villager.setBaby(true);
-
-		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
-		ItemStack hat = programmedHat(helper);
-		player.setItemInHand(InteractionHand.MAIN_HAND, hat);
-
-		offerHat(player, villager);
-		helper.assertTrue(!Workers.isEmployed(villager), "a child villager should not be put to work");
-		helper.assertTrue(hat.getCount() == 1, "a refused hat should stay in the hand that offered it");
-
-		villager.setBaby(false);
-		offerHat(player, villager);
-		helper.assertTrue(Workers.isEmployed(villager), "the same villager grown up should be hired");
-		helper.assertTrue(hat.isEmpty(), "hiring should take the hat");
-		helper.succeed();
-	}
-
-	/**
-	 * Hiring is a career change, not a shift: the villager comes off its village job and onto ours.
-	 *
-	 * <p>Driven through the interact event, because a check that is not on the path a right-click
-	 * takes is not a check.
-	 */
-	@GameTest(template = "work_site", timeoutTicks = 200)
-	public static void hiringTakesTheVillageJob(GameTestHelper helper) {
-		prepareWorkSite(helper);
-
-		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
-		villager.setVillagerData(villager.getVillagerData()
-			.setProfession(VillagerProfession.FARMER));
-		villager.getBrain()
-			.setMemory(MemoryModuleType.JOB_SITE,
-				GlobalPos.of(helper.getLevel()
-					.dimension(), helper.absolutePos(COMPOSTER)));
-
-		hire(helper, villager);
-
-		helper.assertTrue(villager.getVillagerData()
-			.getProfession() == CWProfessions.WORKER.get(),
-			"a hired villager should hold the worker profession, not " + villager.getVillagerData()
-				.getProfession()
-				.name());
-		helper.assertTrue(villager.getBrain()
-			.getMemory(MemoryModuleType.JOB_SITE)
-			.isEmpty(),
-			"hiring should forget the job site, or the worker would still work it from close enough");
-
-		// And it has to survive the brain, which is the whole difficulty: ResetProfession sits in
-		// CORE and wipes any profession but NONE and NITWIT off a villager with no job site that has
-		// never traded, so a hire that only looked right on the tick it happened would be undone a
-		// tick or two later.
-		helper.startSequence()
-			.thenIdle(BRAIN_SETTLE_TICKS)
-			.thenExecute(() -> helper.assertTrue(villager.getVillagerData()
-				.getProfession() == CWProfessions.WORKER.get(),
-				"the worker profession should survive the brain, but became " + villager.getVillagerData()
-					.getProfession()
-					.name()))
-			.thenSucceed();
-	}
-
-	/**
-	 * ...and the workstation goes back to the village, which is the whole gameplay point of taking
-	 * the job away.
-	 *
-	 * <p>The order inside {@code clearVillageJob} is what this covers. {@code releasePoi} lets go of
-	 * a job site only while the villager's <em>current</em> profession still claims that kind of
-	 * site, so changing the profession first leaves the composter ticketed to a worker that can never
-	 * use it, for the rest of the world's life, with nothing in the world to show why.
-	 */
-	@GameTest(template = "work_site", timeoutTicks = 200)
-	public static void hiringHandsTheWorkstationBack(GameTestHelper helper) {
-		prepareWorkSite(helper);
-		BlockPos composter = helper.absolutePos(COMPOSTER);
-		helper.setBlock(COMPOSTER, Blocks.COMPOSTER);
-
-		PoiManager pois = helper.getLevel()
-			.getPoiManager();
-		helper.assertTrue(pois.getFreeTickets(composter) > 0, "a fresh composter should be free to claim");
-
-		// Claimed the way AcquirePoi claims one, then held as a job site the way arriving does.
-		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
-		villager.setVillagerData(villager.getVillagerData()
-			.setProfession(VillagerProfession.FARMER));
-		pois.take(held -> held.is(PoiTypes.FARMER), (held, at) -> at.equals(composter), composter, 1);
-		villager.getBrain()
-			.setMemory(MemoryModuleType.JOB_SITE, GlobalPos.of(helper.getLevel()
-				.dimension(), composter));
-		helper.assertTrue(pois.getFreeTickets(composter) == 0, "the composter should now be claimed");
-
-		hire(helper, villager);
-		helper.assertTrue(pois.getFreeTickets(composter) > 0,
-			"hiring should hand the workstation back so another villager can take it");
-
-		// ...and leave it back. The brain bakes the profession's job-site predicate in at
-		// construction, so a worker whose brain was never refreshed goes on hunting for the farmer's
-		// composter and re-ticketing it within a few tens of ticks -- close enough to the hire to
-		// look fine and far enough to be missed.
-		helper.startSequence()
-			.thenIdle(BRAIN_SETTLE_TICKS)
-			.thenExecute(() -> helper.assertTrue(pois.getFreeTickets(composter) > 0,
-				"the workstation should stay free, but the worker claimed it again"))
-			.thenSucceed();
-	}
-
-	/**
-	 * Retiring gives the old job back, trades and all.
-	 *
-	 * <p>{@code Villager.setVillagerData} throws the trade list away whenever the profession changes,
-	 * so without the stash a hire would silently reroll a villager's trades — the sort of loss a
-	 * player discovers long afterwards, from a single right-click.
-	 */
-	@GameTest(template = "work_site", timeoutTicks = 200)
-	public static void retiringGivesTheVillageJobBack(GameTestHelper helper) {
-		prepareWorkSite(helper);
-
-		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
-		villager.setVillagerData(villager.getVillagerData()
-			.setProfession(VillagerProfession.FARMER));
-		MerchantOffers hired = villager.getOffers();
-		helper.assertTrue(!hired.isEmpty(), "a farmer should have trades to lose");
-		int offered = hired.size();
-		ItemStack firstResult = hired.get(0)
-			.getResult()
-			.copy();
-
-		hire(helper, villager);
-		helper.assertTrue(villager.getOffers()
-			.isEmpty(), "a worker should have no trades of its own while employed");
-
-		retire(helper, villager);
-
-		helper.assertTrue(villager.getVillagerData()
-			.getProfession() == VillagerProfession.FARMER,
-			"retiring should give the village job back");
-		MerchantOffers returned = villager.getOffers();
-		helper.assertTrue(returned.size() == offered,
-			"the old trades should come back, expected " + offered + " but got " + returned.size());
-		helper.assertTrue(ItemStack.isSameItemSameComponents(returned.get(0)
-			.getResult(), firstResult), "the old trades should come back unchanged, not rerolled");
-		helper.succeed();
-	}
-
-	/**
 	 * A worker must never claim a workstation, and that is a property of the profession rather than
 	 * of anything the mod does at runtime.
 	 *
@@ -837,6 +680,19 @@ public class WorkerGameTests {
 		helper.assertTrue(VillagerProfession.NONE.acquirableJobSite()
 			.test(composter),
 			"the contrast this rests on: an unemployed villager would claim that composter");
+
+		// It does claim exactly one thing, and that is what lets a worker hold a real job site --
+		// which is what the whole village-job stash was replaced by.
+		Holder<PoiType> station = helper.getLevel()
+			.registryAccess()
+			.registryOrThrow(Registries.POINT_OF_INTEREST_TYPE)
+			.getHolderOrThrow(CWPoiTypes.WORKER_STATION_KEY);
+		helper.assertTrue(CWProfessions.WORKER.get()
+			.acquirableJobSite()
+			.test(station), "a worker should go looking for a worker station");
+		helper.assertTrue(CWProfessions.WORKER.get()
+			.heldJobSite()
+			.test(station), "and should hold one once it has it");
 		helper.succeed();
 	}
 
@@ -848,10 +704,6 @@ public class WorkerGameTests {
 
 		hire(helper, enderman);
 		helper.assertTrue(Workers.isEmployed(enderman), "an enderman should still be hireable");
-
-		WorkerData data = Workers.get(enderman);
-		helper.assertTrue(data != null && data.takeStashedJob() == null,
-			"there should be no village job stashed for a mob that never had one");
 
 		retire(helper, enderman);
 		helper.assertTrue(!Workers.isEmployed(enderman), "and retiring one should still work");
@@ -878,8 +730,6 @@ public class WorkerGameTests {
 		prepareWorkSite(helper);
 
 		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
-		villager.setVillagerData(villager.getVillagerData()
-			.setProfession(VillagerProfession.FARMER));
 		hire(helper, villager);
 
 		helper.assertTrue(
@@ -890,13 +740,9 @@ public class WorkerGameTests {
 
 		ZombieVillager zombie = villager.convertTo(EntityType.ZOMBIE_VILLAGER, false);
 		helper.assertTrue(zombie != null, "the villager should have been replaced");
-		zombie.setVillagerData(villager.getVillagerData());
 
-		helper.assertTrue(zombie.getVillagerData()
-			.getProfession() == VillagerProfession.FARMER,
-			"the zombie should carry the job the worker was hired out of, not " + zombie.getVillagerData()
-				.getProfession()
-				.name());
+		// This one was hired by hand, with no station holding its hat, so the hat drops. A
+		// station-hired worker drops nothing here: its hat never left the block.
 		helper.assertItemEntityCountIs(CWItems.HARD_HAT.get(), SPAWN, 3.0, 1);
 		helper.succeed();
 	}
@@ -1455,25 +1301,29 @@ public class WorkerGameTests {
 		return hat;
 	}
 
-	/** Hires a mob the way a player does, through the interact event. */
+	/**
+	 * Hires a mob.
+	 *
+	 * <p>An enderman goes through the right-click, that being the only way one is ever hired. A
+	 * villager is employed directly rather than stood beside a station and waited for: these tests are
+	 * about hauling, and driving each of them through vanilla's point-of-interest acquisition would
+	 * add hundreds of ticks apiece to test nothing they are about. {@code WorkerStationGameTests}
+	 * covers the station route itself.
+	 */
 	private static void hire(GameTestHelper helper, Mob mob) {
-		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
-		player.setItemInHand(InteractionHand.MAIN_HAND, programmedHat(helper));
-		offerHat(player, mob);
+		if (mob instanceof EnderMan) {
+			Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+			player.setItemInHand(InteractionHand.MAIN_HAND, programmedHat(helper));
+			NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(player, InteractionHand.MAIN_HAND, mob));
+		} else {
+			ItemStack hat = programmedHat(helper);
+			Workers.employ(mob, hat, HardHatItem.getProgram(hat), null);
+		}
 		helper.assertTrue(Workers.isEmployed(mob), "the mob should have been hired");
 	}
 
-	/** ...and retires it the same way: shift, empty hand. */
 	private static void retire(GameTestHelper helper, Mob mob) {
-		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
-		player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
-		player.setShiftKeyDown(true);
-		NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(player, InteractionHand.MAIN_HAND, mob));
-	}
-
-	/** The right-click, posted the way vanilla posts it rather than called on the handler behind it. */
-	private static void offerHat(Player player, Mob target) {
-		NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(player, InteractionHand.MAIN_HAND, target));
+		Workers.dismiss(mob);
 	}
 
 	private static WorkerData employ(GameTestHelper helper, Mob mob) {

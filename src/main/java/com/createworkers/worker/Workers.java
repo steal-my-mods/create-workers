@@ -3,8 +3,9 @@ package com.createworkers.worker;
 import org.jetbrains.annotations.Nullable;
 
 import com.createworkers.CWConfig;
+import com.createworkers.net.WorkerStatePacket;
+import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWAttachments;
-import com.createworkers.registry.CWProfessions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,26 +13,17 @@ import java.util.List;
 import com.createworkers.worker.target.WorkerTarget;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.npc.VillagerData;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.trading.MerchantOffers;
 
 /** Helpers for reading and classifying worker state. */
 public class Workers {
-
-	/**
-	 * The trade level a hired villager is held at, because {@code ResetProfession} only wipes the
-	 * profession of a villager still on its first. See {@link #clearVillageJob}.
-	 */
-	private static final int RESET_PROOF_LEVEL = 2;
 
 	/** @return the worker state already on this entity, or null if it has never had one. */
 	@Nullable
@@ -54,21 +46,6 @@ public class Workers {
 	/** @return whether this kind of mob can be given a hard hat at all. */
 	public static boolean canBeEmployed(Entity entity) {
 		return entity instanceof Villager || entity instanceof EnderMan;
-	}
-
-	/**
-	 * Whether a mob is old enough to be handed a hard hat, which is a question about hiring and only
-	 * about hiring. Children grow up, so one turned away today can be hired the day it does — and
-	 * because {@code WorkerEvents} gives the job goal to every villager as it spawns, employed or
-	 * not, growing up needs no bookkeeping of its own. Gating the goal on age instead would leave a
-	 * villager that grew up unable to work for the rest of its life.
-	 *
-	 * <p>Endermen have no young, so this is a villager rule in generic clothes.
-	 */
-	public static boolean isOldEnoughToWork(Entity entity) {
-		if (CWConfig.HIRE_CHILDREN.get())
-			return true;
-		return !(entity instanceof LivingEntity living) || !living.isBaby();
 	}
 
 	/**
@@ -133,98 +110,55 @@ public class Workers {
 	}
 
 	/**
-	 * Takes a villager off its village job and onto the payroll.
+	 * Puts a mob to work. The one way anything becomes a worker.
 	 *
-	 * <p>The order here is load-bearing. {@code Villager.releasePoi} only lets go of a job site if
-	 * the villager's <em>current</em> profession still claims that kind of site — the predicate in
-	 * {@code Villager.POI_MEMORIES} for {@code JOB_SITE} is the profession's own {@code heldJobSite}
-	 * — so changing the profession first would leave the composter ticketed to a worker that can
-	 * never use it, for the rest of the world's life, with nothing to show why. Release first, then
-	 * change the job. Releasing also does not erase the memory, so that is done by hand: a stale
-	 * job site is a workstation this worker would still work if it ever stood within 1.73 blocks of
-	 * it, which is the only thing {@code WorkAtPoi} asks.
+	 * <p>Villagers arrive here from a {@code WorkerStation}, having already been made Workers by
+	 * vanilla's {@code AssignProfessionFromJobSite}; endermen arrive from a player's right-click. Both
+	 * need the same four things done, and the schedule is the one that is easy to forget — a worker
+	 * without it keeps the village's hours rather than its own.
 	 *
-	 * <p>Two things vanilla does behind the profession have to be answered, and neither is optional.
-	 *
-	 * <p>The brain <em>bakes the profession in</em>: {@code Villager.registerBrainGoals} builds
-	 * {@code AcquirePoi(profession.acquirableJobSite(), ...)} into the CORE package once, so a
-	 * villager whose profession changed without a {@code refreshBrain} keeps hunting for the
-	 * workstations of the job it no longer has — it would re-ticket the very composter this method
-	 * just handed back, a few tens of ticks later, and pathfind across its follow range looking for
-	 * more. Vanilla pairs every profession change with {@code refreshBrain} for exactly this reason
-	 * ({@code ResetProfession} and {@code AssignProfessionFromJobSite} both do).
-	 *
-	 * <p>And {@code ResetProfession} — CORE, priority 10 — wipes the profession of any villager that
-	 * has no job site, has never traded and is still level 1, exempting only {@code NONE} and
-	 * {@code NITWIT} by name. A worker is all three of those things by design, so without something
-	 * done about it a hired villager's profession is reset to {@code NONE} within a tick or two:
-	 * precisely the everything-acquiring state {@link CWProfessions} exists to avoid. Occupying
-	 * {@code JOB_SITE} cannot save it, because {@code ValidateNearbyPoi} runs at priority 0 and
-	 * erases a job site the profession does not claim before {@code ResetProfession} reads it in the
-	 * same tick. What is left is the level: at 2 the reset does not apply. The real one is stashed
-	 * with the rest of the job and comes back on retirement.
-	 *
-	 * <p>Endermen have no profession, so this is a villager rule in generic clothes.
+	 * <p>Nothing here touches the villager's profession. It does not have to: a station only ever
+	 * hires a villager that had none, because {@code AssignProfessionFromJobSite} refuses to convert
+	 * anything else. That is what let the whole business of stashing a village job, restoring its
+	 * trades, refreshing the brain and holding the trade level above {@code ResetProfession}'s reach
+	 * be deleted rather than maintained — see {@code docs/professions.md} for what used to be here and
+	 * why none of it is needed once hiring goes through a workstation like every other job.
 	 */
-	public static void clearVillageJob(Mob mob, WorkerData data) {
-		if (!(mob instanceof Villager villager))
-			return;
+	public static void employ(Mob mob, ItemStack hat, WorkerProgram programme, @Nullable GlobalPos station) {
+		WorkerData data = getOrCreate(mob);
+		data.employ(hat, programme);
+		if (station != null)
+			data.rememberStation(station);
 
-		VillagerData job = villager.getVillagerData();
-		if (job.getProfession() == CWProfessions.WORKER.get())
-			return;
-
-		villager.releasePoi(MemoryModuleType.JOB_SITE);
-		villager.releasePoi(MemoryModuleType.POTENTIAL_JOB_SITE);
-		villager.getBrain()
-			.eraseMemory(MemoryModuleType.JOB_SITE);
-		villager.getBrain()
-			.eraseMemory(MemoryModuleType.POTENTIAL_JOB_SITE);
-
-		data.stashVillageJob(job, villager.getOffers());
-		villager.setVillagerData(job.setProfession(CWProfessions.WORKER.get())
-			.setLevel(Math.max(job.getLevel(), RESET_PROOF_LEVEL)));
-		refreshBrain(villager);
-		// After the refresh, never before: rebuilding the brain resets the schedule to the village's.
-		WorkerShift.applySchedule(villager);
+		WorkerShift.applySchedule(mob);
+		updateCargoAppearance(mob, data.getHeld());
+		WorkerStatePacket.sync(mob, data);
 	}
 
 	/**
-	 * Gives back the village job a worker was hired out of, trades and all.
+	 * Takes a mob off the job, and returns whatever it should drop.
 	 *
-	 * <p>The order is load-bearing here too, the other way about: {@code setVillagerData} throws the
-	 * trade list away when the profession changes, so the offers have to go back afterwards or they
-	 * are lost on the way in.
-	 *
-	 * <p>The villager keeps its profession but not its old workstation — that went back to the
-	 * village when it was hired, and may well be someone else's by now. Vanilla will send it looking
-	 * for another one, exactly as it would for any villager whose job site was taken, which is what
-	 * the brain refresh at the end is for.
+	 * <p>A villager's profession is left alone here too, and vanilla tidies it: a worker with no job
+	 * site that has never traded and is still on trade level one is exactly what {@code
+	 * ResetProfession} clears, so within a tick or two of its station going away it is an ordinary
+	 * unemployed villager that can take any job again. That only works because nothing raises its
+	 * trade level any more.
 	 */
-	public static void restoreVillageJob(Mob mob, WorkerData data) {
-		if (!(mob instanceof Villager villager))
-			return;
+	public static List<ItemStack> dismiss(Mob mob) {
+		WorkerData data = get(mob);
+		if (data == null || !data.isEmployed())
+			return List.of();
 
-		VillagerData job = data.takeStashedJob();
-		if (job == null)
-			return;
+		wake(mob);
+		List<ItemStack> drops = data.dismiss();
+		updateCargoAppearance(mob, ItemStack.EMPTY);
 
-		villager.setVillagerData(job);
-		MerchantOffers offers = data.takeStashedOffers();
-		if (offers != null)
-			villager.setOffers(offers);
-		refreshBrain(villager);
-	}
+		WorkerLocomotion locomotion = locomotionFor(mob);
+		if (locomotion != null)
+			locomotion.stop(mob);
 
-	/**
-	 * Rebuilds the brain around the profession the villager now holds.
-	 *
-	 * <p>Not optional either way round: a retired villager whose brain still carried the worker's
-	 * job-site predicate — which matches nothing — could never find a workstation again.
-	 */
-	private static void refreshBrain(Villager villager) {
-		if (villager.level() instanceof ServerLevel level)
-			villager.refreshBrain(level);
+		WorkerStatePacket.sync(mob, data);
+		return drops;
 	}
 
 	/**

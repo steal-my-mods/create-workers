@@ -92,7 +92,8 @@ public class WorkerCargoLayer<T extends LivingEntity, M extends EntityModel<T>> 
 		boolean left = arm == HumanoidArm.LEFT;
 
 		poseStack.pushPose();
-		// The same allowance vanilla makes for a baby's hand, which matters once hireChildren is on.
+		// The same allowance vanilla makes for a baby's hand. Nothing hires one now, but a modded
+		// villager may be small, and the layer is offered to every renderer.
 		if (getParentModel().young) {
 			poseStack.translate(0.0F, 0.75F, 0.0F);
 			poseStack.scale(0.5F, 0.5F, 0.5F);

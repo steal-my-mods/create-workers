@@ -275,10 +275,12 @@ public class WorkerShiftGameTests {
 		helper.assertTrue(villager.getBrain()
 			.getSchedule() != Schedule.VILLAGER_DEFAULT, "...which is not the village's");
 
+		// Putting the village's schedule back is vanilla's job now rather than this mod's. A
+		// dismissed worker loses its job site, and ResetProfession then clears the profession and
+		// refreshes the brain — which is what sets VILLAGER_DEFAULT. That path is covered where there
+		// is a real job site to lose, in WorkerStationGameTests.
 		retire(helper, villager);
-		helper.assertTrue(villager.getBrain()
-			.getSchedule() == Schedule.VILLAGER_DEFAULT,
-			"a retired villager should be back on the village's own hours");
+		helper.assertTrue(!Workers.isEmployed(villager), "and retiring should take the hat back off it");
 		helper.succeed();
 	}
 
@@ -992,19 +994,12 @@ public class WorkerShiftGameTests {
 	private static void hire(GameTestHelper helper, Mob mob, BlockPos bed) {
 		ItemStack hat = new ItemStack(CWItems.HARD_HAT.get());
 		HardHatItem.setProgram(hat, program(helper, bed));
-
-		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
-		player.setItemInHand(InteractionHand.MAIN_HAND, hat);
-		NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(player, InteractionHand.MAIN_HAND, mob));
+		Workers.employ(mob, hat, HardHatItem.getProgram(hat), null);
 		helper.assertTrue(Workers.isEmployed(mob), "the mob should have been hired");
 	}
 
-	/** ...and retires it the same way a player does: sneak, empty hand. */
 	private static void retire(GameTestHelper helper, Mob mob) {
-		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
-		player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
-		player.setShiftKeyDown(true);
-		NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(player, InteractionHand.MAIN_HAND, mob));
+		Workers.dismiss(mob);
 		helper.assertTrue(!Workers.isEmployed(mob), "the mob should have been retired");
 	}
 

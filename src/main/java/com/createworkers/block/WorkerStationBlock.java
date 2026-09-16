@@ -102,7 +102,7 @@ public class WorkerStationBlock extends BaseEntityBlock {
 
 		if (!level.isClientSide()) {
 			ItemStack hat = station.getHat();
-			station.releaseWorker();
+			station.dismissWorker();
 			station.setHat(ItemStack.EMPTY);
 			if (!player.getInventory()
 				.add(hat))
@@ -112,11 +112,12 @@ public class WorkerStationBlock extends BaseEntityBlock {
 	}
 
 	/**
-	 * Breaking the office does not sack the worker.
+	 * Breaking the office sacks the worker, because there is no longer anything else it could mean.
 	 *
-	 * <p>The hat drops and the villager carries on exactly as a hand-hired one would — still employed,
-	 * still working its programme, but nobody's to replace any more. Retiring it on the spot was the
-	 * alternative and is worse: mining a block by accident should not cost a shift's work.
+	 * <p>With hiring by hand gone for villagers, a worker whose station has been broken would be
+	 * employed by nobody, firable by nothing, and impossible to get the hat back from — so breaking
+	 * the block ends the job, drops the hat, and leaves an ordinary unemployed villager that vanilla
+	 * will find another job for.
 	 */
 	@Override
 	protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
@@ -124,7 +125,7 @@ public class WorkerStationBlock extends BaseEntityBlock {
 			return;
 
 		if (level.getBlockEntity(pos) instanceof WorkerStationBlockEntity station) {
-			station.releaseWorker();
+			station.dismissWorker();
 			if (station.hasJob())
 				Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), station.getHat());
 		}
