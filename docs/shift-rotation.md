@@ -147,13 +147,39 @@ they deserve to be the design:
    receiver only needs to want more. Two *workers* satisfy it. A day-crew worker that picked up a
    stack of bread will hand half of it to a night-crew worker they meet — which is exactly what the
    1000-tick changeover gaps are for. Do not close them.
-3. **The player automates it**, and this is the answer to design toward. A funnel or a chute dropping
-   bread on the floor of the bunkhouse, and the crew picks it up during leisure. That turns feeding a
-   workforce into a Create problem, which is the right genre for this mod entirely — and it makes
-   farmer sharing a pleasant bootstrap rather than the mechanism the design leans on.
+3. **The player automates it**, and this is the answer to design toward — but not by dropping items
+   on the floor. See below.
 
 Adjusting everyone's hours to overlap the farmer's is the one answer to avoid. It would compress
 every shift into the waking half of the day, which defeats the point of having shifts at all.
+
+### Nothing in vanilla hands food to a villager, so we need a block
+
+Checked rather than assumed: **there is no container a villager will take food out of.** The three
+ways food reaches a villager are picking it up off the ground, being thrown it by another villager,
+and — for farmers — harvesting crops. `WorkAtComposter` turns out to be the village bakery, taking
+wheat out of the farmer's *own* inventory and putting bread back into it, but it is not a place
+anyone else can shop.
+
+Loose items on the floor are a poor answer anyway: they despawn, they are picked up by hoppers and
+players, and a heap of bread in a factory looks like a mistake. So this wants a block of our own — a
+**canteen** — and it turns out to solve two problems at once.
+
+- **It is an inventory**, so a funnel, chute, belt or arm fills it and feeding a workforce becomes an
+  ordinary Create automation problem. That is the right genre for this mod entirely.
+- **It should be a worker target**, by registering an `ArmInteractionPointType` for it — which makes
+  it a valid destination on a hat. A worker hauling bread to the canteen that feeds the workers is a
+  pleasing loop, and it costs nothing because that machinery already exists.
+- **It is found the way a bed is found**: register it as a point of interest and reuse `findBed`'s
+  shape — designated, or nearest one with a path that reaches. No new provenance rules.
+- **It answers the mid-shift case.** A worker that hits zero food with a canteen in range breaks off,
+  eats, and goes back to work, instead of the line stopping for reasons nobody can see. That is the
+  difference between food being a mechanic and food being a trap.
+- It should probably feed *any* hungry villager, not just workers. It is a food trough; making it
+  worker-only would be arbitrary, and a village that feeds itself is a better toy.
+
+Farmer sharing then becomes a pleasant bootstrap — the way your first crew eats before you have built
+anything — rather than the mechanism the design leans on.
 
 ## Off the clock: what vanilla's leisure actually is
 
@@ -177,8 +203,15 @@ which today is suspended off-shift because the bed is a known destination. That 
 existing `IdleBehaviour.WANDER` plus a leash — a thing the mod already ships and already documents
 the failure mode of.
 
-The village still matters, but as a soft good rather than a requirement, and there is a pleasant
-result hiding in how vanilla defines one. `isVillageCenter` looks for POIs tagged `PoiTypeTags.VILLAGE`
+**The food supply is a fair reason to want a village nearby, though, and that was the better version
+of the question.** Farmers are where bread comes from, and farmers live in villages. Three ways out,
+and none of them is "build next to a village": hire a farmer of your own by putting a composter and a
+wheat field in the factory, in which case the bakery is on site; automate a canteen, as above; or
+accept a daily commute's worth of sharing at the changeover. The first is the charming one — a
+factory with its own farmer and its own crops is a village that happens to make andesite.
+
+The village still matters beyond food, but as a soft good rather than a requirement, and there is a
+pleasant result hiding in how vanilla defines one. `isVillageCenter` looks for POIs tagged `PoiTypeTags.VILLAGE`
 with `Occupancy.IS_OCCUPIED` — *claimed* ones. Beds are village POIs, and vanilla's own
 `AcquirePoi(HOME)` claims a bed for any villager, worker or not. So **a bunkhouse whose crew has taken
 its beds is a village centre**, and `isVillage` is within one section of one.
@@ -252,21 +285,40 @@ coming, shifts should wait for it, because the station is where a crew is config
 
 ## Trades for workers
 
-Probably not, and the reasons are worth writing down so the idea is not re-litigated.
+An earlier draft said no. On re-examination **most of that was a balance opinion wearing a
+principle's clothes**, and the honest position is yes, with one constraint on *what* they trade.
 
-Against: a worker that pays for itself is the exact opposite of the food economy this document is
-building, which exists to stop workers being free. Selling Create components would put this addon in
-charge of Create's own progression, which is not its place. And mechanically it is awkward —
-`setVillagerData` nulls the offer list on every profession change, so worker trades would be
-generated fresh on hire and destroyed on retirement, making levels and trade XP meaningless.
+What the objection actually was, taken apart:
 
-For: leisure makes `ShowTradesToPlayer` and `TradeWithVillager` visible for the first time, and a
-worker with nothing to show has a slightly empty middle window.
+- *"A worker that pays for itself undercuts the food economy."* This is a balance argument, and a
+  contingent one. Trades and food are separate loops, and a player funding bread with emeralds is
+  just an economy — which is what villages are for.
+- *"Selling Create components would put this addon in charge of Create's progression."* This one
+  survives, but it is an objection to a *trade list*, not to trading. It rules out iron plates and
+  andesite alloy; it says nothing about whether a worker may trade at all.
+- *"`setVillagerData` nulls the offer list on every profession change, so worker trades regenerate on
+  hire and vanish on retirement."* Real, and it means levelling is meaningless — but it is mild, and
+  [the worker station](worker-station.md) dissolves it: a station-hired worker holds a `JOB_SITE`, so
+  `ResetProfession` never fires, the `RESET_PROOF_LEVEL` hack goes away, and a worker can carry a real
+  trade level like any other villager.
 
-If it ever happens, the shape that does not break anything is workers **buying** rather than selling
-— labourers with wages, emeralds for raw materials, a sink instead of a source. But the better answer
-to "the leisure window needs an interaction" is the one this design already has: hand them bread.
-Revisit after food, not before.
+And there is a positive argument the first draft simply missed. The mod's whole thesis is that
+workers are people rather than machines. Every other profession trades; a worker that cannot is
+conspicuously *less* of a villager than a fletcher. Leisure makes `ShowTradesToPlayer` and
+`GiveGiftToHero` fire for the first time, so trades are also the thing that makes the middle window
+visible to a player walking past.
+
+**The constraint is the trade list, and it is easy to satisfy: stay inside our own namespace.** A
+worker selling **hard hats** is thematically perfect — the person wearing one will sell you one — and
+it is our item, so it is our progression to set rather than Create's. Buying raw materials for
+emeralds fits the fiction of labourers with wages and adds a sink rather than a source. What a worker
+must never do is sell the components Create expects you to build a factory to make.
+
+Mechanically it is one event: `VillagerTrades.TRADES` is a plain mutable map keyed by profession, and
+NeoForge's `VillagerTradesEvent` is the supported way in.
+
+Ordering: after food, because food is what makes a worker's leisure window mean something and trades
+are the decoration on top — and after the station, because that is what makes trade levels real.
 
 ## What it costs
 
