@@ -470,56 +470,87 @@ public class WorkerStationGameTests {
 
 
 	/**
-	 * The rack is an inventory, and it is a <b>list</b> wearing an inventory's clothes.
+	 * The rack is an ordinary inventory with places that stay where they are put.
 	 *
-	 * <p>The difference matters because the order of the rack is the player's priority lever: index
-	 * {@code i} has to be the {@code i}th job and can never be a hole, or the fill order stops meaning
-	 * what the screen shows. So a hat goes in at the end and nowhere else, and taking one out closes
-	 * the gap behind it — which is also what makes a funnel or an arm stocking a station do something
-	 * predictable rather than scattering jobs down a grid.
+	 * <p>A job's place in the rack is the player's statement of what matters most, so it has to be
+	 * theirs to choose: a hat you know is your least important job goes at the bottom, before there is
+	 * anything above it. And taking one out of the middle leaves a gap rather than promoting everything
+	 * below it into a priority nobody asked for.
+	 *
+	 * <p>The dense list this replaced also disagreed with vanilla about what a slot is.
+	 * {@code moveItemStackTo} shrinks the stack it finds in place, so shift-clicking a hat out left a
+	 * job holding a zero-count stack — which cannot be encoded, and took the server down the next time
+	 * the chunk was saved.
 	 */
 	@GameTest(template = "work_site", timeoutTicks = 200)
-	public static void theRackIsAnInventoryThatKeepsItsOrder(GameTestHelper helper) {
+	public static void theRackKeepsJobsWhereTheyArePut(GameTestHelper helper) {
 		prepareWorkSite(helper);
 		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
-		putHatIn(helper, STATION);
-		putHatIn(helper, STATION);
 
 		IItemHandler rack = helper.getLevel()
 			.getCapability(Capabilities.ItemHandler.BLOCK, helper.absolutePos(STATION), null);
 		helper.assertTrue(rack != null, "a station should be an inventory other machines can reach");
 
-		ItemStack first = rack.getStackInSlot(0);
-		helper.assertTrue(!first.isEmpty() && rack.getStackInSlot(1)
-			.isEmpty() == false, "its first two slots are its first two jobs");
-		helper.assertTrue(rack.getStackInSlot(2)
-			.isEmpty(), "and nothing is in the third");
+		ItemStack hat = new ItemStack(CWItems.HARD_HAT.get());
+		HardHatItem.setProgram(hat, programme(helper));
 
-		ItemStack spare = new ItemStack(CWItems.HARD_HAT.get());
-		HardHatItem.setProgram(spare, programme(helper));
+		helper.assertTrue(rack.insertItem(5, hat.copy(), false)
+			.isEmpty(), "a hat should go where it is put, with nothing above it");
+		helper.assertTrue(station(helper).jobAt(5) != null, "so the sixth place holds a job");
+		helper.assertTrue(station(helper).jobAt(0) == null, "and the first is still empty");
+		helper.assertTrue(station(helper).jobCount() == 1, "one job, in the place it was asked for");
 
-		helper.assertTrue(!rack.insertItem(0, spare.copy(), false)
-			.isEmpty(), "a hat may not be pushed into a job somebody else's hat is already doing");
-		helper.assertTrue(!rack.insertItem(5, spare.copy(), false)
-			.isEmpty(), "nor parked past the end, which would leave a hole in the order");
-		helper.assertTrue(station(helper).slots()
-			.size() == 2, "so neither refusal should have racked anything");
+		helper.assertTrue(!rack.insertItem(5, hat.copy(), false)
+			.isEmpty(), "a place that is taken refuses a second hat");
 
-		helper.assertTrue(rack.insertItem(2, spare.copy(), false)
-			.isEmpty(), "the one free index is the end of the list, and that one takes it");
-		helper.assertTrue(station(helper).slots()
-			.size() == 3, "leaving three jobs");
+		helper.assertTrue(rack.insertItem(2, hat.copy(), false)
+			.isEmpty(), "a place above one that is taken is still free");
 
-		helper.assertTrue(!rack.insertItem(2, spare.copy(), false)
-			.isEmpty(), "after which that index is a job of its own and refuses too");
-
-		ItemStack pulled = rack.extractItem(0, 1, false);
-		helper.assertTrue(ItemStack.isSameItem(pulled, first), "taking slot zero gives back the first job's hat");
-		helper.assertTrue(station(helper).slots()
-			.size() == 2, "and the list closes up behind it");
+		ItemStack pulled = rack.extractItem(2, 1, false);
+		helper.assertTrue(!pulled.isEmpty(), "taking a job out gives its hat back");
+		helper.assertTrue(station(helper).jobAt(2) == null, "leaving that place empty");
+		helper.assertTrue(station(helper).jobAt(5) != null,
+			"and the job below it exactly where the player left it, not shuffled up");
 		helper.succeed();
 	}
 
+
+	/**
+	 * Shift-clicking a hat out of the rack ends the job, rather than leaving one holding nothing.
+	 *
+	 * <p>The exact crash this replaced, reproduced end to end. {@code moveItemStackTo} shrinks the stack
+	 * it was handed <em>in place</em>, and the stack a menu hands it is the live one in the rack — so
+	 * without the source slot being emptied afterwards the rack kept a job whose hat had a count of
+	 * zero. Nothing noticed until the chunk was written, at which point {@code ItemStack.save} threw
+	 * "Cannot encode empty ItemStack" and took the server down with it.
+	 *
+	 * <p>Hence the save at the end: the assertion that matters is not only that the job is gone but
+	 * that what is left can be written to disk.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void shiftClickingAHatOutEndsItsJob(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		WorkerStationMenu menu = WorkerStationMenu.create(1, player.getInventory(), station(helper));
+		helper.assertTrue(station(helper).jobCount() == 1, "precondition: one job on the rack");
+
+		menu.quickMoveStack(player, 0);
+
+		helper.assertTrue(station(helper).jobAt(0) == null,
+			"the place should be empty, not holding a hat with nothing in it");
+		helper.assertTrue(station(helper).jobCount() == 0, "so the rack holds no jobs");
+		// countItem, not contains: contains matches components too, and this hat carries a programme.
+		helper.assertTrue(player.getInventory()
+			.countItem(CWItems.HARD_HAT.get()) == 1, "and the player has the hat");
+
+		// The crash was here, a tick or two later, not at the click.
+		station(helper).saveWithoutMetadata(helper.getLevel()
+			.registryAccess());
+		helper.succeed();
+	}
 
 	/**
 	 * The station's menu builds, and its slots are the rack's slots.
@@ -575,10 +606,8 @@ public class WorkerStationGameTests {
 		player.setPos(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D);
 
 		menu.quickMoveStack(player, playerSlot);
-		helper.assertTrue(station(helper).slots()
-			.size() == 2, "shift-clicking a hat in should rack it, and the rack holds "
-				+ station(helper).slots()
-					.size());
+		helper.assertTrue(station(helper).jobCount() == 2, "shift-clicking a hat in should rack it, and the rack holds "
+				+ station(helper).jobCount());
 		helper.assertTrue(menu.getSlot(1)
 			.hasItem(), "in the place that was empty");
 		helper.succeed();
@@ -625,6 +654,57 @@ public class WorkerStationGameTests {
 		helper.assertTrue(menu.getSlot(WorkerStationMenu.ROWS_PER_COLUMN).x > menu.getSlot(0).x,
 			"and to the right of it");
 		helper.succeed();
+	}
+
+
+	/**
+	 * Losing an early job's worker promotes from a <b>later job on the same shift</b>, not only from a
+	 * later shift.
+	 *
+	 * <p>The fill order is one order, read shift first and then down the rack: every job's day crew in
+	 * rack order, then every job's evening crew in rack order, then night. Rebalancing restores that
+	 * order wherever it was broken, so the two cases are the same rule and not two rules — a day
+	 * vacancy is filled from the last job in the fill order whether that worker was on nights or merely
+	 * further down the rack.
+	 *
+	 * <p>Which means a worker's <em>route</em> changes when it is promoted, because the hat changes with
+	 * the job. That is the intended behaviour: the rack says which work matters most, and a short crew
+	 * should be doing the work that matters most.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void losingAnEarlyJobPromotesFromALaterOneOnTheSameShift(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		putHatIn(helper, STATION);
+		// Day only, so the only worker there is to promote is the one doing the less important job.
+		station(helper).setShifts(0, Set.of(Shift.DAY));
+		station(helper).setShifts(1, Set.of(Shift.DAY));
+
+		claimant(helper);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1, "the first job"))
+			.thenExecute(() -> claimant(helper))
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 2, "and the second"))
+			.thenExecute(() -> {
+				Villager victim = (Villager) helper.getLevel()
+					.getEntity(station(helper).jobAt(0)
+						.worker(Shift.DAY));
+				victim.setNoAi(false);
+				victim.hurt(helper.getLevel()
+					.damageSources()
+					.genericKill(), Float.MAX_VALUE);
+			})
+			.thenWaitUntil(() -> {
+				helper.assertTrue(station(helper).jobAt(0)
+					.worker(Shift.DAY) != null,
+					"the more important job should be covered again");
+				helper.assertTrue(station(helper).jobAt(1)
+					.worker(Shift.DAY) == null,
+					"by the worker from the less important one, which is now the empty job");
+			})
+			.thenSucceed();
 	}
 
 	/**

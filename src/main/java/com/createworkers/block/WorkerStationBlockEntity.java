@@ -128,7 +128,21 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		}
 	}
 
-	private final List<Slot> slots = new ArrayList<>();
+	/**
+	 * The rack, as a fixed set of places with gaps allowed rather than a list that closes up.
+	 *
+	 * <p>A place is where the player put a hat, and that is the whole of it. Requiring the next free
+	 * index made the rack impossible to use as a priority order — a job you know is your least
+	 * important is one you want to put at the <em>bottom</em>, before you have anything above it —
+	 * and it made taking a hat out of the middle shuffle every job below it into a different priority,
+	 * which is not what anyone clicking an item out of an inventory means.
+	 *
+	 * <p>It also removes a whole class of bug. A dense list backing an inventory disagrees with vanilla
+	 * about what a slot is: {@code moveItemStackTo} shrinks the stack it finds <em>in place</em>, so
+	 * shift-clicking a hat out left a job holding a zero-count stack, which the block entity then could
+	 * not save ("Cannot encode empty ItemStack"). A fixed array is what an inventory already is.
+	 */
+	private final Slot[] slots = new Slot[MAX_SLOTS];
 
 	/**
 	 * How many of this block's point-of-interest tickets the station is holding back from villagers.
@@ -172,24 +186,28 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 		@Override
 		public ItemStack getStackInSlot(int index) {
-			return index >= 0 && index < slots.size() ? slots.get(index).hat : ItemStack.EMPTY;
+			Slot job = jobAt(index);
+			return job == null ? ItemStack.EMPTY : job.hat;
 		}
 
 		@Override
 		public ItemStack insertItem(int index, ItemStack stack, boolean simulate) {
 			if (!isItemValid(index, stack))
 				return stack;
+			// putHat, not addHat: the index is the place the player asked for, and the whole point of
+			// a rack with gaps is that it is not the next free one.
 			if (!simulate)
-				addHat(stack);
+				putHat(index, stack);
 			return stack.copyWithCount(stack.getCount() - 1);
 		}
 
 		@Override
 		public ItemStack extractItem(int index, int amount, boolean simulate) {
-			if (amount < 1 || index < 0 || index >= slots.size())
+			Slot job = jobAt(index);
+			if (amount < 1 || job == null)
 				return ItemStack.EMPTY;
 			if (simulate)
-				return slots.get(index).hat.copy();
+				return job.hat.copy();
 			// Not a quiet extraction: this hat is somebody's job, and the crew wearing copies of it
 			// goes with it. Exactly what taking it out by hand does.
 			return removeHat(index);
@@ -202,7 +220,8 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 		@Override
 		public boolean isItemValid(int index, ItemStack stack) {
-			return index == slots.size() && index < capacity() && stack.getItem() instanceof HardHatItem;
+			return index >= 0 && index < capacity() && slots[index] == null
+				&& stack.getItem() instanceof HardHatItem;
 		}
 
 		/**
@@ -212,17 +231,21 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		 */
 		@Override
 		public void setStackInSlot(int index, ItemStack stack) {
-			if (index < 0 || index > slots.size() || index >= capacity())
+			if (index < 0 || index >= MAX_SLOTS)
 				return;
+			// Empty covers a zero-count stack as well as ItemStack.EMPTY, which is what vanilla leaves
+			// behind when it takes the last of a slot: moveItemStackTo shrinks the live stack rather
+			// than replacing it, and a job holding a zero-count hat is one the block entity cannot save.
 			if (stack.isEmpty()) {
-				if (index < slots.size())
+				if (slots[index] != null)
 					removeHat(index);
-			} else if (index < slots.size()) {
-				slots.get(index).hat = stack.copyWithCount(1);
-				changed();
-			} else {
-				addHat(stack);
+				return;
 			}
+			if (slots[index] == null)
+				slots[index] = new Slot(stack.copyWithCount(1));
+			else
+				slots[index].hat = stack.copyWithCount(1);
+			changed();
 		}
 	};
 
@@ -237,12 +260,31 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 	// --- the rack ------------------------------------------------------------------------
 
+	/** The rack by position, with a null wherever there is no job. Always {@link #MAX_SLOTS} long. */
 	public List<Slot> slots() {
-		return java.util.Collections.unmodifiableList(slots);
+		return java.util.Collections.unmodifiableList(java.util.Arrays.asList(slots));
+	}
+
+	/** The job at {@code index}, or null — which is an ordinary answer now, not an edge case. */
+	@Nullable
+	public Slot jobAt(int index) {
+		return index >= 0 && index < MAX_SLOTS ? slots[index] : null;
+	}
+
+	/** How many jobs are on the rack, gaps not counted. */
+	public int jobCount() {
+		int count = 0;
+		for (Slot slot : slots)
+			if (slot != null)
+				count++;
+		return count;
 	}
 
 	public boolean hasJob() {
-		return !slots.isEmpty();
+		for (Slot slot : slots)
+			if (slot != null)
+				return true;
+		return false;
 	}
 
 	/** How many slots this station will accept, which the config may hold below {@link #MAX_SLOTS}. */
@@ -256,11 +298,23 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * @return whether there was room for it.
 	 */
 	public boolean addHat(ItemStack stack) {
-		if (slots.size() >= capacity())
+		for (int i = 0; i < capacity(); i++)
+			if (slots[i] == null)
+				return putHat(i, stack);
+		return false;
+	}
+
+	/**
+	 * Racks a hat at a place the player chose.
+	 *
+	 * @return whether that place was free.
+	 */
+	public boolean putHat(int index, ItemStack stack) {
+		if (index < 0 || index >= capacity() || slots[index] != null)
 			return false;
 
-		boolean wasEmpty = slots.isEmpty();
-		slots.add(new Slot(stack.copyWithCount(1)));
+		boolean wasEmpty = !hasJob();
+		slots[index] = new Slot(stack.copyWithCount(1));
 		// A station with nothing in it is not a job site at all, so its point of interest -- and with
 		// it every ticket this block was holding -- was thrown away when the last hat came out. The
 		// record about to be created starts full, so anything we thought we were holding is fiction.
@@ -278,10 +332,13 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * half-finished delivery is the worker's own and is dropped where it stands rather than deleted.
 	 */
 	public ItemStack removeHat(int index) {
-		if (index < 0 || index >= slots.size())
+		Slot slot = jobAt(index);
+		if (slot == null)
 			return ItemStack.EMPTY;
 
-		Slot slot = slots.remove(index);
+		// The place is left empty rather than closed up. Every job below it keeps the priority the
+		// player gave it, which is the whole point of the rack being an order.
+		slots[index] = null;
 		dismissAll(slot);
 		changed();
 		return slot.hat;
@@ -289,10 +346,9 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 	/** Which shifts a job runs on. Turning one off sacks whoever was covering it. */
 	public void setShifts(int index, Set<Shift> wanted) {
-		if (index < 0 || index >= slots.size() || wanted.isEmpty())
+		Slot slot = jobAt(index);
+		if (slot == null || wanted.isEmpty())
 			return;
-
-		Slot slot = slots.get(index);
 		for (Shift shift : Shift.VALUES)
 			if (slot.runs(shift) && !wanted.contains(shift))
 				dismiss(slot, shift);
@@ -310,10 +366,11 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * anvil would have set, so nothing new has to be saved or synced for it.
 	 */
 	public void renameJob(int index, String name) {
-		if (index < 0 || index >= slots.size())
+		Slot job = jobAt(index);
+		if (job == null)
 			return;
 
-		ItemStack hat = slots.get(index).hat;
+		ItemStack hat = job.hat;
 		String trimmed = name.trim();
 		if (trimmed.isEmpty())
 			hat.remove(DataComponents.CUSTOM_NAME);
@@ -332,9 +389,16 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * thing than the one it prevents.
 	 */
 	public boolean moveSlot(int from, int to) {
-		if (from < 0 || from >= slots.size() || to < 0 || to >= slots.size() || from == to)
+		if (from < 0 || from >= MAX_SLOTS || to < 0 || to >= MAX_SLOTS || from == to)
 			return false;
-		slots.add(to, slots.remove(from));
+		if (slots[from] == null)
+			return false;
+
+		// A swap, not an insert. With gaps allowed there is nothing to close up, and swapping is what
+		// lets a job be pushed into an empty place above it rather than only past another job.
+		Slot moved = slots[from];
+		slots[from] = slots[to];
+		slots[to] = moved;
 		changed();
 		return true;
 	}
@@ -342,7 +406,8 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	/** @return whether this station has {@code id} down as one of its workers. */
 	public boolean employs(UUID id) {
 		for (Slot slot : slots)
-			for (Shift shift : Shift.VALUES)
+			if (slot != null)
+				for (Shift shift : Shift.VALUES)
 				if (id.equals(slot.workers[shift.ordinal()]))
 					return true;
 		return false;
@@ -354,7 +419,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	public int positions(Shift shift) {
 		int count = 0;
 		for (Slot slot : slots)
-			if (slot.runs(shift))
+			if (slot != null && slot.runs(shift))
 				count++;
 		return count;
 	}
@@ -363,7 +428,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	public int staffed(Shift shift) {
 		int count = 0;
 		for (Slot slot : slots)
-			if (slot.runs(shift) && slot.workers[shift.ordinal()] != null)
+			if (slot != null && slot.runs(shift) && slot.workers[shift.ordinal()] != null)
 				count++;
 		return count;
 	}
@@ -418,6 +483,8 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		int knownAlive = 0;
 
 		for (Slot slot : slots) {
+			if (slot == null)
+				continue;
 			for (Shift shift : Shift.VALUES) {
 				UUID id = slot.workers[shift.ordinal()];
 				if (id == null)
@@ -533,7 +600,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	/** Where a position falls in the fill order, so two of them can be compared. */
 	private int order(Position position) {
 		return position.shift()
-			.ordinal() * slots.size() + position.slot();
+			.ordinal() * MAX_SLOTS + position.slot();
 	}
 
 	/**
@@ -548,10 +615,8 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	@Nullable
 	private Position nextVacancy() {
 		for (Shift shift : Shift.VALUES)
-			for (int i = 0; i < slots.size(); i++)
-				if (slots.get(i)
-					.runs(shift)
-					&& slots.get(i).workers[shift.ordinal()] == null)
+			for (int i = 0; i < MAX_SLOTS; i++)
+				if (slots[i] != null && slots[i].runs(shift) && slots[i].workers[shift.ordinal()] == null)
 					return new Position(i, shift);
 		return null;
 	}
@@ -561,10 +626,8 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	private Position lastStaffed() {
 		for (int s = Shift.VALUES.length - 1; s >= 0; s--) {
 			Shift shift = Shift.VALUES[s];
-			for (int i = slots.size() - 1; i >= 0; i--)
-				if (slots.get(i)
-					.runs(shift)
-					&& slots.get(i).workers[shift.ordinal()] != null)
+			for (int i = MAX_SLOTS - 1; i >= 0; i--)
+				if (slots[i] != null && slots[i].runs(shift) && slots[i].workers[shift.ordinal()] != null)
 					return new Position(i, shift);
 		}
 		return null;
@@ -593,7 +656,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	private void rebalance(ServerLevel server) {
 		// lastStaffed strictly decreases on every successful move, so this cannot run away -- but a
 		// roster is at most thirty-six places and a loop over a mutating list deserves the belt.
-		for (int guard = slots.size() * Shift.VALUES.length; guard > 0 && promoteOne(server); guard--)
+		for (int guard = MAX_SLOTS * Shift.VALUES.length; guard > 0 && promoteOne(server); guard--)
 			;
 	}
 
@@ -603,7 +666,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		if (vacancy == null || last == null || order(last) < order(vacancy))
 			return false;
 
-		Slot from = slots.get(last.slot());
+		Slot from = slots[last.slot()];
 		UUID id = from.workers[last.shift()
 			.ordinal()];
 		// An unloaded worker cannot be promoted, and guessing at one is what the roster audit already
@@ -611,7 +674,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		if (!(server.getEntity(id) instanceof Villager worker))
 			return false;
 
-		Slot to = slots.get(vacancy.slot());
+		Slot to = slots[vacancy.slot()];
 		WorkerProgram programme = HardHatItem.getProgram(to.hat);
 		if (!programme.hasTargets())
 			return false;
@@ -627,7 +690,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	}
 
 	private void hire(ServerLevel server, Villager villager, Position vacancy) {
-		Slot slot = slots.get(vacancy.slot());
+		Slot slot = slots[vacancy.slot()];
 		WorkerProgram programme = HardHatItem.getProgram(slot.hat);
 		if (!programme.hasTargets()) {
 			turnAway(villager);
@@ -665,6 +728,8 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 			return;
 
 		for (Slot slot : slots) {
+			if (slot == null)
+				continue;
 			for (Shift shift : Shift.VALUES) {
 				UUID id = slot.workers[shift.ordinal()];
 				if (id == null)
@@ -693,7 +758,8 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	/** Sacks everybody on the rack. What breaking the block does. */
 	public void dismissAll() {
 		for (Slot slot : slots)
-			dismissAll(slot);
+			if (slot != null)
+				dismissAll(slot);
 	}
 
 	private void dismissAll(Slot slot) {
@@ -782,12 +848,19 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	@Override
 	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
 		super.loadAdditional(tag, registries);
-		slots.clear();
+		java.util.Arrays.fill(slots, null);
 		reserved = tag.getInt("Reserved");
 
 		ListTag racked = tag.getList("Slots", Tag.TAG_COMPOUND);
-		for (int i = 0; i < racked.size() && slots.size() < MAX_SLOTS; i++) {
+		for (int i = 0; i < racked.size(); i++) {
 			CompoundTag entry = racked.getCompound(i);
+			// The place is saved with the job, because the rack has gaps and a job's place in it is the
+			// player's statement of what matters most. An entry with no index is from before that was
+			// true, and packing those from the top reproduces the order they used to have.
+			int index = entry.contains("Index") ? entry.getInt("Index") : i;
+			if (index < 0 || index >= MAX_SLOTS || slots[index] != null)
+				continue;
+
 			ItemStack hat = ItemStack.parseOptional(registries, entry.getCompound("Hat"));
 			if (hat.isEmpty())
 				continue;
@@ -807,7 +880,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 				if (workers.hasUUID(shift.getSerializedName()))
 					slot.workers[shift.ordinal()] = workers.getUUID(shift.getSerializedName());
 
-			slots.add(slot);
+			slots[index] = slot;
 		}
 	}
 
@@ -817,8 +890,15 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		tag.putInt("Reserved", reserved);
 
 		ListTag racked = new ListTag();
-		for (Slot slot : slots) {
+		for (int index = 0; index < MAX_SLOTS; index++) {
+			Slot slot = slots[index];
+			// A gap is saved by not being saved. An empty stack cannot be encoded at all, which is how
+			// a job left holding a zero-count hat used to take the whole block entity down with it.
+			if (slot == null || slot.hat.isEmpty())
+				continue;
+
 			CompoundTag entry = new CompoundTag();
+			entry.putInt("Index", index);
 			entry.put("Hat", slot.hat.save(registries));
 
 			ListTag shifts = new ListTag();

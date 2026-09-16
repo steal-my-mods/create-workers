@@ -110,10 +110,12 @@ public class WorkerStationMenu extends MenuBase<WorkerStationBlockEntity> {
 	/**
 	 * Shift-clicking, which is the only way a stack moves without the cursor.
 	 *
-	 * <p>A hat out of the rack goes to the player; anything from the player's inventory is offered to
-	 * the rack, which takes it only if it is a hard hat and only at the end of the list — the rack is
-	 * an ordered list of jobs and its order is load-bearing, so there is exactly one place a new one
-	 * can go.
+	 * <p>Vanilla's shape exactly, and the last two lines are the ones that matter.
+	 * {@code moveItemStackTo} <b>shrinks the stack it was handed in place</b> rather than replacing it,
+	 * and the stack it is handed here is the live one in the rack — so a hat shift-clicked out left the
+	 * job holding a zero-count stack, which is a thing the block entity cannot save and which took the
+	 * server down with "Cannot encode empty ItemStack" the next time the chunk was written. Emptying the
+	 * source slot through {@code setByPlayer} is what ends the job instead.
 	 */
 	@Override
 	public ItemStack quickMoveStack(Player player, int index) {
@@ -122,18 +124,20 @@ public class WorkerStationMenu extends MenuBase<WorkerStationBlockEntity> {
 			return ItemStack.EMPTY;
 
 		ItemStack stack = slot.getItem();
-		int rackSlots = WorkerStationBlockEntity.MAX_SLOTS;
-		boolean fromRack = index < rackSlots;
-
 		ItemStack before = stack.copy();
-		if (fromRack) {
-			if (!moveItemStackTo(stack, rackSlots, slots.size(), false))
+		int rackSlots = WorkerStationBlockEntity.MAX_SLOTS;
+
+		if (index < rackSlots) {
+			if (!moveItemStackTo(stack, rackSlots, slots.size(), true))
 				return ItemStack.EMPTY;
 		} else if (!moveItemStackTo(stack, RACK_SLOT_START, rackSlots, false)) {
 			return ItemStack.EMPTY;
 		}
 
-		slot.setChanged();
+		if (stack.isEmpty())
+			slot.setByPlayer(ItemStack.EMPTY);
+		else
+			slot.setChanged();
 		return before;
 	}
 }

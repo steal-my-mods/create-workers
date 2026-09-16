@@ -74,6 +74,9 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 		nameBox = new EditBox(font, 0, 0, EDIT_WIDTH, 10, Component.empty());
 		nameBox.setMaxLength(MAX_NAME_LENGTH);
 		nameBox.setBordered(false);
+		// Dark text on a light panel with vanilla's drop shadow underneath it reads as a smear, the
+		// shadow being a darkened copy of a colour that was already dark.
+		nameBox.setTextShadow(false);
 		nameBox.setTextColor(LABEL);
 		nameBox.visible = false;
 		addRenderableWidget(nameBox);
@@ -112,7 +115,9 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 
 		WorkerStationBlockEntity.Slot job = jobAt(index);
 		if (job == null) {
-			if (index == jobCount())
+			// Every empty place takes a hat, so there is nothing to point at -- except on a rack with
+			// nothing in it at all, where one line says what the block is for.
+			if (index == 0 && jobCount() == 0)
 				graphics.drawString(font, Component.translatable("createworkers.station.empty_slot"), jx + NAME_X,
 					jy + 5, LABEL_FAINT, false);
 			return;
@@ -141,9 +146,13 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 				runs);
 		}
 
-		if (index % WorkerStationMenu.ROWS_PER_COLUMN != 0)
+		// Up and down run through the whole rack rather than stopping at the foot of a column, because
+		// the order they change is one order of twelve -- the second column is its second half, not a
+		// separate list. Either may swap a job into an empty place, which is how a job is moved down
+		// without another one to trade with.
+		if (index > 0)
 			arrow(graphics, jx + ARROW_X, jy, true);
-		if (jobAt(index + 1) != null && (index + 1) % WorkerStationMenu.ROWS_PER_COLUMN != 0)
+		if (index < WorkerStationBlockEntity.MAX_SLOTS - 1)
 			arrow(graphics, jx + ARROW_X, jy + ARROW_HEIGHT + 2, false);
 	}
 
@@ -312,12 +321,11 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 			}
 
 			int ax = jx + ARROW_X;
-			if (index % WorkerStationMenu.ROWS_PER_COLUMN != 0
-				&& within(mouseX, mouseY, ax, jy, ARROW_WIDTH, ARROW_HEIGHT)) {
+			if (index > 0 && within(mouseX, mouseY, ax, jy, ARROW_WIDTH, ARROW_HEIGHT)) {
 				send(StationRosterPacket.move(index, index - 1));
 				return true;
 			}
-			if (jobAt(index + 1) != null && (index + 1) % WorkerStationMenu.ROWS_PER_COLUMN != 0
+			if (index < WorkerStationBlockEntity.MAX_SLOTS - 1
 				&& within(mouseX, mouseY, ax, jy + ARROW_HEIGHT + 2, ARROW_WIDTH, ARROW_HEIGHT)) {
 				send(StationRosterPacket.move(index, index + 1));
 				return true;
@@ -353,8 +361,7 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 
 	private int jobCount() {
 		WorkerStationBlockEntity station = menu.contentHolder;
-		return station == null ? 0 : station.slots()
-			.size();
+		return station == null ? 0 : station.jobCount();
 	}
 
 	/** Asked several times a row, several times a frame, so it indexes rather than copies. */

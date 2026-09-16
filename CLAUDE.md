@@ -709,6 +709,22 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   the station out of the sender's open menu and gates on `stillValid`, which is the same check that
   closes the menu when the player walks away or the block is broken. The rack's order is a priority
   lever and its shift toggles hire and fire villagers, so neither may be driven from across the world.
+- **The rack is a fixed set of places with gaps allowed, not a list that closes up.** A job's place is
+  the player's statement of what matters most, so it has to be theirs to choose — a hat you know is
+  your least important goes at the bottom before anything is above it — and taking one out of the
+  middle must not promote everything below it into a priority nobody asked for. It is also what an
+  inventory already is: a dense list backing one disagrees with vanilla about what a slot is, and that
+  disagreement is a crash, not an inconvenience (see the next entry). `putHat` places at an index,
+  `addHat` finds the first free one for the right-click path, and `moveSlot` **swaps** rather than
+  inserts, which is how a job is pushed into an empty place above it.
+- **`moveItemStackTo` shrinks the stack it was handed, in place.** The stack a menu hands it is the
+  live one in the inventory, so a `quickMoveStack` that does not empty its source slot afterwards
+  leaves a slot holding a **zero-count** stack. Nothing notices until the chunk is written, at which
+  point `ItemStack.save` throws "Cannot encode empty ItemStack" and takes the server down — which is
+  exactly how shift-clicking a hat out of a station crashed. Follow vanilla's shape exactly: after the
+  move, `stack.isEmpty()` means `slot.setByPlayer(ItemStack.EMPTY)`, never `setChanged()` alone.
+  `shiftClickingAHatOutEndsItsJob` reproduces it end to end, saving the block entity at the finish
+  because that is where the crash actually was, and is mutation-checked by dropping the clear.
 - **A death has to be followed by a promotion, or the fill order only holds while a roster grows.**
   `nextVacancy` puts new workers in the right place; it cannot move the ones already there. Three jobs
   on two shifts with four villagers gives a complete day crew and one evening worker, and losing a day

@@ -214,6 +214,33 @@ Shift 3 (night)    ···  0/3
 If a part-staffed evening shift is useless on their line, they can see that and know to breed more
 villagers. If it is fine, nothing has been taken away from them.
 
+### The order, written out once
+
+The fill order is **one order over every place on the rack**, read shift first and then down the rack.
+With three jobs and two shifts it is:
+
+| # | Place | | # | Place |
+|---|---|---|---|---|
+| 1 | job 1, day | | 4 | job 1, evening |
+| 2 | job 2, day | | 5 | job 2, evening |
+| 3 | job 3, day | | 6 | job 3, evening |
+
+Villagers fill it from the top. So four villagers staff the whole day shift and then start the evening;
+they never leave a day job empty to begin one.
+
+**Rebalancing restores that order wherever it breaks, and it does not care why.** A vacancy is filled
+from the *last* occupied place in the order, so:
+
+- Job 1's day worker dies while job 3's day worker lives → job 3's worker moves up to job 1. **Within
+  a shift**, and the promoted worker's route changes, because the hat changes with the job.
+- Job 1's day worker dies while only an evening worker is spare → the evening worker moves to days.
+  **Across shifts.**
+
+Those are the same rule, not two. Which is the answer to "does it rebalance within the first shift as
+well": yes, and for the same reason — the rack is a priority order, and a short crew should be doing
+the work that matters most. `losingAnEarlyJobPromotesFromALaterOneOnTheSameShift` and
+`losingADayWorkerPromotesSomebodyUpToIt` pin one case each.
+
 ### And it has to rebalance, or the rule only holds while the roster grows
 
 Filling in order places new workers correctly and does nothing about the ones already placed, which

@@ -133,7 +133,8 @@ public class WorkerStationBlock extends BaseEntityBlock {
 		if (level.getBlockEntity(pos) instanceof WorkerStationBlockEntity station) {
 			station.dismissAll();
 			for (WorkerStationBlockEntity.Slot slot : station.slots())
-				Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), slot.hat());
+				if (slot != null)
+					Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), slot.hat());
 		}
 		super.onRemove(state, level, pos, newState, movedByPiston);
 	}
