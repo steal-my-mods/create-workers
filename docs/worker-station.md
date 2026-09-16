@@ -36,27 +36,38 @@ that *is* the mod's identity on a project page. Against that, the station gains 
 already get from holding hats — a station with three hats in it **is** a crew of three, with no new
 concepts and no new state.
 
-### So does direct assignment, and it is worth naming what it produces
+### Direct assignment stays, for villagers as much as for endermen
 
-Right-clicking a villager with a programmed hat stays. But rather than "the same thing, done by
-hand", it is better understood as producing a different *kind* of worker — an **unmanaged** one:
+Nothing here removes a hiring route. Right-clicking a villager with a programmed hat keeps working
+exactly as it does today, and both Ponder scenes keep teaching it. The station is the path a base
+takes when it has outgrown doing that by hand — not a replacement for it.
 
-| | Hired from a station | Hired by hand |
-|---|---|---|
-| Belongs to a crew | Yes | No |
-| Keeps a shift | Yes | No — always on |
-| Replaced when lost | Yes | No |
-| Eats | Yes, on its own | Yes, but the player feeds it |
+What differs is only whether the worker belongs to a **crew**:
 
-That is not a second-class citizen so much as the only kind of worker an **enderman** can ever be:
-no profession, no point of interest, nothing for a job board to hire. So the hand-hired villager and
-the enderman converge on one idea — the unmanaged worker, always on, no crew, no self-healing — which
-is a coherent thing to have rather than an awkward leftover.
+| | Station-hired villager | Hand-hired villager | Enderman |
+|---|---|---|---|
+| Keeps working hours | Yes, its crew's shift | **Yes, the server's hours** | No — exempt |
+| Sleeps, eats | Yes | Yes | No |
+| Belongs to a crew | Yes | No | No |
+| Replaced when lost | Yes, automatically | No | No |
+
+An earlier draft of this table had a hand-hired villager as "always on, no hours", lumped in with
+endermen under one idea called the unmanaged worker. **That was wrong, and it would have been a
+regression**: hand-hired villagers keep hours *today*, and they sleep in beds *today*. Introducing a
+station must not quietly take that away from every worker hired before it existed.
+
+So "unmanaged" means no crew and no automatic replacement. It does not mean no schedule. The hours a
+hand-hired villager keeps are the server's, from `clockOff`/`clockOn` — which is exactly what ships
+now, and becomes the default shift once shifts exist.
+
+The enderman column is different for a reason that has nothing to do with this block: it has no
+profession and no point of interest, so there is no job board that could ever hire it. That is why it
+stays a hand-hire, and it is the same reason it is exempt from hours.
 
 It also keeps the small build small. One worker between two depots should not need a block, a shaft
-and a power source, and both Ponder scenes still teach the thing the player does first.
+and a power source.
 
-The honest cost of keeping it: the `RESET_PROOF_LEVEL` trick stays alive for that path, because a
+The honest cost of keeping the route: the `RESET_PROOF_LEVEL` trick stays alive for it, because a
 hand-hired worker still has no job site. See [What it lets us delete](#what-it-lets-us-delete).
 
 ## How hiring works
@@ -119,26 +130,97 @@ need to, because a line that depends on three workers is *one* station with thre
 inside a station is a loop over its own slots; coordination between stations would be a distributed
 problem, and the way to avoid a distributed problem is not to create one.
 
-### What a station does with a crew it cannot complete
+### But the station must not decide that for the player
 
-It should **hold the shift closed**. A shift it cannot fully staff does not run: the hats stay in
-their slots, no villager is hired into it, and the screen says so.
+A first pass concluded that a shift which cannot be fully staffed should not open at all. **That is
+overreach**, because the chain above is only one of the shapes a line can have, and the station cannot
+tell which it is looking at:
+
+| The player built | A part-staffed shift is |
+|---|---|
+| A chain, one worker per hop | Broken — nothing comes out |
+| Two workers per role, for throughput or redundancy | Fine, at reduced rate |
+| Several unrelated jobs in one station | Fine; the unstaffed jobs stop and the rest carry on |
+
+Nothing in a programme declares which of those it is. A hat is a list of inventories; it does not say
+"my output is worker 2's input", and it does not say "I am a spare copy of worker 1". The mod could
+*infer* some of it — identical programmes are redundant copies, and a `DEPOSIT` target that is
+another hat's `TAKE` target is a chain link — but that is a pile of fragile inference in service of
+overriding a decision the player is better placed to make.
+
+**So the station fills in order and does not second-guess.** Two policies, both defensible without
+knowing the topology:
+
+- **Fill slots in list order.** Which makes *slot order the player's way of saying what matters most*
+  — put one of each role first and the spares after, and a short-handed station gives you complete
+  coverage before it gives you redundancy. That is a lever the player already understands, needs no
+  new UI concept, and beats any rule we could invent.
+- **Fill one shift before starting the next.** This one survives every topology above: concentrating
+  a short crew on one window is never worse than scattering it across three, and in the chain case it
+  is the difference between a working factory and nothing at all.
+
+And **fill the daytime shift first**, so an understaffed factory runs during the hours the player is
+most likely to be standing in it. A factory that only works while you are asleep is one you cannot
+debug.
+
+What the station owes the player is not a judgement but a **clear readout** — which slots are filled,
+which are not, and on which shift:
 
 ```
-Shift 1 (day)      ███  3/3   running
-Shift 2 (evening)  ██·  2/3   short one worker -- not running
-Shift 3 (night)    ···  0/3   no crew
+Shift 1 (day)      ███  3/3
+Shift 2 (evening)  ██·  2/3
+Shift 3 (night)    ···  0/3
 ```
 
-Two refinements that fall out of the chain argument:
+If a part-staffed evening shift is useless on their line, they can see that and know to breed more
+villagers. If it is fine, nothing has been taken away from them.
 
-- **Do not fire a crew that becomes incomplete mid-shift.** If a worker dies at noon, the remaining
-  two will back their own line up and stop on their own within a few minutes, and the station will
-  usually have refilled the slot before that matters. Tearing down a running shift the instant
-  somebody dies would be a far more violent failure than the one it prevents.
-- **Fill the daytime shift first**, so an understaffed factory runs during the hours the player is
-  most likely to be standing in it. A factory that only works while you are asleep is one you cannot
-  debug.
+One related restraint, from the same principle: **do not fire a crew that becomes incomplete
+mid-shift.** If a worker dies at noon, the remaining crew either carries on usefully or backs its own
+line up and stops within minutes — and the station will usually have refilled the slot before that
+matters. Tearing down a running shift the instant somebody dies would be a far more violent failure
+than the one it prevents.
+
+## How hats get in and out
+
+A station needs slots managed and shifts assigned, so **yes, it needs a screen** — but it should not
+*only* be a screen.
+
+- **The block is an inventory.** Right-click with a hat to drop one in, right-click empty-handed to
+  take the last one back. That covers a one-slot or two-slot station with no interface at all, the
+  way a lectern or a jukebox does.
+- **The screen is for arrangement**: which slot holds which hat, which shift each slot belongs to,
+  and the readout above. That is the part a right-click cannot express, and it is the part that
+  matters once a station holds more than about three jobs.
+- **Because it is an inventory, Create can fill it** — a funnel or an arm feeding hats into a station.
+  Almost certainly a curiosity rather than a real workflow, but it costs nothing to allow and refusing
+  it would be the odd choice in a Create addon.
+
+Physical hats rather than stored programmes, deliberately. The hat is a real item that the worker
+wears, comes back when they die, and had to be crafted — so a station's capacity is bounded by
+something the player actually built, and every existing behaviour (the drop, the clearing recipe, the
+tooltip) keeps working with no special case for "a job that has no hat".
+
+## How many jobs one station holds
+
+Capped, for three reasons that all point at a similar number:
+
+1. **Every slot is a villager that will exist.** This mod counts what one worker costs a server tick
+   by tick; a station is a multiplier on that count, and it deserves the same treatment `maxTargets`
+   gets — a configurable ceiling, documented as a server cost rather than a taste.
+2. **The POI ticket count is fixed at registration.** `maxTickets` belongs to the point-of-interest
+   *type*, not to the block, so whatever cap is chosen has to be baked in when the type is registered.
+   That makes it a real ceiling rather than a soft one.
+3. **A line with more roles than that is two lines.** The roster framing suggests a modest number by
+   construction.
+
+**One flat list of slots, each holding a hat and tagged with a shift**, rather than a grid of roles
+times shifts. Simpler to cap, simpler to order — which matters, because slot order is now the
+player's priority lever — and more flexible: a role can run three shifts while another runs one,
+which a grid would forbid for no reason.
+
+Twelve is a reasonable starting cap. Three shifts of four roles is already a serious line and twelve
+villagers is already a serious village.
 
 ## Coming back: the self-healing part, and its limit
 
@@ -241,7 +323,7 @@ Two pieces of existing complexity fall out, both documented as traps today:
    a station *holds* one, so the behaviour never fires on it — and the trick of holding workers at
    trade level 2 to dodge it, along with stashing and restoring the real level, stops being needed
    for station-hired workers. (A hand-hired worker still has no job site, so the hack stays for that
-   path until hand-hiring also assigns one.)
+   path — which is the price of keeping direct assignment, and it is worth paying.)
 2. **It unblocks trades.** With a real job site and a real trade level, a worker is an ordinary
    villager in every respect that matters, which removes the mechanical objection raised in
    [shift-rotation.md](shift-rotation.md).
@@ -262,12 +344,13 @@ Which is a genuinely interesting choice rather than a strictly-better option on 
 
 ## Open questions
 
-1. **How does a station get programmed?** Two shapes: you put already-programmed hats into it (no new
-   UX at all, and the existing click-to-select flow is untouched), or you programme the station
-   itself and it stamps blank hats. The first is far cheaper and probably right.
-2. **May one station run two different programmes?** With hats in slots this is free — different hats
-   in different slots — and it is genuinely useful: a day crew on one beat and a night crew on
-   another. Worth not accidentally forbidding.
+1. **Should slot order be visible as priority?** It is load-bearing now — it is how a player says
+   which roles matter most when the village is short — so the screen probably has to show it as an
+   order rather than as an unordered grid, and let it be rearranged. That is more UI than a plain
+   container.
+2. **How does a station cope with a line too big for its slots?** Raise the cap, or let a station name
+   another it depends on — an explicit link, never an inferred one. Not worth building before someone
+   hits it.
 3. **What happens when a station is broken with workers out?** Probably: every worker it hired retires
    on the spot, dropping its hat where it stands. The alternative — orphaned workers that carry on
    forever with no employer — is the invisible-failure problem all over again.
