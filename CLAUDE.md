@@ -139,6 +139,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `block/WorkerStationMenu` | The rack as real slots, over Create's `MenuBase`. Its geometry constants are shared with the screen, because slots are placed before any screen exists |
 | `client/WorkerStationScreen` | The rack arranged: shift toggles, order arrows, staffing readout. Reads the block entity, never its own copy |
 | `net/StationRosterPacket` | The two edits that are not an item — which shifts a job runs, and where it sits |
+| `net/StationRenamePacket` | Naming a job, on its hat's `CUSTOM_NAME`, with no anvil and no experience |
 | `registry/CWMenuTypes` | Screens this mod opens. **Reads the open packet's buffer itself**, because `MenuBase` cannot |
 | `registry/CWCapabilities` | What other machines can reach into: the station's rack, and nothing else |
 | `registry/CWPoiTypes` | The station as a village workstation. `maxTickets` is the largest roster the mod allows, because it belongs to the *type*; the block holds back the difference |
@@ -685,9 +686,18 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   layout depends on must be true on both sides at that moment — which is why the rack's `getSlots()`
   returns the hard `MAX_SLOTS` and never the configured capacity, the config being a server setting
   that merely usually reaches a client in time. And since `Slot.x`/`y` are final in 1.21, a window that
-  grew and shrank with the number of jobs would mean rebuilding the menu every time a hat moved; the
-  screen draws every row instead. The row count is the number to revisit after playtesting, not the
-  mechanism.
+  grew and shrank with the number of jobs would mean rebuilding the menu every time a hat moved — so
+  every place is drawn whether or not it holds a job, and **twelve of them go in two columns of six**.
+  One column of twelve made a panel 342 pixels tall, which fits nobody's screen at a GUI scale anybody
+  chooses. A rack read down one column and then down the other is still a rack.
+- **A layout is testable even though a screen is not.** Client classes do not load on a dedicated
+  server, so nothing can render `WorkerStationScreen` — but a menu's slot positions are ordinary
+  arithmetic in a common class, and a window that does not fit shows up there first.
+  `theStationScreenLaysOutInsideItsPanel` asserts every slot is inside the panel, that no two share a
+  position, that the second column starts level with the first, and that the panel is short enough to
+  fit a screen. Mutation-checked by putting the rack back in one column, which it catches as a slot
+  hanging out of the bottom. Write geometry into the *menu*, never into the screen, so it stays
+  reachable.
 - **The screen reads the block entity, not a copy threaded through the menu.** `WorkerStationBlockEntity`
   overrides `getUpdateTag`/`getUpdatePacket` and sends itself whole whenever its rack changes, so shift
   toggles, who is wearing what and the staffing readout are all live — a worker hired or lost while

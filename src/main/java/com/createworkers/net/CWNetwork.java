@@ -14,6 +14,9 @@ public class CWNetwork {
 		registrar.playToServer(StationRosterPacket.TYPE, StationRosterPacket.STREAM_CODEC,
 			StationRosterPacket::handle);
 
+		registrar.playToServer(StationRenamePacket.TYPE, StationRenamePacket.STREAM_CODEC,
+			StationRenamePacket::handle);
+
 		registrar.playToClient(WorkerStatePacket.TYPE, WorkerStatePacket.STREAM_CODEC,
 			WorkerStatePacket::handle);
 	}

@@ -269,8 +269,8 @@ A hard hat can already be renamed — `CUSTOM_NAME` is a data component, it surv
 return to a slot, and it shows in the tooltip — so an anvil already half-solves this. Two small
 additions make it real:
 
-- **A rename field in the station screen.** No anvil, no experience cost, and it is right there while
-  you are arranging slots. Naming a job "Smelting feed" is a label, not an enchantment, and should not
+- **A rename field in the station screen** *(built)*. No anvil, no experience cost, and it is right
+  there while you are arranging slots. Naming a job "Smelting feed" is a label, not an enchantment, and should not
   cost a level. Create names its Frogports and Train Stations in-block for the same reason.
 - **A named hat names its wearer.** Copy the hat's custom name onto the villager when it is employed,
   and clear it on retirement. Villagers never despawn, so there is no persistence side effect, and the
@@ -446,10 +446,13 @@ Which is a genuinely interesting choice rather than a strictly-better option on 
 
 ## Open questions
 
-1. **The screen's shape.** Built, but sized before anyone used it: it draws all twelve rows whether
-   or not the rack holds twelve jobs, because a `Slot`'s position is final once the menu is built and
-   a window that grew with the rack would mean rebuilding the menu on every change. The rename field
-   is also still missing. Both are questions for after somebody has opened it.
+1. **The screen's shape.** Built, and rebuilt once after the first version turned out not to fit a
+   screen: twelve jobs go in two columns of six rather than one column of twelve, because a `Slot`'s
+   position is final once the menu is built and a window that grew with the rack would mean rebuilding
+   the menu on every change. It is drawn in vanilla's own palette and bevels rather than in a texture,
+   which keeps it out of anybody's art. Renaming is in, on the hat's `CUSTOM_NAME`. What is still not
+   is the other half of that idea — **a named hat naming its wearer**, which is where the diagnostic
+   value actually is.
 2. **How does a station cope with a line too big for its slots?** Raise the cap, or let a station name
    another it depends on — an explicit link, never an inferred one. Not worth building before someone
    hits it.

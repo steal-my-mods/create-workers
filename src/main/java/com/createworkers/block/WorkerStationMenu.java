@@ -27,12 +27,34 @@ public class WorkerStationMenu extends MenuBase<WorkerStationBlockEntity> {
 
 	/**
 	 * The screen's geometry, declared here because the menu has to place its slots before any screen
-	 * exists and the two must agree exactly.
+	 * exists and the two must agree exactly — a {@code Slot}'s position is final once set.
+	 *
+	 * <p><b>Two columns of six, not one column of twelve.</b> Twelve rows stacked made a window over
+	 * three hundred pixels tall, which does not fit a screen at any GUI scale a player would choose.
+	 * Splitting it is what lets the rack keep its twelve jobs without a scrollbar, and a rack read in
+	 * two columns is still a rack: the order runs down the first and then down the second.
 	 */
-	public static final int PANEL_WIDTH = 214;
-	public static final int ROW_HEIGHT = 18;
-	public static final int FIRST_ROW_Y = 30;
-	public static final int SLOT_X = 8;
+	public static final int ROWS_PER_COLUMN = 6;
+	public static final int COLUMN_WIDTH = 160;
+	public static final int FIRST_COLUMN_X = 8;
+	public static final int SECOND_COLUMN_X = 178;
+	public static final int FIRST_ROW_Y = 22;
+	public static final int ROW_HEIGHT = 20;
+
+	public static final int INVENTORY_X = 92;
+	public static final int INVENTORY_Y = 162;
+	public static final int PANEL_WIDTH = SECOND_COLUMN_X + COLUMN_WIDTH + FIRST_COLUMN_X;
+	public static final int PANEL_HEIGHT = 244;
+
+	/** The left edge of the job at {@code index}, its well included. */
+	public static int columnX(int index) {
+		return index < ROWS_PER_COLUMN ? FIRST_COLUMN_X : SECOND_COLUMN_X;
+	}
+
+	/** The top edge of the job at {@code index}, its well included. */
+	public static int rowY(int index) {
+		return FIRST_ROW_Y + (index % ROWS_PER_COLUMN) * ROW_HEIGHT;
+	}
 
 	public WorkerStationMenu(MenuType<?> type, int id, Inventory inventory, RegistryFriendlyByteBuf buf) {
 		super(type, id, inventory, buf);
@@ -71,16 +93,14 @@ public class WorkerStationMenu extends MenuBase<WorkerStationBlockEntity> {
 			return;
 
 		for (int i = 0; i < WorkerStationBlockEntity.MAX_SLOTS; i++)
-			addSlot(new SlotItemHandler(contentHolder.rack(), i, SLOT_X + 1, FIRST_ROW_Y + 1 + i * ROW_HEIGHT) {
+			addSlot(new SlotItemHandler(contentHolder.rack(), i, columnX(i) + 1, rowY(i) + 1) {
 				@Override
 				public int getMaxStackSize() {
 					return 1;
 				}
 			});
 
-		// The screen pushes the rows it is not showing off-screen and moves the player's inventory up
-		// to meet the last one, so these are only where they start.
-		addPlayerSlots(SLOT_X + 1, FIRST_ROW_Y + WorkerStationBlockEntity.MAX_SLOTS * ROW_HEIGHT + 20);
+		addPlayerSlots(INVENTORY_X + 1, INVENTORY_Y + 1);
 	}
 
 	@Override

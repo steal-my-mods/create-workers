@@ -21,6 +21,8 @@ import com.simibubi.create.foundation.utility.IInteractionChecker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -79,6 +81,9 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * block. The config caps slots <em>below</em> this; nothing can raise it.
 	 */
 	public static final int MAX_SLOTS = 12;
+
+	/** As long a name as an anvil allows. Checked here too: a packet is not the sender's to size. */
+	private static final int MAX_NAME_LENGTH = 32;
 
 	/** How often the station looks over its roster. */
 	private static final int STAFFING_INTERVAL = 20;
@@ -294,6 +299,28 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 		slot.shifts.clear();
 		slot.shifts.addAll(wanted);
+		changed();
+	}
+
+	/**
+	 * Names a job, or takes its name away again.
+	 *
+	 * <p>The name lives on the hat rather than on the slot, so it survives the hat being taken out,
+	 * moved down the rack or dropped by a worker that died — and it is the same {@code CUSTOM_NAME} an
+	 * anvil would have set, so nothing new has to be saved or synced for it.
+	 */
+	public void renameJob(int index, String name) {
+		if (index < 0 || index >= slots.size())
+			return;
+
+		ItemStack hat = slots.get(index).hat;
+		String trimmed = name.trim();
+		if (trimmed.isEmpty())
+			hat.remove(DataComponents.CUSTOM_NAME);
+		else
+			hat.set(DataComponents.CUSTOM_NAME,
+				Component.literal(trimmed.length() > MAX_NAME_LENGTH ? trimmed.substring(0, MAX_NAME_LENGTH)
+					: trimmed));
 		changed();
 	}
 

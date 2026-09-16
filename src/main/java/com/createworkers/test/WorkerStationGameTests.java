@@ -31,6 +31,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
@@ -580,6 +581,49 @@ public class WorkerStationGameTests {
 					.size());
 		helper.assertTrue(menu.getSlot(1)
 			.hasItem(), "in the place that was empty");
+		helper.succeed();
+	}
+
+
+	/**
+	 * Every slot the station's screen lays out is inside its panel, and no two of them are in the same
+	 * place.
+	 *
+	 * <p>The only automated check there is on a layout. The screen itself cannot be tested — client
+	 * classes do not load on a dedicated server — but a menu's slot positions are ordinary arithmetic in
+	 * a common class, and they are where a window that does not fit shows up first: the rack was one
+	 * column of twelve before it was two of six, which made a panel over three hundred pixels tall and
+	 * fitted on nobody's screen.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void theStationScreenLaysOutInsideItsPanel(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+
+		Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+		WorkerStationMenu menu = WorkerStationMenu.create(1, player.getInventory(), station(helper));
+
+		// A window taller than this does not fit a 1080p screen at the GUI scale most players use.
+		helper.assertTrue(WorkerStationMenu.PANEL_HEIGHT <= 256,
+			"the panel should fit a screen, and it is " + WorkerStationMenu.PANEL_HEIGHT + " tall");
+
+		Set<Long> taken = new java.util.HashSet<>();
+		for (Slot slot : menu.slots) {
+			helper.assertTrue(slot.x >= 0 && slot.x + 16 <= WorkerStationMenu.PANEL_WIDTH,
+				"a slot at x=" + slot.x + " hangs outside a panel " + WorkerStationMenu.PANEL_WIDTH + " wide");
+			helper.assertTrue(slot.y >= 0 && slot.y + 16 <= WorkerStationMenu.PANEL_HEIGHT,
+				"a slot at y=" + slot.y + " hangs outside a panel " + WorkerStationMenu.PANEL_HEIGHT + " tall");
+			helper.assertTrue(taken.add((long) slot.x << 32 | slot.y),
+				"two slots share the position " + slot.x + "," + slot.y);
+		}
+
+		// The rack is read down one column and then down the other, so the second column's jobs must
+		// start again at the top rather than carrying on below the first.
+		helper.assertTrue(menu.getSlot(WorkerStationMenu.ROWS_PER_COLUMN).y == menu.getSlot(0).y,
+			"the second column should start level with the first");
+		helper.assertTrue(menu.getSlot(WorkerStationMenu.ROWS_PER_COLUMN).x > menu.getSlot(0).x,
+			"and to the right of it");
 		helper.succeed();
 	}
 

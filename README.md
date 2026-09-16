@@ -66,8 +66,9 @@ hires a replacement, so a line never quietly runs short over one lost villager. 
 stations repairs its own workforce.
 
 Right-click the station empty-handed to open the rack. Each job shows its hat, three shift toggles —
-dark for off, green for wanted, bright green for covered — and arrows to move it up or down the order.
-Underneath is the count for each crew. Taking a hat out ends that job and puts its workers out of work,
+sunken for off, yellow for wanted, green for covered — and arrows to move it up or down the order.
+Underneath is the count for each crew. **Click a job's name to rename it**, no anvil and no experience:
+a hat called "Smelting feed" is a job you can find again when something goes wrong with it. Taking a hat out ends that job and puts its workers out of work,
 leaving the rest of the rack running; breaking the block does the same to all of them.
 
 A station is also an ordinary inventory, so a funnel or a Mechanical Arm can stock it with hats.
