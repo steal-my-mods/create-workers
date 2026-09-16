@@ -116,6 +116,12 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		private ItemStack hat;
 		private final EnumSet<Shift> shifts = EnumSet.of(Shift.DAY);
 		private final UUID[] workers = new UUID[Shift.VALUES.length];
+		/**
+		 * When each worker was last found in the world, and the whole of how a station now tells a
+		 * worker that died from one whose chunk is simply away. Runtime only: a station that has just
+		 * loaded has not failed to find anybody yet, so the first look starts the clock.
+		 */
+		private final long[] seen = new long[Shift.VALUES.length];
 
 		private Slot(ItemStack hat) {
 			this.hat = hat;
@@ -163,21 +169,6 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * not save ("Cannot encode empty ItemStack"). A fixed array is what an inventory already is.
 	 */
 	private final Slot[] slots = new Slot[MAX_SLOTS];
-
-	/**
-	 * How many of this block's point-of-interest tickets the station is holding back from villagers.
-	 *
-	 * <p>{@code maxTickets} is a property of the POI <em>type</em>, so every station advertises room
-	 * for the largest roster the mod allows however few hats are actually in it. Left alone, a station
-	 * with one job would have three dozen villagers walk across the village to be turned away. So the
-	 * station takes its own surplus tickets and releases them one at a time as vacancies appear,
-	 * which makes "free tickets" mean "openings" — the number vanilla's own {@code AcquirePoi} then
-	 * enforces for us, exactly as it enforces one librarian per lectern.
-	 *
-	 * <p>Persisted, because the tickets themselves are: a {@code PoiRecord} saves its free count with
-	 * the chunk section, so a station that forgot what it was holding would leak the difference.
-	 */
-	private int reserved;
 
 	private int untilNextLook;
 
@@ -344,13 +335,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		if (index < 0 || index >= capacity() || slots[index] != null)
 			return false;
 
-		boolean wasEmpty = !hasJob();
 		slots[index] = new Slot(stack.copyWithCount(1));
-		// A station with nothing in it is not a job site at all, so its point of interest -- and with
-		// it every ticket this block was holding -- was thrown away when the last hat came out. The
-		// record about to be created starts full, so anything we thought we were holding is fiction.
-		if (wasEmpty)
-			reserved = 0;
 		changed();
 		return true;
 	}
@@ -435,6 +420,26 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		return true;
 	}
 
+	/**
+	 * Strikes a worker off the moment it stops being one, rather than waiting to notice.
+	 *
+	 * <p>The audit's clock is a backstop for a death the station was not loaded to see. It is a poor
+	 * primary signal, because a corpse is only in the world for the twenty ticks of its death animation
+	 * and a station only looks every twenty — so whether a death was caught promptly or sat out the
+	 * absentee timeout came down to which tick it landed on.
+	 */
+	public void forget(UUID id) {
+		for (Slot slot : slots) {
+			if (slot == null)
+				continue;
+			for (Shift shift : Shift.VALUES)
+				if (id.equals(slot.workers[shift.ordinal()])) {
+					slot.workers[shift.ordinal()] = null;
+					rosterChanged();
+				}
+		}
+	}
+
 	/** @return whether this station has {@code id} down as one of its workers. */
 	public boolean employs(UUID id) {
 		for (Slot slot : slots)
@@ -491,14 +496,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		finishHandovers(server);
 		sackAbsentees(server);
 		rebalance(server);
-		staffUp(server);
 		recruit(server);
-		// Last, and the ordering is the whole of it. Reconciling before hiring leaves the station
-		// advertising the openings it is about to fill for the rest of that tick -- and a villager that
-		// claims one, walks over and is turned away does not simply try again: AcquirePoi puts that
-		// position on a backoff growing to four hundred ticks, so a station that over-advertises even
-		// occasionally teaches the village to stop asking.
-		reconcileTickets(server);
 
 		// Once, at the end. Everything above may have moved several workers, and the screen wants the
 		// answer rather than the working.
@@ -521,48 +519,47 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * difference matters: a station that read "not loaded" as "gone" would hire a second villager onto
 	 * a job somebody is already doing the moment the first walked into a chunk nobody is standing in.
 	 *
-	 * <p>The ticket count settles it in aggregate. Tickets are released by {@code Villager} on death
-	 * and conversion and never on unloading, so the number of them out on loan is the number of
-	 * workers still alive — and comparing that with the size of the roster says <em>how many</em> of
-	 * the ones we cannot see have gone, even though a counter can never say which. When several are
-	 * unaccounted for at once the ones lowest in the fill order are struck off first, on the principle
-	 * that a station short-handed should be short-handed at the bottom of its list; the hat a returning
-	 * worker is actually wearing is then reconciled by the worker itself, which checks on every load
-	 * that its station still has it down.
+	 * <p>So time settles it. Every look that finds a worker stamps it, and one that has not been
+	 * findable for as long as an absentee gets is written off. That covers what nothing else can — a
+	 * worker that died while its station was not loaded to see it — and it is wrong only about a worker
+	 * that was away for minutes and comes back, which sacks itself on load when the roster no longer has
+	 * it down and is hired again a moment later.
+	 *
+	 * <p>This was point-of-interest tickets, which vanilla released on death whether anybody was
+	 * watching or not. That was the better signal and it is gone for a reason: a worker holds no job
+	 * site any more, so nothing releases a ticket for us and there is nothing left to count.
 	 */
 	private void auditRoster(ServerLevel server) {
-		List<Slot> unknownSlots = new ArrayList<>();
-		List<Shift> unknownShifts = new ArrayList<>();
-		int knownAlive = 0;
+		long now = server.getGameTime();
+		int lost = CWConfig.ABSENTEE_TIMEOUT.get();
 
 		for (Slot slot : slots) {
 			if (slot == null)
 				continue;
 			for (Shift shift : Shift.VALUES) {
-				UUID id = slot.workers[shift.ordinal()];
-				if (id == null)
+				int index = shift.ordinal();
+				if (slot.workers[index] == null)
 					continue;
 
-				Entity entity = server.getEntity(id);
-				if (entity == null) {
-					unknownSlots.add(slot);
-					unknownShifts.add(shift);
-				} else if (isStillOurs(entity)) {
-					knownAlive++;
-				} else {
-					slot.workers[shift.ordinal()] = null;
+				Entity entity = server.getEntity(slot.workers[index]);
+				if (entity != null && isStillOurs(entity)) {
+					slot.seen[index] = now;
+					continue;
+				}
+				if (entity != null) {
+					// There, and demonstrably not ours: dead, or wearing somebody else's hat.
+					slot.workers[index] = null;
+					rosterChanged();
+					continue;
+				}
+
+				if (slot.seen[index] == 0L)
+					slot.seen[index] = now;
+				else if (lost > 0 && now - slot.seen[index] > lost) {
+					slot.workers[index] = null;
 					rosterChanged();
 				}
 			}
-		}
-
-		int holding = CWPoiTypes.MAX_TICKETS - server.getPoiManager()
-			.getFreeTickets(worldPosition) - reserved;
-		int gone = knownAlive + unknownSlots.size() - holding;
-		for (int i = unknownSlots.size() - 1; i >= 0 && gone > 0; i--, gone--) {
-			unknownSlots.get(i).workers[unknownShifts.get(i)
-				.ordinal()] = null;
-			rosterChanged();
 		}
 	}
 
@@ -576,86 +573,6 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 			.equals(worldPosition);
 	}
 
-	/**
-	 * Holds back every ticket that is not an actual opening.
-	 *
-	 * <p>Aims at exactly one invariant — free tickets equal vacancies — from whichever side it is
-	 * currently on, so it repairs itself after a load, a config change or a worker dying while the
-	 * station was not there to see it, without any of those needing a case of their own.
-	 */
-	private void reconcileTickets(ServerLevel server) {
-		int wanted = vacancies();
-		int free = server.getPoiManager()
-			.getFreeTickets(worldPosition);
-
-		while (free > wanted && takeTicket(server)) {
-			free--;
-			reserved++;
-			setChanged();
-		}
-		while (free < wanted && releaseTicket(server)) {
-			free++;
-			reserved--;
-			setChanged();
-		}
-		// Never below zero. Reaching for a ticket this station did not hold back means one leaked --
-		// a claimant that wandered off and died somewhere, a release that vanilla refused because the
-		// villager's profession no longer matched -- and the alternative to letting the count go is a
-		// station that can never advertise again, standing there with openings nobody is offered.
-		// Reading the count low only ever makes the roster audit more cautious.
-		if (reserved < 0) {
-			reserved = 0;
-			setChanged();
-		}
-	}
-
-	private boolean takeTicket(ServerLevel server) {
-		return server.getPoiManager()
-			.take(type -> type.is(CWPoiTypes.WORKER_STATION_KEY), (type, pos) -> pos.equals(worldPosition),
-				worldPosition, 1)
-			.isPresent();
-	}
-
-	private boolean releaseTicket(ServerLevel server) {
-		// release() throws rather than returns for a position that was never a point of interest, and
-		// a station whose block state has just changed under it is exactly that.
-		if (!server.getPoiManager()
-			.exists(worldPosition, type -> type.is(CWPoiTypes.WORKER_STATION_KEY)))
-			return false;
-		return server.getPoiManager()
-			.release(worldPosition);
-	}
-
-	/**
-	 * Gives a job to a villager that has walked over for it.
-	 *
-	 * <p>A claimant that arrives when the last opening has gone — the roster shrank, or somebody
-	 * beat it here — is put back the way it came: the ticket returned by hand and the job site
-	 * forgotten, after which {@code ResetProfession} makes it an ordinary unemployed villager again
-	 * within a tick or two.
-	 */
-	private void staffUp(ServerLevel server) {
-		AABB nearby = new AABB(worldPosition).inflate(HIRING_RANGE);
-		for (Villager villager : server.getEntitiesOfClass(Villager.class, nearby, this::hasClaimedThis)) {
-			if (Workers.isEmployed(villager))
-				continue;
-			// A villager killed at its station is unemployed the instant it dies -- our own death
-			// handler takes the hat off it -- but it stays in the world for its death animation,
-			// still holding this block as its job site. Without this the station hires the corpse,
-			// shows the job as covered for a second, and then has to strike it off again when the
-			// entity finally goes.
-
-			Position vacancy = nextVacancy();
-			if (vacancy == null) {
-				turnAway(villager);
-				continue;
-			}
-
-			hire(server, villager, vacancy);
-		}
-	}
-
-	/** A place on the roster: one slot on one shift, whether or not anybody is in it. */
 	private record Position(int slot, Shift shift) {
 	}
 
@@ -681,6 +598,12 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	private void recruit(ServerLevel server) {
 		Position vacancy = nextVacancy();
 		if (vacancy == null)
+			return;
+		// Before anybody is made a Worker, not after. A villager given the profession and then turned
+		// away for an unprogrammed hat would be shielded from ResetProfession with no job to show for
+		// it, which is a villager stuck as a Worker for the rest of the world's life.
+		if (!HardHatItem.getProgram(slots[vacancy.slot()].hat)
+			.hasTargets())
 			return;
 
 		AABB nearby = new AABB(worldPosition).inflate(RECRUIT_RANGE);
@@ -716,19 +639,22 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	/**
 	 * Everything {@code AssignProfessionFromJobSite} used to do on the villager's arrival.
 	 *
-	 * <p>The order is the one {@code docs/professions.md} spells out: the profession first, then the
-	 * brain refresh that goes with any profession change, and the memory last — a refresh rebuilds the
-	 * brain, so a job site set before it is a job site thrown away.
+	 * <p><b>No job site.</b> That is what {@code AssignProfessionFromJobSite} would have set, and what
+	 * normally keeps {@code ResetProfession} from clearing a profession straight back off again — but a
+	 * worker cannot hold one. {@code PoiCompetitorScan} takes every villager whose job site is the same
+	 * position with a matching profession and erases it from all but the one with the most trading
+	 * experience, which for a rack of workers on none apiece is all but one of them, every tick. Losing
+	 * the memory is not the injury; what follows it is, because {@code ResetProfession} then calls
+	 * {@code refreshBrain}, and a refreshed brain is back on the village's hours rather than its crew's.
+	 *
+	 * <p>So the shield is a single point of trading experience, which {@code ResetProfession} also
+	 * refuses to act on and which no two workers can strip from one another. The profession still goes
+	 * on first and the brain refresh second, because a refresh rebuilds the brain.
 	 */
 	private void takeTheJob(ServerLevel server, Villager villager) {
 		villager.setVillagerData(villager.getVillagerData()
 			.setProfession(CWProfessions.WORKER.get()));
 		villager.refreshBrain(server);
-		villager.getBrain()
-			.setMemory(MemoryModuleType.JOB_SITE, GlobalPos.of(server.dimension(), worldPosition));
-		server.getPoiManager()
-			.take(type -> type.is(CWPoiTypes.WORKER_STATION_KEY), (type, pos) -> pos.equals(worldPosition),
-				worldPosition, 1);
 	}
 
 	/** Where a position falls in the fill order, so two of them can be compared. */
@@ -837,23 +763,13 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 	private void hire(ServerLevel server, Villager villager, Position vacancy) {
 		Slot slot = slots[vacancy.slot()];
-		WorkerProgram programme = HardHatItem.getProgram(slot.hat);
-		if (!programme.hasTargets()) {
-			turnAway(villager);
-			return;
-		}
-
-		Workers.employ(villager, slot.hat, programme, GlobalPos.of(server.dimension(), worldPosition),
-			vacancy.shift());
+		Workers.employ(villager, slot.hat, HardHatItem.getProgram(slot.hat),
+			GlobalPos.of(server.dimension(), worldPosition), vacancy.shift());
 		slot.workers[vacancy.shift()
 			.ordinal()] = villager.getUUID();
+		slot.seen[vacancy.shift()
+			.ordinal()] = server.getGameTime();
 		rosterChanged();
-	}
-
-	private void turnAway(Villager villager) {
-		villager.releasePoi(MemoryModuleType.JOB_SITE);
-		villager.getBrain()
-			.eraseMemory(MemoryModuleType.JOB_SITE);
 	}
 
 	/**
@@ -891,7 +807,6 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 				// The ticket has to go back by hand. A sacked absentee is alive and still holding this
 				// block as its job site, so its ticket would stay taken and nobody could ever replace
 				// it -- which is the exact failure this is meant to end.
-				turnAway(worker);
 				drop(worker);
 				slot.workers[shift.ordinal()] = null;
 				rosterChanged();
@@ -943,7 +858,6 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 					continue;
 				}
 
-				turnAway(worker);
 				drop(worker);
 				slot.workers[shift.ordinal()] = null;
 				rosterChanged();
@@ -978,14 +892,6 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	private static void drop(Mob mob) {
 		for (ItemStack stack : Workers.dismiss(mob))
 			mob.spawnAtLocation(stack);
-	}
-
-	private boolean hasClaimedThis(Villager villager) {
-		return villager.getBrain()
-			.getMemory(MemoryModuleType.JOB_SITE)
-			.map(site -> site.pos()
-				.equals(worldPosition))
-			.orElse(false);
 	}
 
 	/**
@@ -1047,7 +953,6 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
 		super.loadAdditional(tag, registries);
 		java.util.Arrays.fill(slots, null);
-		reserved = tag.getInt("Reserved");
 
 		ListTag racked = tag.getList("Slots", Tag.TAG_COMPOUND);
 		for (int i = 0; i < racked.size(); i++) {
@@ -1085,7 +990,6 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	@Override
 	protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
 		super.saveAdditional(tag, registries);
-		tag.putInt("Reserved", reserved);
 
 		ListTag racked = new ListTag();
 		for (int index = 0; index < MAX_SLOTS; index++) {

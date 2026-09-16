@@ -226,8 +226,12 @@ public class WorkerEvents {
 		if (data == null || !data.isEmployed())
 			return;
 
+		// Workers.dismiss rather than data.dismiss: the bookkeeping around it is not optional. It is
+		// what tells the station its worker is gone -- without which a station only finds out on its
+		// own clock, and a corpse is in the world for twenty ticks against a look every twenty -- and
+		// what hands the villager back to vanilla so a cured one can take an ordinary job again.
 		Level level = entity.level();
-		for (ItemStack drop : data.dismiss()) {
+		for (ItemStack drop : Workers.dismiss((Mob) entity)) {
 			ItemEntity item = new ItemEntity(level, entity.getX(), entity.getY(), entity.getZ(), drop);
 			item.setDefaultPickUpDelay();
 			event.getDrops()

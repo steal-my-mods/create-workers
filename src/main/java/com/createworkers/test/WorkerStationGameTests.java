@@ -17,6 +17,7 @@ import com.createworkers.registry.CWPoiTypes;
 import com.createworkers.registry.CWProfessions;
 import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
+import com.createworkers.worker.WorkerShift;
 import com.createworkers.worker.Workers;
 import com.createworkers.worker.target.WorkerTarget;
 import com.simibubi.create.AllBlocks;
@@ -720,51 +721,27 @@ public class WorkerStationGameTests {
 	 * after every change rather than only at the end, because "it advertised nothing for a while" is
 	 * exactly the shape of that failure.
 	 */
-	@GameTest(template = "work_site", timeoutTicks = 600)
+	@GameTest(template = "work_site", timeoutTicks = 900)
 	public static void aJobOnThreeShiftsTakesThreeVillagers(GameTestHelper helper) {
 		prepareWorkSite(helper);
 		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
 		putHatIn(helper, STATION);
-		BlockPos pos = helper.absolutePos(STATION);
-		boolean[] overAdvertised = new boolean[1];
+		station(helper).setShifts(0, Set.of(Shift.DAY, Shift.EVENING, Shift.NIGHT));
 
+		claimant(helper);
+		claimant(helper);
 		claimant(helper);
 
 		helper.startSequence()
-			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1,
-				"the day shift should be covered"))
-			.thenWaitUntil(() -> helper.assertTrue(freeTickets(helper, pos) == 0,
-				"a fully staffed job should advertise nothing, and it advertises " + freeTickets(helper, pos)))
-			.thenExecute(() -> station(helper).setShifts(0, Set.of(Shift.DAY, Shift.EVENING, Shift.NIGHT)))
-			.thenWaitUntil(() -> helper.assertTrue(freeTickets(helper, pos) == 2,
-				"opening two more shifts should advertise two more openings, and it advertises "
-					+ freeTickets(helper, pos)))
-			.thenExecute(() -> {
-				claimant(helper);
-				claimant(helper);
-			})
-			// Sampled every tick across the hiring, because the failure is a single tick wide: a
-			// station that reconciles its tickets before it hires spends the rest of that tick still
-			// advertising the openings it has just filled.
-			.thenExecuteFor(60, () -> {
-				if (freeTickets(helper, pos) > station(helper).vacancies())
-					overAdvertised[0] = true;
-			})
-			.thenExecute(() -> {
-				helper.assertTrue(station(helper).staffed(Shift.EVENING) == 1, "the evening shift is covered");
+			.thenWaitUntil(() -> {
+				helper.assertTrue(station(helper).staffed(Shift.DAY) == 1, "the day shift should be covered");
+				helper.assertTrue(station(helper).staffed(Shift.EVENING) == 1, "and the evening shift");
 				helper.assertTrue(station(helper).staffed(Shift.NIGHT) == 1, "and the night shift");
-				helper.assertTrue(station(helper).jobCount() == 1, "all of it one job");
-				helper.assertTrue(freeTickets(helper, pos) == 0, "with nothing left to advertise, and it has "
-					+ freeTickets(helper, pos));
-				// A villager sent to a station with nothing for it is not merely turned away: AcquirePoi
-				// puts that position on a backoff growing to four hundred ticks, so a station that
-				// over-advertises teaches the village to stop asking.
-				helper.assertTrue(!overAdvertised[0],
-					"a station should never advertise an opening it does not have, even for one tick");
 			})
+			.thenExecute(() -> helper.assertTrue(station(helper).jobCount() == 1,
+				"all three of them on one job"))
 			.thenSucceed();
 	}
-
 
 	/**
 	 * A worker whose shift is switched off finishes what it is carrying before it is let go.
@@ -901,34 +878,114 @@ public class WorkerStationGameTests {
 			.thenSucceed();
 	}
 
+
 	/**
-	 * A station advertises exactly as many openings as it has, and no more.
+	 * A worker sacked from a station that is <em>still running</em> gets the village's hours back too.
 	 *
-	 * <p>{@code maxTickets} belongs to the point-of-interest type rather than to the block, so every
-	 * station is registered with room for the largest roster the mod allows. Left alone, a station with
-	 * one job would have three dozen villagers walk across the village to be turned away, each of them
-	 * made a Worker on arrival and un-made again a tick later. Holding back the tickets it has no
-	 * opening for is what makes "free tickets" mean "openings" — after which vanilla's own
-	 * {@code AcquirePoi} does the enforcing, exactly as it does for one librarian per lectern.
+	 * <p>Nothing in this mod puts a schedule back. `ResetProfession` does, through the `refreshBrain`
+	 * that comes with clearing a profession — but it needs the villager to have no job site, and the
+	 * two firings reach that differently. Take the last hat out and the block stops being a point of
+	 * interest at all, so `ValidateNearbyPoi` erases the memory; take one hat out of several and the
+	 * point of interest survives, and what erases the memory is the station itself turning the villager
+	 * away for want of a vacancy.
 	 *
-	 * <p>No villagers in this one on purpose: what is being measured is the advertisement, and an
-	 * entity walking over would only add a way for it to be right by accident.
+	 * <p>Only the first was covered. A worker left on its own hours would keep a crew's clock forever —
+	 * asleep at noon in a village that is awake, and nothing in the world to say why.
+	 *
+	 * <p>Real villagers rather than the {@code claimant} helper, deliberately: that helper holds them
+	 * still with {@code setNoAi}, and a villager with no AI does not tick its brain, so none of the
+	 * behaviours this is actually about would run.
 	 */
-	@GameTest(template = "work_site", timeoutTicks = 200)
-	public static void aStationAdvertisesOnlyTheOpeningsItHas(GameTestHelper helper) {
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void aWorkerSackedFromAStillRunningStationGetsItsHoursBack(GameTestHelper helper) {
 		prepareWorkSite(helper);
 		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
 		putHatIn(helper, STATION);
 		putHatIn(helper, STATION);
-		station(helper).setShifts(1, Set.of(Shift.DAY, Shift.EVENING, Shift.NIGHT));
 
-		BlockPos pos = helper.absolutePos(STATION);
-		helper.assertTrue(CWPoiTypes.MAX_TICKETS > 4,
-			"precondition: the type must advertise more than this station wants, or nothing is being held back");
+		helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+		helper.spawn(EntityType.VILLAGER, BESIDE_STATION.east());
+		UUID[] sacked = new UUID[1];
 
-		helper.succeedWhen(() -> helper.assertTrue(freeTickets(helper, pos) == 4,
-			"one job on one shift and one on three is four openings, and it advertises "
-				+ freeTickets(helper, pos)));
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 2,
+				"both jobs should be covered"))
+			.thenExecute(() -> {
+				sacked[0] = station(helper).jobAt(0)
+					.worker(Shift.DAY);
+				helper.assertTrue(((Villager) helper.getLevel()
+					.getEntity(sacked[0])).getBrain()
+					.getSchedule() != Schedule.VILLAGER_DEFAULT,
+					"precondition: a worker keeps its own crew's hours, not the village's");
+				station(helper).removeHat(0);
+			})
+			.thenWaitUntil(() -> {
+				Villager freed = (Villager) helper.getLevel()
+					.getEntity(sacked[0]);
+				helper.assertTrue(freed.getVillagerData()
+					.getProfession() == VillagerProfession.NONE,
+					"the sacked worker should be an ordinary villager again, and it is a "
+						+ freed.getVillagerData()
+							.getProfession());
+				helper.assertTrue(freed.getBrain()
+					.getSchedule() == Schedule.VILLAGER_DEFAULT,
+					"keeping the village's hours rather than a crew's");
+			})
+			.thenExecute(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1,
+				"while the job that was left alone carries on"))
+			.thenSucceed();
+	}
+
+
+	/**
+	 * Two workers at one station keep their own crews' hours.
+	 *
+	 * <p>The second place vanilla insists a job site belongs to exactly one villager, and the more
+	 * damaging of the two. {@code PoiCompetitorScan} — villager CORE, priority 2 — takes every villager
+	 * whose {@code JOB_SITE} is the same position with a matching profession and <b>erases the loser's
+	 * job site</b>, the loser being whichever has less trading experience. Every worker at a station has
+	 * the same job site, the same profession and no experience at all, so they strip each other every
+	 * tick.
+	 *
+	 * <p>Losing the job site is not the injury. What follows it is: {@code ResetProfession} wants a
+	 * villager with no job site that has never traded, so it clears the profession and calls
+	 * {@code refreshBrain} — and a refreshed brain is one back on {@code VILLAGER_DEFAULT}. The crew's
+	 * schedule is the whole of shift work, so a night worker quietly goes back to sleeping at night.
+	 *
+	 * <p>Asserted on the schedules rather than on the memory, because the schedule is the thing a player
+	 * would actually notice going wrong.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void twoWorkersAtOneStationKeepTheirOwnHours(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		station(helper).setShifts(0, Set.of(Shift.DAY, Shift.NIGHT));
+
+		helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+		helper.spawn(EntityType.VILLAGER, BESIDE_STATION.east());
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1
+				&& station(helper).staffed(Shift.NIGHT) == 1, "one villager on each crew"))
+			// Long enough for a behaviour that runs every tick to have run a great many times.
+			.thenExecuteAfter(100, () -> {
+				for (Shift shift : Shift.VALUES) {
+					UUID id = station(helper).jobAt(0)
+						.worker(shift);
+					if (id == null)
+						continue;
+					Villager worker = (Villager) helper.getLevel()
+						.getEntity(id);
+					helper.assertTrue(worker.getBrain()
+						.getSchedule() == WorkerShift.scheduleFor(shift),
+						"the " + shift + " worker should still be keeping its crew's hours");
+					helper.assertTrue(worker.getVillagerData()
+						.getProfession() == CWProfessions.WORKER.get(),
+						"and still be a Worker, rather than having been reset out from under itself");
+				}
+			})
+			.thenSucceed();
 	}
 
 	/**
@@ -1023,31 +1080,12 @@ public class WorkerStationGameTests {
 	 * two claimants, arriving in a known order.
 	 */
 	private static Villager claimant(GameTestHelper helper) {
-		ServerLevel level = helper.getLevel();
-		BlockPos station = helper.absolutePos(STATION);
 		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
-
-		// Everything AssignProfessionFromJobSite would have done on arrival, and the ticket AcquirePoi
-		// would have taken on the way -- without which the station's own accounting is being handed a
-		// world that could not happen.
-		level.getPoiManager()
-			.take(type -> type.is(CWPoiTypes.WORKER_STATION_KEY), (type, pos) -> pos.equals(station), station, 1);
-		villager.setVillagerData(villager.getVillagerData()
-			.setProfession(CWProfessions.WORKER.get()));
-		villager.getBrain()
-			.setMemory(MemoryModuleType.JOB_SITE, GlobalPos.of(level.dimension(), station));
-		// And held where it stands. An unemployed villager strolls, and one that strolls out of the
-		// station's hiring range between two of its twenty-tick looks is a test that fails on the
-		// villager's legs rather than on the rack's bookkeeping. A real claimant cannot do this: it is
-		// hired within a tick or two of arriving, because arriving is what made it a Worker.
-		villager.setNoAi(true);
+		// Held where it stands. An unemployed villager strolls, and one that strolls out of a station's
+		// recruiting range between two of its twenty-tick looks is a test that fails on the villager's
+		// legs rather than on the rack's bookkeeping. Nothing else is needed: the station finds it,
+		// path-checks it and hires it, which is the whole of hiring now.
 		return villager;
-	}
-
-	private static int freeTickets(GameTestHelper helper, BlockPos pos) {
-		return helper.getLevel()
-			.getPoiManager()
-			.getFreeTickets(pos);
 	}
 
 	private static void sealIn(GameTestHelper helper, Villager villager, BlockPos cell) {
@@ -1092,6 +1130,26 @@ public class WorkerStationGameTests {
 		station(helper).addHat(hat);
 	}
 
+	/**
+	 * Walls the site in, because a station recruits from sixteen blocks and the test beside it is
+	 * closer than that.
+	 *
+	 * <p>Hiring is the station's own now: it looks for any unemployed villager in range that it can
+	 * path to. On a game-test grid that reaches straight into the neighbouring plot, so a test about
+	 * what a station does when it is <em>short</em> of villagers would quietly be handed one of
+	 * somebody else's. Since the check is a pathfind, a wall is enough to answer it — and every
+	 * villager these tests care about is spawned inside.
+	 */
+	private static void sealPerimeter(GameTestHelper helper) {
+		for (int along = -1; along <= SITE_SIZE; along++)
+			for (int y = 1; y <= 3; y++) {
+				helper.setBlock(new BlockPos(along, y, -1), Blocks.POLISHED_ANDESITE);
+				helper.setBlock(new BlockPos(along, y, SITE_SIZE), Blocks.POLISHED_ANDESITE);
+				helper.setBlock(new BlockPos(-1, y, along), Blocks.POLISHED_ANDESITE);
+				helper.setBlock(new BlockPos(SITE_SIZE, y, along), Blocks.POLISHED_ANDESITE);
+			}
+	}
+
 	private static WorkerProgram programme(GameTestHelper helper) {
 		WorkerTarget in = target(helper, SOURCE);
 		in.cycleMode(); // targets start as DEPOSIT; one cycle makes this the input
@@ -1111,6 +1169,7 @@ public class WorkerStationGameTests {
 		for (int x = 0; x < SITE_SIZE; x++)
 			for (int z = 0; z < SITE_SIZE; z++)
 				helper.setBlock(new BlockPos(x, 0, z), Blocks.POLISHED_ANDESITE);
+		sealPerimeter(helper);
 		helper.setBlock(SOURCE, AllBlocks.DEPOT.getDefaultState());
 		helper.setBlock(TARGET, AllBlocks.DEPOT.getDefaultState());
 

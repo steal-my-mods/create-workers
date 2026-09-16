@@ -688,12 +688,12 @@ public class WorkerGameTests {
 			.registryAccess()
 			.registryOrThrow(Registries.POINT_OF_INTEREST_TYPE)
 			.getHolderOrThrow(CWPoiTypes.WORKER_STATION_KEY);
-		helper.assertTrue(CWProfessions.WORKER.get()
+		helper.assertTrue(!CWProfessions.WORKER.get()
 			.acquirableJobSite()
-			.test(station), "a worker should go looking for a worker station");
-		helper.assertTrue(CWProfessions.WORKER.get()
+			.test(station), "a worker should not go looking for a station of its own accord");
+		helper.assertTrue(!CWProfessions.WORKER.get()
 			.heldJobSite()
-			.test(station), "and should hold one once it has it");
+			.test(station), "nor hold one, because vanilla lets only one villager hold any job site");
 		helper.succeed();
 	}
 

@@ -45,12 +45,25 @@ public class CWProfessions {
 	public static final DeferredRegister<VillagerProfession> REGISTER =
 		DeferredRegister.create(Registries.VILLAGER_PROFESSION, CreateWorkers.ID);
 
-	/** Works at a worker station and nowhere else, and has no trades of its own. */
+	/**
+	 * Claims no point of interest at all, and has no trades of its own.
+	 *
+	 * <p>Both predicates match nothing, and that is the second time this file has settled there. The
+	 * first reason still holds: {@code AcquirePoi} takes a workstation's ticket the moment a path to it
+	 * merely exists, so a profession that matched anything would have workers squatting composters they
+	 * can never use.
+	 *
+	 * <p>The second is why they went back. They briefly matched the worker station, so that vanilla
+	 * could do the hiring — and vanilla will not let two villagers share a job site. {@code YieldJobSite}
+	 * stops a second villager ever claiming one, and {@code PoiCompetitorScan} strips the job site from
+	 * every villager but the one with the most trading experience, which for a rack of workers on nought
+	 * apiece means all but one of them, every tick. A station holds up to thirty-six.
+	 *
+	 * <p>So a worker holds no job site, and what keeps {@code ResetProfession} from clearing the
+	 * profession out from under it is a point of trading experience instead — see
+	 * {@code Workers.protectFromReset}.
+	 */
 	public static final DeferredHolder<VillagerProfession, VillagerProfession> WORKER =
-		REGISTER.register("worker", id -> new VillagerProfession(id.getPath(), CWProfessions::isWorkerStation,
-			CWProfessions::isWorkerStation, ImmutableSet.of(), ImmutableSet.of(), null));
-
-	private static boolean isWorkerStation(Holder<PoiType> poi) {
-		return poi.is(CWPoiTypes.WORKER_STATION_KEY);
-	}
+		REGISTER.register("worker", id -> new VillagerProfession(id.getPath(), PoiType.NONE, PoiType.NONE,
+			ImmutableSet.of(), ImmutableSet.of(), null));
 }

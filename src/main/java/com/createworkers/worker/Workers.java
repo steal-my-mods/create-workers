@@ -133,11 +133,38 @@ public class Workers {
 		if (station != null)
 			data.rememberStation(station);
 
+		protectFromReset(mob);
 		WorkerShift.applySchedule(mob, shift);
 		data.markAtWork(mob.level()
 			.getGameTime());
 		updateCargoAppearance(mob, data.getHeld());
 		WorkerStatePacket.sync(mob, data);
+	}
+
+	/**
+	 * Keeps {@code ResetProfession} from clearing a worker's profession out from under it.
+	 *
+	 * <p>Vanilla's own shield is a job site, and a worker cannot hold one — {@code PoiCompetitorScan}
+	 * strips a shared job site from every villager but the richest, which for a rack of workers on
+	 * nothing apiece is all but one of them, every tick, and a cleared profession takes the crew's
+	 * schedule with it. What is left of {@code ResetProfession}'s conditions is trading experience, so
+	 * a worker is given a single point of it. It never trades, so the point never goes anywhere.
+	 */
+	public static void protectFromReset(Mob mob) {
+		if (mob instanceof Villager villager && villager.getVillagerXp() == 0)
+			villager.setVillagerXp(1);
+	}
+
+	/**
+	 * Hands a retired worker back to vanilla, which cannot tidy up after one that still looks employed.
+	 *
+	 * <p>The mirror of {@link #protectFromReset}: with the experience gone, {@code ResetProfession}
+	 * clears the profession within a tick or two and the {@code refreshBrain} that comes with it puts
+	 * the village's own hours back.
+	 */
+	public static void allowReset(Mob mob) {
+		if (mob instanceof Villager villager)
+			villager.setVillagerXp(0);
 	}
 
 	/**
@@ -155,6 +182,11 @@ public class Workers {
 			return List.of();
 
 		wake(mob);
+		allowReset(mob);
+		// Tell the station before the worker forgets which one it was. Whatever ends a job -- a death,
+		// a conversion, a hat coming out -- comes through here, and a station that is loaded should not
+		// have to notice on its own clock.
+		tellStation(mob, data);
 		List<ItemStack> drops = data.dismiss();
 		updateCargoAppearance(mob, ItemStack.EMPTY);
 
@@ -206,6 +238,18 @@ public class Workers {
 		if (!rack.employs(mob.getUUID()))
 			for (ItemStack drop : dismiss(mob))
 				mob.spawnAtLocation(drop);
+	}
+
+	private static void tellStation(Mob mob, WorkerData data) {
+		GlobalPos station = data.getStation();
+		if (station == null || station.dimension() != mob.level()
+			.dimension())
+			return;
+		if (mob.level()
+			.isLoaded(station.pos())
+			&& mob.level()
+				.getBlockEntity(station.pos()) instanceof WorkerStationBlockEntity rack)
+			rack.forget(mob.getUUID());
 	}
 
 	/**

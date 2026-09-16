@@ -743,6 +743,27 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   move, `stack.isEmpty()` means `slot.setByPlayer(ItemStack.EMPTY)`, never `setChanged()` alone.
   `shiftClickingAHatOutEndsItsJob` reproduces it end to end, saving the block entity at the finish
   because that is where the crash actually was, and is mutation-checked by dropping the clear.
+- **A worker holds no job site, and a point of trading experience is what keeps it a Worker.**
+  `PoiCompetitorScan` (villager CORE, **priority 2**) is the sibling of `YieldJobSite` and the more
+  damaging of the two: it takes every villager whose `JOB_SITE` is the same position with a matching
+  profession and **erases it from all but the one with the most trading experience** — which, for a
+  rack of workers on none apiece, is all but one of them, every tick. Losing the memory is not the
+  injury; what follows it is, because `ResetProfession` then clears the profession and calls
+  `refreshBrain`, and a refreshed brain is back on `VILLAGER_DEFAULT`. **The crew's schedule is the
+  whole of shift work**, so a night worker quietly goes back to sleeping at night.
+  Vanilla's shield against `ResetProfession` is a job site and a worker cannot have one, so what is
+  left of its conditions is `getVillagerXp() == 0`: `Workers.protectFromReset` gives a worker one point
+  of experience, which nothing can strip from it, and `allowReset` takes it back when the job ends so
+  vanilla can tidy up. Both halves are load-bearing and both are mutation-checked
+  (`twoWorkersAtOneStationKeepTheirOwnHours`, `aSackedWorkerIsTidiedUpByVanilla`).
+  **Both profession predicates are back to matching nothing**, which is where `docs/professions.md`
+  started: nothing should make a worker claim a point of interest, ours included.
+- **Anything that ends a job goes through `Workers.dismiss`, including a death.** `onLivingDrops`
+  called `data.dismiss()` directly and so skipped the bookkeeping around it — handing the villager back
+  to vanilla, and telling the station. That second one matters more than it looks: a station only
+  discovers a death on its own clock otherwise, and a corpse is in the world for the twenty ticks of
+  its death animation against a look every twenty ticks, so whether a dead worker was replaced promptly
+  or sat out the absentee timeout came down to which tick it landed on.
 - **Ticket reconciliation must be able to release more than it took.** The obvious guard —
   only release a ticket this station held back — makes a leak permanent: a claimant that wandered off
   and died, or a release vanilla refused because the villager's profession no longer matched the job
