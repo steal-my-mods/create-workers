@@ -500,7 +500,9 @@ Ideas deliberately left out of the MVP. Anything worked through in detail lives 
   does with conductors. They would run on backtanks: when empty, go to an inventory, drop the spent
   backtank and pick up the fullest one available.
 - **Nicer models.** The current hat and vest are built from code with generated textures — functional
-  placeholders rather than proper art.
+  placeholders rather than proper art. The Worker Station is worse than a placeholder: it is a plain
+  cube with a procedurally-drawn face, and it looks it. A block that a player walks up to and
+  right-clicks wants a silhouette, the way every Create block has one.
 
 ## License
 
