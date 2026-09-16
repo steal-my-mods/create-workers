@@ -13,6 +13,7 @@ import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWBlockEntities;
 import com.createworkers.registry.CWPoiTypes;
+import com.createworkers.registry.CWProfessions;
 import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.Workers;
@@ -31,6 +32,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -45,11 +48,10 @@ import net.neoforged.neoforge.items.IItemHandlerModifiable;
  * A line's roster: an ordered rack of programmed hard hats, each of which may run on any of the three
  * shifts, and the villagers wearing them.
  *
- * <p>Nearly all of the hiring is vanilla's. The station is a point of interest in the
- * {@code acquirable_job_site} tag, so an unemployed villager finds it, walks to it and takes a ticket
- * through {@code AcquirePoi}, and {@code AssignProfessionFromJobSite} turns it into a Worker once it
- * is within two blocks — the same path that makes a librarian out of somebody standing at a lectern.
- * All this has to do is notice that it happened and hand over the right hat.
+ * <p>The station does its own hiring — see {@link #recruit}. It looks for an unemployed adult
+ * villager near enough to path to it, gives it the Worker profession and this block as a job site,
+ * and hands over a hat. It used to leave all of that to vanilla, the way a lectern does, and that
+ * route cannot staff one block with more than one villager.
  *
  * <p>The hats <b>stay in the station</b> and each worker wears a copy. That one decision is the whole
  * self-healing property: nothing has to be handed back when a worker dies, because the job never left
@@ -89,6 +91,17 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	private static final int STAFFING_INTERVAL = 20;
 	/** How far from the block to look for an arriving claimant. Vanilla assigns within 2; this is slack. */
 	private static final double HIRING_RANGE = 4.0D;
+	/**
+	 * How far a station will look for somebody to hire.
+	 *
+	 * <p>A station hires out of the building it is in, not across a village. Deliberately far short of
+	 * the 48 blocks {@code AcquirePoi} searches: this is an entity query and a pathfind rather than a
+	 * point-of-interest lookup, it only runs while there is an opening, and a job board nobody can see
+	 * from where they are standing is a strange thing to be recruited by.
+	 */
+	private static final double RECRUIT_RANGE = 16.0D;
+	/** How many candidates are path-checked in one look. Each one is an A*. */
+	private static final int RECRUIT_CANDIDATES = 3;
 	/**
 	 * How long a worker gets to finish what it is carrying before its station moves it or lets it go.
 	 *
@@ -479,6 +492,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		sackAbsentees(server);
 		rebalance(server);
 		staffUp(server);
+		recruit(server);
 		// Last, and the ordering is the whole of it. Reconciling before hiring leaves the station
 		// advertising the openings it is about to fill for the rest of that tick -- and a villager that
 		// claims one, walks over and is turned away does not simply try again: AcquirePoi puts that
@@ -643,6 +657,78 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 	/** A place on the roster: one slot on one shift, whether or not anybody is in it. */
 	private record Position(int slot, Shift shift) {
+	}
+
+	/**
+	 * Finds somebody for the next opening and puts them to work.
+	 *
+	 * <p><b>This is the mod's own hiring, and it has to be.</b> The station used to sit in
+	 * {@code minecraft:acquirable_job_site} and let vanilla do all of it — an unemployed villager
+	 * found the block, claimed it, walked over and was turned into a Worker on arrival, exactly as one
+	 * takes a lectern. That route cannot staff this block, and the reason is a behaviour rather than a
+	 * bug: {@code YieldJobSite}, villager CORE priority 8, runs on any villager holding a
+	 * {@code POTENTIAL_JOB_SITE} and makes it <em>give up its claim</em> as soon as it sees another
+	 * villager whose profession already holds that same point of interest. A worker this station has
+	 * already hired is precisely that villager. So the first villager was hired and every one after it
+	 * walked over, yielded and stood about — and the claim it dropped leaked a ticket, because erasing
+	 * the memory does not release one.
+	 *
+	 * <p>The rule is right for vanilla, where every workstation holds exactly one villager. A station
+	 * holds up to thirty-six, so it cannot use a route built on that assumption. What is left of
+	 * vanilla's part is everything that still works: the profession, the job-site memory that keeps
+	 * {@code ResetProfession} off a worker's back, and the tickets that say who is still alive.
+	 */
+	private void recruit(ServerLevel server) {
+		Position vacancy = nextVacancy();
+		if (vacancy == null)
+			return;
+
+		AABB nearby = new AABB(worldPosition).inflate(RECRUIT_RANGE);
+		List<Villager> candidates = server.getEntitiesOfClass(Villager.class, nearby, this::couldWork);
+		candidates.sort(java.util.Comparator.comparingDouble(villager -> villager.distanceToSqr(
+			worldPosition.getX() + 0.5D, worldPosition.getY() + 0.5D, worldPosition.getZ() + 0.5D)));
+
+		int checked = 0;
+		for (Villager villager : candidates) {
+			if (checked++ >= RECRUIT_CANDIDATES)
+				return;
+			// Path-verified, as vanilla's own search is. A villager walled away from its station is one
+			// that could never reach the work either, and hiring it would only start the absentee clock.
+			Path path = villager.getNavigation()
+				.createPath(worldPosition, 1);
+			if (path == null || !path.canReach())
+				continue;
+
+			takeTheJob(server, villager);
+			hire(server, villager, vacancy);
+			return;
+		}
+	}
+
+	/** Whether this villager is one a station may approach: an adult with no job of its own. */
+	private boolean couldWork(Villager villager) {
+		return villager.isAlive() && !villager.isBaby() && !villager.isDeadOrDying()
+			&& villager.getVillagerData()
+				.getProfession() == VillagerProfession.NONE
+			&& !Workers.isEmployed(villager);
+	}
+
+	/**
+	 * Everything {@code AssignProfessionFromJobSite} used to do on the villager's arrival.
+	 *
+	 * <p>The order is the one {@code docs/professions.md} spells out: the profession first, then the
+	 * brain refresh that goes with any profession change, and the memory last — a refresh rebuilds the
+	 * brain, so a job site set before it is a job site thrown away.
+	 */
+	private void takeTheJob(ServerLevel server, Villager villager) {
+		villager.setVillagerData(villager.getVillagerData()
+			.setProfession(CWProfessions.WORKER.get()));
+		villager.refreshBrain(server);
+		villager.getBrain()
+			.setMemory(MemoryModuleType.JOB_SITE, GlobalPos.of(server.dimension(), worldPosition));
+		server.getPoiManager()
+			.take(type -> type.is(CWPoiTypes.WORKER_STATION_KEY), (type, pos) -> pos.equals(worldPosition),
+				worldPosition, 1);
 	}
 
 	/** Where a position falls in the fill order, so two of them can be compared. */

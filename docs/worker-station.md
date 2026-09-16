@@ -74,6 +74,10 @@ block, a shaft and a power source.
 
 ## How hiring works
 
+**This section described vanilla's workstation route, and that route turned out to be unusable.** The
+correction is at the end; the original reasoning is kept because everything it says about professions
+and tickets is still true and still load-bearing.
+
 Almost all of it is vanilla, and the part that is not is small.
 
 **Registration.** A `createworkers:worker_station` point-of-interest type over the block's states,
@@ -101,6 +105,32 @@ Two details worth knowing before building it:
 - **`maxTickets` is per POI *type*, not per block.** Registered at the largest roster the mod
   supports, which is why the slot cap is a constant the config can only lower. See
   [Advertising openings](#advertising-openings) for what the block does about the difference.
+
+### Why none of the above survives contact — `YieldJobSite`
+
+The lectern route staffs a block with **one** villager, and vanilla enforces that with a behaviour
+nobody reading `AcquirePoi` would think to look for. `YieldJobSite`, villager CORE priority 8, runs on
+any villager holding a `POTENTIAL_JOB_SITE`, scans for another villager nearby whose profession's
+`heldJobSite` matches that point of interest, and makes the applicant **give up its claim**.
+
+A worker this station has already hired is exactly that other villager: `CWProfessions.WORKER`'s
+`heldJobSite` matches the station, and its `JOB_SITE` is the station. So the first villager is hired
+and every one after it walks over, yields, and stands about — and the claim it drops leaks a ticket,
+because erasing the memory does not release one.
+
+None of the fixes that keep the route work. The profession cannot stop matching `heldJobSite`, because
+`ValidateNearbyPoi` would then erase every worker's job site and `ResetProfession` would clear the
+whole crew. The behaviour cannot be removed from the brain without a mixin, and removing it would
+change every villager in the world, not ours.
+
+**So the station recruits.** It takes itself out of `acquirable_job_site`, looks for an unemployed
+adult villager within `RECRUIT_RANGE` that it can path to, and does what `AssignProfessionFromJobSite`
+did: profession, brain refresh, job-site memory, ticket. Everything else above stands — the
+profession, the job site that keeps `ResetProfession` off a worker's back, and the tickets that say
+who is still alive are all still vanilla's, and all still load-bearing.
+
+The cost is honest and small: an entity query and at most three pathfinds per station per second, and
+only while a station actually has an opening.
 
 ### Advertising openings
 

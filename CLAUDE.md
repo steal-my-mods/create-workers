@@ -467,14 +467,26 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   leniently and degrades to an unemployed villager if the mod is removed; a nitwit stays a nitwit
   forever) and why it is named for the role rather than for hauling (a profession id is permanent
   save state, so a rename strands every worker in every world).
-- **Hiring from a station is almost entirely vanilla, and the wiring is three things.** The point of
-  interest must be in `minecraft:acquirable_job_site` — that tag, not our profession, is what an
-  *unemployed* villager searches, since `VillagerProfession.NONE` acquires `ALL_ACQUIRABLE_JOBS`. The
-  profession's `heldJobSite` must match our POI, because `AssignProfessionFromJobSite` picks the
-  profession by looking up whose held predicate matches the POI it found. And `maxTickets` is 1, so
-  "one station, one worker" is a rule vanilla enforces rather than one this mod polices.
-  `anUnemployedVillagerTakesTheJob` covers the lot, mutation-checked by putting the predicates back to
-  `PoiType.NONE`.
+- **A station does its own hiring, and it has to. `YieldJobSite` makes vanilla's route impossible
+  here.** The station used to sit in `minecraft:acquirable_job_site` and let an unemployed villager
+  find it, claim it and walk over, with `AssignProfessionFromJobSite` doing the rest — the lectern
+  route, and the thing the whole design was proud of. It cannot work for this block.
+  `YieldJobSite` (villager CORE, **priority 8**) runs on any villager holding a `POTENTIAL_JOB_SITE`,
+  looks for another villager nearby whose profession's `heldJobSite` matches that POI, and makes the
+  applicant **give up its claim** — erasing its own potential job site, walk target and look target. A
+  worker this station has already hired is exactly that other villager. So the first villager was
+  hired and every one after it walked over, yielded and stood about; and the dropped claim **leaks a
+  ticket**, because erasing the memory does not release one. The rule is right for vanilla, where a
+  workstation holds one villager. A station holds up to thirty-six.
+  So the tag membership is gone and `WorkerStationBlockEntity.recruit` finds an unemployed adult
+  within `RECRUIT_RANGE`, path-verifies it exactly as `AcquirePoi` would, and does what
+  `AssignProfessionFromJobSite` did — profession, then `refreshBrain`, then the `JOB_SITE` memory, in
+  that order. What is still vanilla's is everything that kept working: the profession itself, the job
+  site that keeps `ResetProfession` off a worker's back, and the tickets that say who is still alive.
+  `aSecondVillagerTakesAJobAtAnOccupiedStation` is deliberately end to end with real villagers,
+  because what it is really asserting is that nothing in the brain gets a veto over a second hire.
+  **`PoiCompetitorScan` (CORE 2) is the same shape of hazard** and is avoided for the same reason:
+  nothing gives a worker a `POTENTIAL_JOB_SITE` any more.
 - **An empty station must not be a job site, and `HAS_JOB` is how.** The POI is registered only over
   the states with a hat in them. Register it over all of them and a villager crosses a village, is
   turned into a Worker on arrival, finds nothing to do — and can then never take another job, because

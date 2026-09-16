@@ -1,5 +1,6 @@
 > **Superseded.** Hiring a villager by hand is gone: villagers are hired by a
-> [Worker Station](worker-station.md), which is a workstation like a lectern, so vanilla does the
+> [Worker Station](worker-station.md), which is a workstation the station itself recruits for (see
+> that note on `YieldJobSite`), so vanilla does the
 > profession change itself. Everything below describes machinery that no longer exists —
 > `clearVillageJob`, `restoreVillageJob`, the stashed trades, the trade level held above
 > `ResetProfession`'s reach — and it is kept because **it is the reason the replacement is safe**.

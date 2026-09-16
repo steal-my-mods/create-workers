@@ -18,11 +18,15 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 /**
  * The worker station as a village workstation.
  *
- * <p>Registering it is what makes hiring vanilla's problem rather than ours: an unemployed villager's
- * own {@code AcquirePoi} finds the block, paths to it, takes a ticket and walks over, and
- * {@code AssignProfessionFromJobSite} turns it into a Worker on arrival. The one thing that has to be
- * arranged for that is membership of {@code minecraft:acquirable_job_site}, which is the tag an
- * unemployed villager actually searches — see this mod's tag file under {@code data/minecraft}.
+ * <p>Deliberately <b>not</b> in {@code minecraft:acquirable_job_site}. It was, and that made hiring
+ * vanilla's problem rather than ours — until it turned out that {@code YieldJobSite} makes every
+ * applicant after the first give up its claim to the worker already standing there, which is right for
+ * a lectern and fatal for a block that wants a crew. The station recruits for itself now.
+ *
+ * <p>What the point of interest is still for is everything that kept working. A worker's
+ * {@code JOB_SITE} has to point at a POI whose type its profession claims, or {@code ValidateNearbyPoi}
+ * erases the memory and {@code ResetProfession} clears the profession behind it — and the tickets are
+ * how a station tells a worker that died from one that is merely in an unloaded chunk.
  */
 public class CWPoiTypes {
 

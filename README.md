@@ -45,7 +45,7 @@ Both limits tell you as you click, rather than letting you discover later that a
 missing.
 
 **3. Let them hire themselves.** Put the programmed hat into a **Worker Station** and an unemployed
-villager will come and take the job, exactly as one takes a lectern or a composter.
+villager nearby will be taken on for it, the way an unclaimed lectern finds itself a librarian.
 
 ```
 P H P      P = any planks

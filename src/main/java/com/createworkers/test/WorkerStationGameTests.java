@@ -52,11 +52,13 @@ import net.neoforged.neoforge.items.ItemHandlerHelper;
 /**
  * The block that hires workers.
  *
- * <p>Almost everything here is vanilla's doing — an unemployed villager finds the station because it
- * is in the {@code acquirable_job_site} tag, walks to it, takes a ticket and is turned into a Worker
- * by {@code AssignProfessionFromJobSite}. So what these tests are really checking is that the wiring
- * into that machinery is right, and that the one thing the station does itself, handing the hat over
- * without letting go of it, survives a worker dying.
+ * <p>The station does its own hiring: it looks for an unemployed adult villager near enough to path
+ * to it, gives it the Worker profession and the job site, and hands over a hat. It used to leave all
+ * of that to vanilla — the station sat in the {@code acquirable_job_site} tag and villagers claimed
+ * it like a lectern — and that route cannot staff one block with more than one villager, because
+ * {@code YieldJobSite} makes every applicant after the first give up its claim to the worker already
+ * standing there. What is still vanilla's is everything that kept working: the profession, the job
+ * site that keeps {@code ResetProfession} off a worker's back, and the tickets that say who is alive.
  */
 @GameTestHolder(CreateWorkers.ID)
 @PrefixGameTestTemplate(false)
@@ -133,7 +135,7 @@ public class WorkerStationGameTests {
 	 * The headline: a villager hires itself.
 	 *
 	 * <p>No player, no right-click. The villager is stood next to a station with a programmed hat in
-	 * it and left alone, and vanilla's own workstation machinery does the rest.
+	 * it and left alone, and it ends up wearing the hat.
 	 */
 	@GameTest(template = "work_site", timeoutTicks = 600)
 	public static void anUnemployedVillagerTakesTheJob(GameTestHelper helper) {
@@ -148,7 +150,7 @@ public class WorkerStationGameTests {
 		helper.succeedWhen(() -> {
 			helper.assertTrue(villager.getVillagerData()
 				.getProfession() == CWProfessions.WORKER.get(),
-				"vanilla should have made it a Worker by now, and its profession is "
+				"the station should have made it a Worker by now, and its profession is "
 					+ villager.getVillagerData()
 						.getProfession());
 			helper.assertTrue(Workers.isEmployed(villager), "and the station should have handed it the hat");
@@ -861,6 +863,41 @@ public class WorkerStationGameTests {
 				.setHeld(ItemStack.EMPTY))
 			.thenWaitUntil(() -> helper.assertTrue(carrier[0].equals(station(helper).jobAt(0)
 				.worker(Shift.DAY)), "and be promoted once they are empty"))
+			.thenSucceed();
+	}
+
+
+	/**
+	 * A second villager takes a job at a station that already has a worker on it.
+	 *
+	 * <p>The test that made the mod stop using vanilla's hiring. The station used to sit in
+	 * {@code minecraft:acquirable_job_site} and let an unemployed villager find it, claim it and walk
+	 * over — and every villager after the first one arrived, gave up its claim and stood there. Not a
+	 * bug: {@code YieldJobSite}, villager CORE priority 8, makes a villager holding a
+	 * {@code POTENTIAL_JOB_SITE} yield the moment it sees another villager whose profession already
+	 * holds that same point of interest, which is exactly what a worker this station has hired is. The
+	 * rule is right for vanilla, where a workstation holds one villager, and fatal here.
+	 *
+	 * <p>So this is deliberately end to end with real villagers rather than the {@code claimant}
+	 * helper: what it is really asserting is that nothing in the villager brain gets a veto over a
+	 * station's second hire.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 600)
+	public static void aSecondVillagerTakesAJobAtAnOccupiedStation(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		station(helper).setShifts(0, Set.of(Shift.DAY, Shift.EVENING));
+
+		helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1,
+				"the first villager should be hired"))
+			.thenExecute(() -> helper.spawn(EntityType.VILLAGER, BESIDE_STATION.east()))
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.EVENING) == 1,
+				"and the second should take the other shift rather than standing about, "
+					+ "which it has " + (station(helper).staffed(Shift.EVENING) == 1 ? "" : "not ") + "done"))
 			.thenSucceed();
 	}
 

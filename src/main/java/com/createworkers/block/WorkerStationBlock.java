@@ -28,7 +28,8 @@ import net.minecraft.world.phys.BlockHitResult;
 
 /**
  * The block that hires workers: put a programmed hard hat in it and an unemployed villager takes the
- * job, the way one takes a lectern or a composter.
+ * job — near enough to one, anyway: the station goes and finds them, because vanilla's own
+ * workstation route refuses to put a second villager on a block that already has one.
  *
  * <p>{@code HAS_JOB} is not decoration. The point of interest is registered over the states where it
  * is true, so a station with no hat in it is not a job site at all — which is what stops a villager
