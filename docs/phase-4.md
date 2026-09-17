@@ -1,9 +1,8 @@
 # Phase 4 — leisure, food, and trades
 
-**Status: leisure, muster, the canteen block and the food drain are built. What is left of food is
-the canteen trip; trades are not started.** A worker eats as it hauls, eats out of its own inventory,
-and slows to `hungryPace` when it runs out — but nothing yet sends it to a canteen to restock, so for
-now a crew is fed by what a player or a farmer puts in its pockets. This was the
+**Status: leisure, muster, the canteen and food are built; trades are not started.** A worker eats as
+it hauls, out of its own inventory, and slows to `hungryPace` when it runs out; a Canteen hands food
+to anybody short of it within `canteenRange`. This was the
 plan agreed before any code, so that the shape was argued once rather than discovered three times.
 [shift-rotation.md](shift-rotation.md) holds the original thinking; where this document disagrees
 with it, this one is right and says why.
@@ -255,11 +254,21 @@ harvesting. So feeding a workforce needs a block of our own, and it solves sever
   costs nothing; the worker delivers into a funnel on the canteen, the way it delivers into a funnel
   on a chest.)*
 - **It is found the way a bed is found** — designated, or the nearest one with a path that reaches —
-  reusing `findBed`'s paced, path-verified shape. A canteen hunt is a point-of-interest query and an
+  reusing `findBed`'s paced, path-verified shape. *(**Reversed in the build: nobody goes to a canteen,
+  the canteen comes to them.** See the status note. The paragraph below is still the right description
+  of what a bed hunt costs, which is most of the argument against doing it again for lunch.)* A
+  canteen hunt is a point-of-interest query and an
   A\*, and the worker that wants one most is the one that cannot reach any, so it wants the same
   pacing that stops a bedless worker pathfinding all night.
-- **It answers the mid-shift case**, which is the important one: a worker that runs out breaks off,
-  eats, and goes back to work.
+- **It answers the mid-shift case**, which is the important one — and it turned out to answer it
+  *better* by pushing than by being walked to. A working Worker has `WALK_TARGET` pinned every tick,
+  which is the very problem this document opens with, so "breaks off, eats, goes back to work" means
+  unpinning it mid-shift and driving the walk by hand: a paced POI hunt, another stall clock, and a
+  Worker off its post long enough for its own Station to strike it off as an absentee. A Canteen that
+  hands food to whoever is in range has none of that, and turns feeding a factory into a question of
+  **where the troughs go** — a building problem, which is the genre. The cost is that placement now
+  matters and a Canteen feeds through walls; funnels do not care about walls either, and the
+  alternative is the A* this exists to avoid.
 - **It feeds any hungry villager, not only workers.** It is a food trough; making it worker-only would
   be arbitrary, and a factory that feeds its own farmers is a better toy. The cost is that a canteen
   near a village will be eaten from, which is a fill-rate problem and a fair one.

@@ -24,11 +24,14 @@ explicitly accepted before a `v*` tag is pushed.
   The two reasons in the code are that it should read as a trough rather than as storage, and that it
   keeps the comparator from jumping to full on the first item — the second is true of almost any slot
   count, so really there is one reason and it is a feeling.
-  **What would settle it:** the food drain rate. Capacity is answering "does a canteen outlast a
-  shift", and that question has no arithmetic behind it until a haul costs something. Revisit once
-  food is tuned; it is a single constant (`CanteenBlockEntity.SLOTS`) and the comparator scales off it
-  automatically. If it still cannot be measured, 20 is the defensible arbitrary number, because it is
-  the one Create already uses for a block of this kind.
+  **What would settle it:** the food drain rate, which now exists — one delivery per point,
+  `deliveriesPerFoodPoint` 25 by default, so a loaf is 100 deliveries. What is still missing is a real
+  line to measure against: how many deliveries a crew makes in a shift, how many crews one trough
+  serves now that a Canteen feeds everyone within `canteenRange`, and therefore how long nine slots
+  last. That is an hour in a world, not an argument.
+  It is a single constant (`CanteenBlockEntity.SLOTS`) and the comparator scales off it automatically.
+  If it still cannot be measured, 20 is the defensible arbitrary number, because it is the one Create
+  already uses for a block of this kind.
 - **How much food a shift costs**, and **the slowdown floor for a hungry worker** — see
   [phase-4.md](phase-4.md#open-questions), which holds the bounds each wants to satisfy.
 

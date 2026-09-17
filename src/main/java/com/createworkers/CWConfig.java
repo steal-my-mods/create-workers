@@ -48,6 +48,8 @@ public class CWConfig {
 	public static final ModConfigSpec.IntValue DELIVERIES_PER_FOOD_POINT;
 	/** The fraction of normal pace a hungry worker manages. Also the floor: it never gets worse. */
 	public static final ModConfigSpec.DoubleValue HUNGRY_PACE;
+	/** How far a canteen hands food out. */
+	public static final ModConfigSpec.IntValue CANTEEN_RANGE;
 	/** The time of day a worker downs tools. */
 	public static final ModConfigSpec.IntValue CLOCK_OFF;
 	/** The time of day it picks them up again. */
@@ -168,6 +170,14 @@ public class CWConfig {
 				"never stops. A line that halts is a line whose owner has to go and find out why; a",
 				"line running at a third is one that is plainly limping.")
 			.defineInRange("hungryPace", 0.35D, 0.05D, 1.0D);
+
+		CANTEEN_RANGE = builder
+			.comment("How far a Canteen hands food out, in blocks. It serves anybody it can reach who is",
+				"short of food -- Workers, farmers, anyone -- so a Canteen is something you place where",
+				"the people are rather than something they queue at. A line whose Workers are outside",
+				"every Canteen's reach goes hungry and slows down, which is the shape of the problem:",
+				"feeding a factory is a question of where you put the troughs.")
+			.defineInRange("canteenRange", 16, 1, 64);
 
 		CLOCK_OFF = builder
 			.comment("The time of day a worker downs tools, in ticks: 0 is dawn, 6000 noon, 12000 dusk,",

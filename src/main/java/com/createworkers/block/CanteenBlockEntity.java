@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.registry.CWBlockEntities;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
@@ -25,6 +26,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.items.IItemHandlerModifiable;
 import net.neoforged.neoforge.items.ItemStackHandler;
 
@@ -56,6 +58,12 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	/** Ticks between syncs while the stock is moving. Twice a second, which an overlay cannot outpace. */
 	private static final int SYNC_INTERVAL = 10;
 
+	/**
+	 * Ticks between servings. Five seconds, which is an entity query per canteen per five seconds --
+	 * nothing, and far faster than anybody eats: a loaf is a hundred deliveries of work.
+	 */
+	private static final int SERVING_INTERVAL = 100;
+
 	private final ItemStackHandler stock = new ItemStackHandler(SLOTS) {
 
 		@Override
@@ -80,6 +88,8 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	private boolean stockChanged;
 	/** Ticks before the next sync is allowed, so a belt filling a canteen cannot send a packet an item. */
 	private int untilSync;
+	/** Ticks before the next serving. */
+	private int untilServing;
 
 	public CanteenBlockEntity(BlockPos pos, BlockState state) {
 		super(CWBlockEntities.CANTEEN.get(), pos, state);
@@ -230,6 +240,11 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	 * at that rate. Twice a second is well past what an overlay needs.
 	 */
 	public static void serverTick(Level level, BlockPos pos, BlockState state, CanteenBlockEntity canteen) {
+		if (canteen.untilServing-- <= 0) {
+			canteen.untilServing = SERVING_INTERVAL;
+			canteen.serve(level, pos);
+		}
+
 		if (canteen.untilSync > 0)
 			canteen.untilSync--;
 		if (!canteen.stockChanged || canteen.untilSync > 0)
@@ -237,6 +252,69 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		canteen.stockChanged = false;
 		canteen.untilSync = SYNC_INTERVAL;
 		level.sendBlockUpdated(pos, state, state, Block.UPDATE_CLIENTS);
+	}
+
+	/**
+	 * Hands food to everybody nearby who is short of it.
+	 *
+	 * <p><b>The canteen pushes; nobody walks to it.</b> That is the whole reason this block works, and
+	 * the alternative is worse than it looks. Vanilla's own way for a villager to pick food up needs
+	 * {@code WALK_TARGET} <em>absent</em>, and a working Worker has it pinned every tick — which is
+	 * why {@code docs/shift-rotation.md} treats food and leisure as one feature in the first place. An
+	 * explicit trip would mean unpinning a Worker mid-shift and driving the walk by hand: a paced
+	 * point-of-interest hunt, another stall clock, and a Worker that is off its post for long enough
+	 * for its own Station to strike it off as an absentee. Pushing has none of that, because the food
+	 * comes to the pinned worker.
+	 *
+	 * <p>It also settles what a Canteen <em>is</em>: something you put where the people are, rather
+	 * than something they queue at. A line whose workers are out of reach of every Canteen goes hungry
+	 * and visibly slows, so feeding a factory is a question of where the troughs go — a building
+	 * problem, which is the genre.
+	 *
+	 * <p><b>Anybody, not only Workers.</b> {@code wantsMoreFood} is vanilla's own "this villager is
+	 * short of food", so a Canteen near a farm feeds the farmers, and one near a Station feeds the
+	 * crew whatever shift they are on. It does not sleep either, which is the point that started this:
+	 * the behaviour that shares food between villagers runs in the idle package, so the farmer who
+	 * would hand a night Worker its dinner is asleep at the hour it is awake.
+	 *
+	 * <p>One item per villager per serving, so a full trough drains at a rate a player can watch
+	 * rather than emptying into the first passer-by.
+	 */
+	private void serve(Level level, BlockPos pos) {
+		if (isEmpty())
+			return;
+
+		double range = CWConfig.CANTEEN_RANGE.get();
+		List<Villager> nearby = level.getEntitiesOfClass(Villager.class, new AABB(pos).inflate(range),
+			Villager::wantsMoreFood);
+		for (Villager hungry : nearby) {
+			int slot = firstFood();
+			if (slot < 0)
+				return; // emptied partway through the queue
+			ItemStack meal = stock.extractItem(slot, 1, false);
+			if (meal.isEmpty())
+				return;
+			// Straight into the inventory rather than onto the floor. A villager only picks items up
+			// when its brain is free to want them, which a Worker's never is.
+			ItemStack refused = hungry.getInventory()
+				.addItem(meal);
+			if (!refused.isEmpty())
+				stock.insertItem(slot, refused, false); // its pockets are full; keep the loaf
+		}
+	}
+
+	/** @return the first slot with food in it, or -1. */
+	private int firstFood() {
+		for (int slot = 0; slot < SLOTS; slot++)
+			if (!stock.getStackInSlot(slot)
+				.isEmpty())
+				return slot;
+		return -1;
+	}
+
+	/** @return whether there is nothing in it, asked before the entity query rather than after. */
+	public boolean isEmpty() {
+		return firstFood() < 0;
 	}
 
 	@Override

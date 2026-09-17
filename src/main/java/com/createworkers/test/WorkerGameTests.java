@@ -1263,6 +1263,45 @@ public class WorkerGameTests {
 	}
 
 	/**
+	 * A Canteen hands food out to whoever is near it. Nobody walks to a Canteen.
+	 *
+	 * <p><b>Pushing is what makes this block work at all.</b> Vanilla's route for a villager to pick
+	 * food up needs {@code WALK_TARGET} absent, and a working Worker has it pinned every tick — which
+	 * is why {@code shift-rotation.md} treats food and leisure as one feature. An explicit trip would
+	 * mean unpinning a Worker mid-shift and driving the walk by hand: a paced point-of-interest hunt,
+	 * another stall clock, and a Worker off its post long enough for its own Station to strike it off
+	 * as an absentee. None of that exists if the food comes to the worker.
+	 *
+	 * <p>So a Canteen is something you put where the people are. The villager here is fed without
+	 * moving, and one out of range is not — which is the whole of the mechanic, and makes feeding a
+	 * factory a question of where the troughs go.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 300)
+	public static void aCanteenFeedsWhoeverIsNearItWithoutAnybodyWalking(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
+		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
+			throw new GameTestAssertException("the canteen should have a block entity");
+		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.BREAD, 8), false);
+
+		Villager beside = helper.spawn(EntityType.VILLAGER, SOURCE.offset(1, 0, 0));
+		// Held still on purpose: what is being asserted is that nobody had to walk anywhere, so a
+		// villager that strolled into range would prove nothing.
+		beside.setNoAi(true);
+		beside.setOnGround(true);
+		helper.assertTrue(beside.getInventory()
+			.isEmpty(), "precondition: the villager starts with nothing to eat");
+		helper.assertTrue(beside.wantsMoreFood(), "precondition: and vanilla agrees it is short of food");
+
+		helper.succeedWhen(() -> {
+			helper.assertTrue(!beside.getInventory()
+				.isEmpty(), "a canteen should hand food to a villager standing next to it");
+			helper.assertTrue(CanteenBlockEntity.foodPoints(beside.getInventory()
+				.getItem(0)) > 0, "and what it hands over should be food");
+		});
+	}
+
+	/**
 	 * A hungry worker is slow, and never stopped.
 	 *
 	 * <p>A line that halts is a line whose owner has to go and find out why, and food must not be the

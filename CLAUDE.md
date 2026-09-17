@@ -750,6 +750,20 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   delivery, which is food as a punishment for hiring rather than a supply line to build — and it
   failed `workFoundOnTheRoundsIsWalkedAtWorkingPace`, because every test villager has empty pockets.
   (`aWorkerEatsWhatItHaulsFor`, `aHungryWorkerIsSlowedAndNeverStopped`, both mutation-checked.)
+- **A Canteen pushes; nobody walks to one, and that is what makes the block work.** Vanilla's route
+  for a villager to pick food up needs `WALK_TARGET` **absent**, and a working worker has it pinned
+  every tick — which is the whole reason `docs/shift-rotation.md` treats food and leisure as one
+  feature. An explicit canteen trip means unpinning a worker mid-shift and driving the walk by hand: a
+  paced point-of-interest hunt, another stall clock, and a worker off its post long enough for its own
+  Station to **strike it off as an absentee**. Serving in a radius has none of it, because the food
+  goes to the pinned worker. It also settles what the block is — something you put where the people
+  are, so feeding a factory is a question of where the troughs go, which is a building problem and the
+  right genre — and it feeds *any* villager short of food, `wantsMoreFood()` being vanilla's own test,
+  so a canteen near a farm feeds the farmers and one near a Station feeds whichever crew is awake. It
+  reaches through walls, which funnels do too, and the alternative is the A* this exists to avoid.
+  (`aCanteenFeedsWhoeverIsNearItWithoutAnybodyWalking`, mutation-checked, and deliberately uses a
+  villager with `setNoAi` — what is being asserted is that *nobody walked*, so a villager that could
+  stroll into range would prove nothing.)
 - **A hungry worker is slowed and never stopped, and `hungryPace` is a floor rather than a slide.** A
   line that halts is a line whose owner has to go and find out why, and food must not be the one
   mechanic here that fails invisibly — but a hard stop turns a supply hiccup into an outage. It is
