@@ -527,6 +527,15 @@ Then, in order, four things that a mean cannot see:
 Where it landed, ring by ring: outer trim 85 against andesite's 89, inner 146 against 140, shadow ring
 70 against 68, boards 83–103 against 84–101. Along the rings, 6.4 and 7.9 against 5.6 and 12.3.
 
+**The boards are two, four and two columns wide, and the uneven widths had to be earned.** They were
+tried early and abandoned: with a board drifting between two tones as a whole, a four-wide one moved
+forty per cent of the panel in a single row and drew a band across the grain that no stagger could
+hide, so even widths of three, three and two were the workaround. Once the grain became short marks
+that alternate and cancel rather than a drift, a wide board stopped swinging the panel — the biggest
+jump across the grain measures 2.7 at 2/4/2 against 2.9 at 3/3/2 — and the irregular widths read
+better, closer to sawn stock than to machined panelling. Worth noting as a pattern: a constraint
+adopted to work around one mechanism outlived the mechanism, and nothing would have rechecked it.
+
 `check_house_style()` holds all of it on every build, **ring by ring rather than in aggregate**, because
 the aggregate version passed all four faults. Neutral trim around a warm panel; two trim rings with a
 real step between them; both gently bevelled; a uniform shadow ring; boards parted by dark lines,

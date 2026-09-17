@@ -172,9 +172,18 @@ def inner_shadow(pixels):
     return pixels
 
 
-# Where the boards are divided, as offsets into the panel. Even widths, and spaced the
-# way andesite's are -- three to five columns of board between single dark lines.
-SEPARATORS = (3, 7)
+# Where the boards are divided, as offsets into the panel: two columns, then four, then
+# two, spaced the way andesite's are at three to five columns between single dark lines.
+#
+# **Uneven on purpose, and it took a change elsewhere to afford it.** These widths were
+# tried once and abandoned, because back then a board drifted between two tones as a
+# whole and a four-wide one therefore moved forty per cent of the panel in a single row,
+# drawing a band across the grain that no stagger could hide. Even widths of three, three
+# and two were the workaround. The grain is short marks that alternate and cancel now
+# rather than a drift, so a wide board no longer swings the panel -- the biggest jump
+# across the grain measures 2.7 here against 2.9 at even widths -- and the irregularity
+# reads better, closer to sawn stock than to machined panelling.
+SEPARATORS = (2, 7)
 
 # One base tone per board, in order. Similar to each other on purpose: Create's three
 # boards are close in colour and told apart by their texturing, not by their shade.
