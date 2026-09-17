@@ -422,6 +422,141 @@ the four that fit across it. The two attempts at painting the state on — a hat
 hat on the board — were both a picture of having something rather than the thing, and neither could
 count: one job and six looked identical.
 
+### Then the hats were dropped, and the readout got better for it
+
+The hats were never the idea. They were the cheapest thing to draw that could *count*, and being real
+items they cost no art. But they answer the wrong question. A hat on the board says a job is
+programmed; what a player wants when a line has stopped is **whether anyone is doing it**, and the
+hats cannot say. That needs three states per place in the rack — nothing programmed here, a job with
+nobody on it, a job being done — which no arrangement of hats provides.
+
+Four directions were drawn and rendered before any of them was built (see `tools/render_block_model.py`,
+which exists because this block had by then been redesigned three times without anyone seeing it).
+What the renders settled:
+
+- **A recess only reads face-on.** The first pass put the rack in a three-deep window behind two-wide
+  jambs; at the isometric and overhead angles — which is how a block is nearly always seen — it was a
+  plain dark crate. Cut to one deep with one-wide jambs, it reads from everywhere. Anything the block
+  needs to say belongs on the flush front or on top.
+- **A gauge cannot say what the block knows.** A needle gives a fraction where the truth is "eight
+  programmed, five staffed", and at sixteen pixels the idle and running dials were barely
+  distinguishable. Conceptually the most Create-like of the four and the least use.
+- **Round indicators beat square ones** at this size, decisively.
+- **Only something on top reads at range**, which is what an andon tower is for in a real factory —
+  but three crew lamps is three bits, not a count. It earns its place as a *status* beacon (does this
+  station need me) over a front that carries the roster exactly, not as the roster itself.
+
+Two finalists, both full cubes so the "not enough weight for a profession block" problem cannot
+return: a timber pegboard with brass tags behind a cast frame, and a cast cabinet with twelve lamps
+behind a brass nameplate.
+
+### What was built: a lamp bank
+
+A **full cube**: a two-pixel andesite trim around a wood panel, with one lamp mounted on the boards for
+every place in the rack. The lamp bank won on three counts: round indicators read better than square
+tags at sixteen pixels, it sits beside a Mechanical Arm the way a pegboard would sit beside a fletching table, and lit lamps
+land on the hard hat's own yellow, which ties block to item without either copying the other. The wood
+panel is what keeps the other half of the argument — it still reads as a profession block, which
+matters because it *is* a villager job site.
+
+**Being a full cube is the load-bearing part.** Every shaped version needed `noOcclusion`, and a model
+that does not fill its block has a face-shaped hole available at every boundary it does not truly
+span — which is exactly what shipped, twice, in two different places, both times looking like the
+world showing through the block. A full cube occludes, lights and culls like any other solid block,
+needs no `getShape`, and stacks into a wall. There is nothing left for that bug to live in.
+
+**A lamp has three states, and choosing them is the design.** Lit when the job is fully staffed for
+every shift it runs, dim when it is programmed and short, dark when the slot is empty. So any dim lamp
+means *this station needs people* — read at a glance, without opening anything. That is the question a
+player walks over to ask when a line has stopped, and it is the one thing no arrangement of hats could
+ever have answered: a full station and a half-staffed one looked identical, and so did one job and six.
+The lit ones draw full-bright, so a working station reads across a dark factory.
+
+**The art follows Create's conventions, measured rather than guessed — and getting there took
+four corrections, every one of which an aggregate had already signed off.**
+
+Counting *which* colours a Create casing uses said: andesite casing is not grey but a neutral ramp and
+a warm tan one in nearly equal measure (copper does the same with orange); Create carries fifteen to
+nineteen shades in a sheet where this had six; and nothing in andesite casing is darker than a luma of
+57, where this block's panel was at 16. Enough to know both ramps belonged, and nothing about how to
+arrange them.
+
+Then, in order, four things that a mean cannot see:
+
+1. **The frame was inside out.** Counting warm pixels *by position* says andesite casing is 0% warm on
+   its border and 100% warm inside it — a two-pixel andesite trim around a wood panel. This had a
+   timber frame around a cast plate. (Copper and railway invert it; the trim names the tier, and
+   andesite is the one to echo.)
+2. **There are two grey trims, and the inner is far brighter** — andesite runs **89** on ring 0 and
+   **140** on ring 1, a step of 51. Averaging the two gives 113, which is exactly the single flat
+   number this generator was matching, and 113 is a colour that appears nowhere in the texture. Worse,
+   collapsing them made ring 2 look like "the inner trim", when ring 2 is the first row of *wood* — the
+   shadow the frame throws on the boards.
+3. **The grain runs down the boards.** Comparing panels alone — excluding the trim edge, which is a
+   material boundary and not noise — Create matches its vertical neighbour about half the time and its
+   horizontal neighbour almost never (andesite 48% against 11%). This ran the other way. Every
+   isotropic statistic called the two sheets identical: same shade count, same isolated-pixel fraction
+   (27% against 25%), same mean neighbour delta. Include the trim and even the anisotropy vanishes.
+4. **The boards need room, they need to differ, and none of them may repeat.** Andesite's column
+   means read `86 98 67 93 89 90 101 67 99 84`: dark separators every three to five columns, boards
+   spanning 84 to 101. This alternated every column or two; then, with the tone indexed by *column*
+   rather than by board, three boards drew as eight narrow stripes; then the correction for that —
+   demanding every column of a board be identical — flattened them, which Create's are not either. Its
+   boards share a colour and are told apart by their **figure**.
+5. **And the figure itself must not repeat.** Both grain lines were drawn by one rule with no
+   reference to which line they were, so they came out pixel for pixel the same. Each board and each
+   line now takes its marks from a hash of its own index. The marks on a board's face **alternate in
+   direction** so they cancel: a mark shifts the average of the column it sits in, and a column that
+   shifts far enough stops reading as part of its board — which is the narrow-stripe failure returning
+   by another route. Balanced, a face carries two or three marks and its average barely moves. A grain
+   line's marks all shade *upward* from the darkest step instead, because it has to stay clearly darker
+   than the boards it parts; balanced marks lifted one line until it stopped counting as a parting at
+   all. The panel and its shadow ring now contain no two identical columns.
+
+6. **And the trim has to slide, not switch.** Picking one tone for the lit sides and another for the
+   shadowed ones puts the whole bevel into the two corners where they meet, so every pixel pair across
+   a corner jumps two ramp steps. Measured *along* the ring, this stepped 19.2 where andesite steps
+   5.6 — and andesite carries the same eighteen luma of bevel while doing it, which a switch cannot do
+   at any setting. The tone slides from the lit corner to the shadowed one, with a light dither on top
+   so the gradient does not band into arcs. Two other things fell out of the same measurement: the
+   corner marks were bright rivets, sixty luma above their neighbours and eight pixels of a sixty-pixel
+   ring, which was most of the roughness on its own (Create's corners are darker patches); and the grey
+   ramp stepped in thirteens, so a ring could be smooth *or* carry a decent count of shades and not
+   both. Eleven steps of nine or ten now, against andesite's seven to ten.
+
+Where it landed, ring by ring: outer trim 85 against andesite's 89, inner 146 against 140, shadow ring
+70 against 68, boards 83–103 against 84–101. Along the rings, 6.4 and 7.9 against 5.6 and 12.3.
+
+`check_house_style()` holds all of it on every build, **ring by ring rather than in aggregate**, because
+the aggregate version passed all four faults. Neutral trim around a warm panel; two trim rings with a
+real step between them; both gently bevelled; a uniform shadow ring; boards parted by dark lines,
+differing from one another, grain running down the face, and no banding across it. The bounds are the
+measured ranges of Create's casings, widened only enough to hold them.
+
+Two of the bounds are worth naming because they were wrong first and the mistakes are instructive. The
+outer-trim bevel's lower end is **16**, not 8: corner bolts alone put about 12 luma of swing on an
+otherwise flat trim, so any bound under that can never fire, and a check that cannot fire is cover. And
+the board-spread bound is **14**, not the 20 it started at: andesite's own boards span 17, and a
+threshold set above what the reference itself measures fails good work.
+
+Every value shipped is this project's own, chosen inside the measured ranges. No pixel, pattern or
+layout of Create's is reproduced — what was taken is aggregate and structural statistics about where
+warmth, light and grain sit, which is a fact about a texture and not the texture.
+
+**No nameplate and no sunk panel.** With the interior already wood, a dark inset would have been a
+fourth material on a block that reads correctly with three, and it would have put the lamps in a hole
+cut through the panel rather than mounted on it, which is not where Create puts a fitting.
+
+**Anything hung on the front is drawn by the block entity renderer, and its numbers live in two files.**
+`WorkerStationRenderer` and `tools/generate_station_textures.py` both hold the lamp grid, in the model's
+own units so the comparison is an equality with nowhere for a factor of sixteen to hide. The generator
+checks them against each other, against the model, and against `MAX_SLOTS`, on every build. This is not
+ceremony — the previous renderer shipped drawing every hat a fiftieth of a block *inside* an opaque
+board, which is not drawn badly but not drawn at all.
+
+`tools/render_block_model.py` draws a block model without a client, which is what made any of this
+decidable: three redesigns had gone out on reasoning alone.
+
 ## Stress
 
 An earlier draft said the station's stress should **scale with the number of active workers**, on the
@@ -447,6 +582,35 @@ way that "ten employees are heavier than one" does not. It buys three things wor
   dependency to exist at all.
 
 None of those need the cost to scale, and none of them are hurt by it being small.
+
+### Correction: an off-switch wants redstone, not a stress requirement
+
+The paragraph above hangs the off-switch off the power, because power was the only dependency going.
+On reflection that is the tail wagging the dog: **an off-switch is a redstone question**, and redstone
+is a thing Create builds with constantly. Requiring a shaft run to a job board to be allowed to turn it
+off is a worse answer than a lever on the side, and it drags in a stress cost that was already
+admitted to be a balance lever in a simulation costume.
+
+So, if the station is ever made switchable: **redstone, not stress.** And the behaviour when it is off
+is *not* what the earlier draft assumed — **a disabled station must not release its workers.** Sacking
+a crew is destructive and slow to undo: the villagers scatter, vanilla resets their professions, and
+turning the block back on means waiting for the whole hiring cycle again. A switch whose cost is that
+high is a switch nobody dares flip. Off should mean **the crew stops working** — stays employed, stays
+on the roster, stands down — so that flipping it back is instant and the switch is usable as a
+production control rather than as a demolition.
+
+Whether a stress connection is worth having *at all*, independently of the off-switch, is still open;
+the three things it buys are listed above and none of them depend on this.
+
+### A whistle at shift change, if it is powered
+
+Parked, not designed. If the station does end up on the kinetic network, the thing worth spending that
+connection on is not a number in a tooltip but a **works whistle at every clock-on and clock-off** —
+which is the moment the mod's whole shift system becomes audible, and the one event a player currently
+has no way to notice. It fits the period, it fits Create, and it gives power something to *do* rather
+than something to cost. It would want to be sparing (three times a day, audible at a distance, and off
+by default or configurable), because a sound that fires on a schedule is a sound that becomes an
+irritant faster than almost anything else.
 
 ### Headcount costs food, because eating is the thing that actually scales
 

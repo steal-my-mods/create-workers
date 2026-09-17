@@ -79,6 +79,10 @@ public class WorkerStationScene {
 			.position(STATION);
 		Vec3 stationTop = util.vector()
 			.topOf(STATION);
+		// The board is the front face, and the plate leaves the Station on its default NORTH facing
+		// because nothing in generate_ponder_structure.py turns it.
+		Vec3 stationFace = util.vector()
+			.blockSurface(STATION, Direction.NORTH);
 		Vec3 middle = util.vector()
 			.centerOf(3, 1, 3);
 
@@ -216,6 +220,18 @@ public class WorkerStationScene {
 			.pointAt(stationTop)
 			.placeNearTarget();
 		scene.idle(90);
+
+		// The block's own readout, which nothing else in the mod teaches. The Station on this plate
+		// has a job in it and nobody on that job, so its board is showing exactly the dim lamp this
+		// beat is about -- which is the state worth recognising, a line that will not run.
+		scene.overlay()
+			.showText(90)
+			.text("Its face is the roster: one lamp per job, lit when the job has all its Workers and dim when it is short")
+			.attachKeyFrame()
+			.colored(PonderPalette.MEDIUM)
+			.pointAt(stationFace)
+			.placeNearTarget();
+		scene.idle(100);
 
 		scene.overlay()
 			.showText(80)

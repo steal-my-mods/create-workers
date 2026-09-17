@@ -40,7 +40,8 @@
   "createworkers.ponder.worker_station.text_5": "Then it works the Hat's beat, carrying items from the Inputs to the Outputs",
   "createworkers.ponder.worker_station.text_6": "Because the job never leaves the block, a Worker that is lost leaves it behind — and the next Villager along takes it up",
   "createworkers.ponder.worker_station.text_7": "A rack holds up to twelve jobs, and each one can run on any of the three shifts",
-  "createworkers.ponder.worker_station.text_8": "Take a Hat back out to end its job and let its Workers go",
+  "createworkers.ponder.worker_station.text_8": "Its face is the roster: one lamp per job, lit when the job has all its Workers and dim when it is short",
+  "createworkers.ponder.worker_station.text_9": "Take a Hat back out to end its job and let its Workers go",
 
   "createworkers.ponder.working_hours.header": "Shifts and Sleep",
   "createworkers.ponder.working_hours.text_1": "At the end of its crew's day a Worker downs tools, walks to a bed and sleeps until morning",

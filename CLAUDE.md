@@ -16,7 +16,8 @@ python3 tools/generate_logo.py         # the in-jar badge at 256
 python3 tools/generate_logo.py branding/icon-512.png --size 512   # ...and the 512 CurseForge wants
 python3 tools/generate_ponder_structure.py   # all three Ponder scenes' structure NBT
 python3 tools/generate_ponder_lang.py        # ...and their lang entries, read out of the storyboards
-python3 tools/generate_station_textures.py   # the Worker Station's block textures
+python3 tools/generate_station_textures.py   # the Worker Station's textures, and the checks that hold its files together
+python3 tools/render_block_model.py <model.json> --hats N --lit N --dim N   # draw a block model without a client
 python3 tools/generate_gear_shifts.py        # the evening and night vests, off the day one
 python3 tools/generate_worker_profession.py  # the worker profession's clothing, both variants
 ```
@@ -141,6 +142,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `block/WorkerStationBlockEntity` | A line's roster: an ordered rack of hats, the shifts each runs on, who is wearing them, and the point-of-interest tickets it holds back |
 | `block/WorkerStationMenu` | The rack as real slots, over Create's `MenuBase`. Its geometry constants are shared with the screen, because slots are placed before any screen exists |
 | `client/WorkerStationScreen` | The rack arranged: shift toggles, order arrows, staffing readout. Reads the block entity, never its own copy |
+| `client/WorkerStationRenderer` | Draws the roster on the block's front: a lamp per slot, lit / dim / dark, so "is this station short" is answerable without opening it |
 | `net/StationRosterPacket` | The two edits that are not an item — which shifts a job runs, and where it sits |
 | `net/StationRenamePacket` | Naming a job, on its hat's `CUSTOM_NAME`, with no anvil and no experience |
 | `registry/CWMenuTypes` | Screens this mod opens. **Reads the open packet's buffer itself**, because `MenuBase` cannot |
@@ -546,17 +548,87 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   `noOcclusion()` on the Station. The same goes the other way in the model: `cullface` belongs only on
   a face that really does span the block's boundary, and putting it on one that does not is the same
   hole by another route.
-- **A block is read by its silhouette, and both of the first two shapes were wrong.** A full cube with
-  a stripe painted on it reads as scenery; a thin board on a low plinth, which was the correction,
-  reads as *slight* beside a lectern or a smithing table — a profession block wants the weight of one.
-  What it is now is a bench filling the footprint with a board rising from the back: an L from the
-  side, a counter from the front, and full height overall.
-- **What is in a station is drawn as the hats that are in it, not painted on.** Two versions painted
-  it: a hat on the top face, which you could only see by standing over the block, and then a hat on
-  the board, which was a drawing of a hat rather than the ones actually there. Both were a picture of
-  a state, and a picture cannot count — one job and six looked the same. `WorkerStationRenderer` hangs
-  the real items on the board, which costs no art, needs no second model, and says how many. That is
-  also why there is one model for both `HAS_JOB` states now.
+- **Which faces a model declares is not a matter of taste, and the Station has shipped a bug of each
+  kind.** A face nothing covers and nobody declares is a **hole**: the plinth is 16 wide and the
+  carcass set on it is 14, so the one-pixel ledge between them was a gap you could see down through
+  the hollow block and out of its culled bottom, onto whatever the Station was standing on. That is
+  invisible in the file and invisible in a model viewer, and obvious the instant a player sets one
+  down on a stone block — it is the *second* time this block has looked transparent for a reason that
+  had nothing to do with the first. And two faces declared in one plane facing each other
+  **stipple**, because which of them wins is depth-buffer rounding and changes with the camera; the
+  board stands on the counter and is let into both posts, which is three such pairs waiting to
+  happen. `check_faces()` settles both exactly rather than by eye — everything is axis-aligned on
+  integer pixels, so "is this face covered" is a matter of marking cells — and it checks `cullface`
+  spans the boundary while it is there. Mutation-checked six ways, including the hole as shipped.
+- **The Station is a full cube, and that is the fix rather than a shortcut.** It went through a thin
+  board on a low plinth (slight beside a lectern) and then a bench with a board rising from the back.
+  Both were shaped, and shaped is what kept costing: a model that does not fill its block cannot
+  occlude, so it needs `noOcclusion`, and then every face that does not truly span the boundary is a
+  hole waiting to be left undrawn — which shipped twice, in two different places, both times looking
+  like the world showing through the block. A full cube occludes, lights and culls like any other
+  solid block, needs no `getShape`, and stacks into a wall. Weight is not in question and the whole
+  family of holes is unavailable. **Do not put `noOcclusion` back** while the model fills its block:
+  it costs every neighbour the face it would otherwise cull, to buy nothing.
+- **The Station's front is a readout, and what a lamp *means* is the design.** Four versions of this
+  got it wrong before the question was even the right one. Two painted the state on — a hat on the top
+  face, visible only from above, then a hat drawn on the board — and a picture cannot count, so one job
+  and six looked the same. The third hung the *real* hats, which counts but answers the wrong question:
+  a hat says a job is **programmed**, and what a player walks over to ask when a line has stopped is
+  whether anybody is **doing** it. `WorkerStationRenderer` now draws one lamp per place in the rack:
+  **lit** when the job is fully staffed for every shift it runs, **dim** when it is programmed and
+  short, **dark** when the slot is empty. Any dim lamp means the station needs people. Lit ones draw
+  full-bright so a working station reads across a dark factory. One model serves both `HAS_JOB` states.
+- **The lamp grid lives in two files, and the generator is what holds them together.**
+  `WorkerStationRenderer` and `tools/generate_station_textures.py` both state the pitch, centre and
+  size — **in the model's own units, sixteenths of a block**, so the comparison is an equality with
+  nowhere for a factor of sixteen to hide. `check_against_model()` runs on every build (both workflows
+  invoke the generator) and asserts: the constants match, the model is one full cube with every face
+  culling, `LAMP_COLUMNS × LAMP_ROWS == MAX_SLOTS`, the lamps are evenly spaced and centred, none of
+  them runs off the sunk panel, and none overlaps its neighbour. Mutation-checked seven ways. It is
+  not ceremony: the renderer before this one shipped drawing every hat a fiftieth of a block *inside*
+  an opaque board, which is not drawn badly but not drawn, with nothing anywhere to say so.
+- **The bezel belongs to the lamp sprite, never to the block's sheet.** A socket painted on a texture
+  has to sit on a whole texel, so four of them across a fourteen-pixel panel cannot be evenly spaced —
+  the attempt left the middle pair a whole pixel closer than the outer two, which is visible instantly.
+  It also splits "where a lamp is" and "where its hole is drawn" across two files, which is the same
+  split that once drew every hat inside the board. Depth comes from lighting the bezel unevenly (dark
+  at the top left, lighter at the bottom right, because a hole's *far* wall catches the light) and from
+  putting the bulb's catch-light up and to the left. A flat ring around a flat disc is flat however
+  dark you make it.
+- **Create's conventions are measurable, and every aggregate over a whole sheet is a trap.** This
+  block's art was corrected four times and *each* version passed the check written for the one before,
+  because a mean hides structure. Counting which colours a casing uses says andesite is **not grey** —
+  a neutral ramp and a warm tan one in near-equal measure — that Create carries **15–19 shades** in a
+  16×16 sheet, and that **nothing in it is darker than luma 57**. That is enough to pick ramps and
+  nothing else. The four things it cannot tell you, all found only by measuring *by position*:
+  1. **Which way round the frame goes.** Andesite casing is **0% warm on its border, 100% warm
+     inside**: a two-pixel andesite trim around a wood panel. (Copper and railway invert it — the trim
+     names the tier.) The wood is also what keeps this reading as a vanilla profession block, which
+     matters because it is a villager job site.
+  2. **That there are *two* grey trims, and the inner is far brighter** — ring 0 at **89**, ring 1 at
+     **140**. Their mean is 113, which is a colour appearing nowhere in the texture and exactly what a
+     border-wide average had this generator matching. Collapsing them also makes ring 2 look like the
+     inner trim when **ring 2 is the first row of wood**, the shadow the frame throws on the boards.
+     That shadow ring is *uniform* in all of Create's (varying 3–5 luma); a bevel there swings 69.
+  3. **Which way the grain runs.** On panels alone Create matches its vertical neighbour ~half the time
+     and its horizontal neighbour almost never (andesite 48%/11%). Shade counts, isolated-pixel
+     fractions (27% ours against 25% theirs) and mean neighbour deltas all called the two sheets
+     identical while one was built from rows and the other from columns — and **including the trim edge
+     hides even this**, because a material boundary is not noise.
+  4. **That boards need room, must differ from each other, and must be staggered.** Andesite's column
+     means read `86 98 67 93 89 90 101 67 99 84` — separators every 3–5 columns, boards spanning 84–101.
+     An even alternation is corduroy; identical board tones (`93 93 61 93 …`) are corduroy with extra
+     steps; and an *unstaggered* tone drift makes every board change at the same point along the grain,
+     drawing a stripe across the panel at right angles to it. Stagger by **board index**, not by column:
+     separators make raw columns land unevenly across the drift period and the stripe comes back.
+  `check_house_style()` pins all of it ring by ring on every build, bounds taken from Create's own
+  casings. Mutation-checked eight ways.
+  **Two bounds were wrong first, instructively.** The outer-trim bevel's lower end is 16, not 8: corner
+  bolts alone put ~12 luma of swing on a flat trim, so anything under that can never fire. And the
+  board-spread bound is 14, not 20: andesite's own boards span 17, and a bound above what the reference
+  measures fails good work. **Check what a bound can actually distinguish before trusting it.**
+  All shipped values are our own, chosen inside the measured ranges; what was taken is statistics about
+  where warmth, light and grain sit, not pixels. The badge icon's licence argument is the same line.
 - **A blockstate file has to grow when a property does, and nothing but a test will say so.** Adding
   `FACING` took the Station from two states to eight, and a state with no variant renders as the
   black-and-magenta cube — silently, because resources are the client's business and the tests run on
@@ -577,6 +649,27 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   `theJobOutlivesTheWorker` asserts no hat entity appears; without that guard every death mints a
   second hat. The station is forgotten when the block is broken or the hat taken out, after which the
   worker is indistinguishable from a hand-hired one and drops its hat as usual.
+- **The Station's geometry is written down in three files, and the generator is what keeps them
+  honest.** `models/block/worker_station.json` has the elements; `WorkerStationBlock` restates their
+  heights as collision; `WorkerStationRenderer` restates the board's face, height and clear span so it
+  can hang the real hats on it; and `generate_station_textures.py` restates which *rows* of a 16×16
+  sheet each element's faces sample, because a face's UVs are derived from the box that owns it and
+  nothing else decides them. Nothing in the build tied those together, and the first version of the
+  renderer shipped with the standoff subtracted where it should have been added — which hung every hat
+  a fiftieth of a block **inside** an opaque board. Not drawn badly: not drawn. A fully staffed station
+  looked exactly like an empty one, the renderer was registered and running, and there was nothing
+  anywhere to say so. `check_against_model()` in the generator now walks the chain on every build
+  (both workflows run it), and it reads the **expressions out of `hang()`**, not the constants — the
+  sign that was wrong is not a constant, so a check on the fields alone passes the bug, which is what
+  the first draft of the check did. Mutation-checked seven ways, the shipped bug among them.
+- **The light a block entity renderer is handed is the light *inside* the block.**
+  `BlockEntityRenderDispatcher` samples `getLightColor` at the block's own position, which is the
+  right answer for something drawn within the block and the wrong one for anything hung on its
+  outside: a hat on the Station's board is lit by the air in front of the board, and drawing it at
+  the block's own reading put a rack of hats in shadow in a room that plainly was not. It also looks
+  intermittent — the reading changes whenever anything else nudges the light engine — which makes it
+  easy to write off as a glitch rather than as the wrong sample. Take the light from
+  `pos.relative(facing)`, the way a wall torch or a sign is lit.
 - **Sleeping and waking must agree with vanilla's `WakeUp`, and a worker's own `Schedule` is how.**
   `WakeUp` (villager CORE, priority 0) stands up any sleeping villager whose brain is not in
   `Activity.REST`, on every tick — so a worker whose hours are not the village's could never sleep.

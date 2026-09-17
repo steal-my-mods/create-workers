@@ -12,7 +12,6 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
@@ -28,9 +27,6 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.world.phys.shapes.Shapes;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * The block that hires workers: put a programmed hard hat in it and an unemployed villager takes the
@@ -41,6 +37,17 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * is true, so a station with no hat in it is not a job site at all — which is what stops a villager
  * crossing a village to become a Worker with nothing to do, and then being unable to take any other
  * job, a Worker's only workstation being the block it is standing at.
+ *
+ * <p><b>It is a full cube, and that is a decision.</b> It went through a thin board on a low plinth,
+ * which read as slight beside a lectern, and then a bench with a board rising from the back of it.
+ * Both were shaped, and being shaped is what kept costing: a model that does not fill its block cannot
+ * occlude, so it needs {@code noOcclusion}, and then every face of it that does not truly span the
+ * block boundary is a hole waiting to be left undrawn. That happened twice, in two different places,
+ * and both times it looked like the world showing through the block. A full cube has none of those
+ * failures available to it — it occludes, lights and culls like any other solid block, it stacks into
+ * a wall, and it needs no {@code getShape} of its own. What the Station has to say it says on its
+ * front face, where {@link com.createworkers.client.WorkerStationRenderer} draws a lamp for every
+ * place in the rack.
  */
 public class WorkerStationBlock extends BaseEntityBlock {
 
@@ -51,34 +58,6 @@ public class WorkerStationBlock extends BaseEntityBlock {
 
 	/** Which way the board faces, which is at whoever put the block down. */
 	public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-
-	/**
-	 * A workbench with a board standing at the back of it.
-	 *
-	 * <p>Create's blocks are read by silhouette before anything else, and a full cube with a stripe on
-	 * it reads as scenery — but the first attempt at fixing that went too far the other way, a thin
-	 * board on a low plinth that looked slight beside a lectern or a smithing table. A profession block
-	 * wants the weight of one. So: a bench filling the block's footprint, and a board rising from the
-	 * back of it, which is an L from the side and a counter you can put something on from the front.
-	 *
-	 * <p>Shaped honestly rather than as a full cube. The space over the counter is open, so a player
-	 * standing at one is standing at it rather than bumping into air.
-	 */
-	private static final VoxelShape BENCH = Block.box(0, 0, 0, 16, 11, 16);
-	private static final VoxelShape[] SHAPES = new VoxelShape[Direction.values().length];
-
-	static {
-		// Authored facing north, which puts the board along the far edge -- the high-z side.
-		for (Direction facing : Direction.Plane.HORIZONTAL) {
-			VoxelShape board = switch (facing) {
-				case SOUTH -> Block.box(0, 11, 0, 16, 16, 6);
-				case WEST -> Block.box(0, 11, 0, 6, 16, 16);
-				case EAST -> Block.box(10, 11, 0, 16, 16, 16);
-				default -> Block.box(0, 11, 10, 16, 16, 16);
-			};
-			SHAPES[facing.ordinal()] = Shapes.or(BENCH, board);
-		}
-	}
 
 	public WorkerStationBlock(Properties properties) {
 		super(properties);
@@ -108,12 +87,6 @@ public class WorkerStationBlock extends BaseEntityBlock {
 	@Override
 	protected BlockState mirror(BlockState state, Mirror mirror) {
 		return state.rotate(mirror.getRotation(state.getValue(FACING)));
-	}
-
-	@Override
-	protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-		return SHAPES[state.getValue(FACING)
-			.ordinal()];
 	}
 
 	@Override

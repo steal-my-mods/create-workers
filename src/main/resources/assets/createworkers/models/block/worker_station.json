@@ -1,39 +1,51 @@
 {
-  "_comment": "Authored facing north, which puts the board along the far edge. blockstates/worker_station.json turns it. One model for both has_job states: what a station has in it is drawn by WorkerStationRenderer, as the actual hats, rather than painted on.",
+  "_comment": "A full cube, authored facing north; blockstates/worker_station.json turns it. The top uses the casing sheet, so its boards run the way the sides do rather than crosswise. One model for both has_job states, and one element on purpose: a block that fills its space occludes, lights and culls like any other solid block, which is what retires the holes and see-through edges the bench-and-board shape produced twice. What is in the rack is drawn by WorkerStationRenderer as lamps on the front face -- see generate_station_textures.py, which checks that this model, that renderer and the sheets still describe one block.",
   "parent": "block/block",
   "textures": {
-    "particle": "createworkers:block/worker_station_side",
-    "side": "createworkers:block/worker_station_side",
-    "top": "createworkers:block/worker_station_top",
+    "particle": "createworkers:block/worker_station_casing",
+    "side": "createworkers:block/worker_station_casing",
+    "top": "createworkers:block/worker_station_casing",
     "bottom": "createworkers:block/worker_station_bottom",
-    "board": "createworkers:block/worker_station_board",
-    "board_back": "createworkers:block/worker_station_board_back"
+    "front": "createworkers:block/worker_station_front"
   },
   "elements": [
     {
-      "__comment": "The bench. Fills the footprint, because a profession block that does not is a profession block that looks like scenery.",
-      "from": [0, 0, 0],
-      "to": [16, 11, 16],
+      "__comment": "The cabinet. Every face spans the block boundary, so every face culls.",
+      "from": [
+        0,
+        0,
+        0
+      ],
+      "to": [
+        16,
+        16,
+        16
+      ],
       "faces": {
-        "down": {"texture": "#bottom", "cullface": "down"},
-        "up": {"texture": "#top"},
-        "north": {"texture": "#side", "cullface": "north"},
-        "south": {"texture": "#side", "cullface": "south"},
-        "west": {"texture": "#side", "cullface": "west"},
-        "east": {"texture": "#side", "cullface": "east"}
-      }
-    },
-    {
-      "__comment": "The board, standing along the back. Its front is what the hats hang on, and it is the face a player is looking at when they open the rack.",
-      "from": [0, 11, 10],
-      "to": [16, 16, 16],
-      "faces": {
-        "down": {"texture": "#board_back"},
-        "up": {"texture": "#board_back", "cullface": "up"},
-        "north": {"texture": "#board"},
-        "south": {"texture": "#board_back", "cullface": "south"},
-        "west": {"texture": "#board_back", "cullface": "west"},
-        "east": {"texture": "#board_back", "cullface": "east"}
+        "down": {
+          "texture": "#bottom",
+          "cullface": "down"
+        },
+        "up": {
+          "texture": "#top",
+          "cullface": "up"
+        },
+        "north": {
+          "texture": "#front",
+          "cullface": "north"
+        },
+        "south": {
+          "texture": "#side",
+          "cullface": "south"
+        },
+        "west": {
+          "texture": "#side",
+          "cullface": "west"
+        },
+        "east": {
+          "texture": "#side",
+          "cullface": "east"
+        }
       }
     }
   ]

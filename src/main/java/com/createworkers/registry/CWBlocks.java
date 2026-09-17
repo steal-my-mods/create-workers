@@ -21,11 +21,11 @@ public class CWBlocks {
 		() -> new WorkerStationBlock(BlockBehaviour.Properties.of()
 			.mapColor(MapColor.WOOD)
 			.strength(2.5F)
-			.sound(SoundType.WOOD)
-			// Not a full cube, so it must not claim to be one. Left occluding -- which is what
-			// Properties.of() gives you -- every neighbour culls the face it shares with this block,
-			// and the gap the model leaves shows straight through the world.
-			.noOcclusion()));
+			.sound(SoundType.WOOD)));
+	// No noOcclusion: the Station fills its block, so it should occlude, light and cull like any
+	// other solid one. It needed the flag while it was a bench with a board on it, and leaving the
+	// flag behind after the shape became a full cube would quietly cost every neighbour the face it
+	// would otherwise cull -- paying for a problem the block no longer has.
 
 	public static final DeferredItem<BlockItem> WORKER_STATION_ITEM =
 		CWItems.ITEMS.registerSimpleBlockItem("worker_station", WORKER_STATION, new Item.Properties());
