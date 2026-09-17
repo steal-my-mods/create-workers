@@ -5,22 +5,17 @@ Generates the Worker Station's block textures.
 Five 16x16 sheets, written by hand the way the logo and the profession clothing
 are, so the art is this mod's own rather than borrowed or traced:
 
-  worker_station_base          the plinth's sides, planks under a hi-vis stripe
-  worker_station_base_top      its top, a worn surface with a border
-  worker_station_post          the two posts holding the board up
-  worker_station_board         the board, with three empty pegs
-  worker_station_board_staffed the same board with a hard hat on a peg
+  worker_station_side       the bench's sides, planks under a hi-vis stripe
+  worker_station_top        the counter, worn and bordered
+  worker_station_bottom     plain boards, seen only from underneath
+  worker_station_board      the board's front, pegged and ready to have work hung on it
+  worker_station_board_back its back and edges, plain boarding
 
-The board is the part that changes with the block state, so a station with a job
-in it can be told from an empty one at a glance and from any angle -- which the
-old top-face-only version could not, a block being something you mostly see from
-the side.
-
-**The board's art sits in the window x 2..14, y 1..11.** The model gives that face
-no explicit UVs, so Minecraft derives them from the element's own coordinates
-(x 2..14, y 5..15 becomes uv 2,1 -> 14,11), which is what keeps the drawn pixels
-square and on the block grid instead of stretched across it. Move the board in
-the model and this window moves with it.
+**Nothing here says whether the station has a job in it.** That was two attempts:
+a hat painted on the top face, which you could only see by standing over the
+block, and then a hat painted on the board, which was a small drawing of a hat
+next to nothing. It is drawn by WorkerStationRenderer now, as the actual hats
+that are in the rack -- which is unambiguous, needs no art, and counts.
 
 The palette is the hat's own yellow over spruce-ish browns, which is what ties
 the block to the item without either being a copy of the other.
@@ -37,8 +32,9 @@ OUTPUT_DIR = 'src/main/resources/assets/createworkers/textures/block'
 
 SIZE = 16
 
-# Where the board's front face actually shows, derived from the model. See above.
-BOARD_WINDOW = (2, 1, 14, 11)
+# The board is 16 wide and 5 tall, so its front face uses the sheet's full width
+# and its top five rows. The pegs go there.
+BOARD_ROWS = 5
 
 # Spruce-ish planks, dark to light, plus the hat's yellow and its shadow.
 PLANK_DARK = (0x3B, 0x2A, 0x1B, 255)
@@ -70,8 +66,8 @@ def speckle(pixels, colour, scatter):
     return pixels
 
 
-def base_side():
-    """Horizontal boards, with a seam every four rows and a hi-vis stripe."""
+def bench_side():
+    """Horizontal boards with a hi-vis stripe just under the counter's lip."""
     pixels = blank(PLANK)
     for y in range(SIZE):
         for x in range(SIZE):
@@ -80,76 +76,57 @@ def base_side():
             elif (x * 7 + y * 3) % 11 == 0:
                 pixels[y][x] = PLANK_LIGHT
 
-    # The stripe sits low, because only the bottom three pixels of this sheet are
-    # ever on the plinth -- the rest of the block is board and posts.
+    # Rows 5 and 6, which is under the lip of an eleven-pixel bench. The stripe is
+    # what says "site equipment" across a room, so it wants to be on the part of the
+    # sheet the bench actually shows.
     for x in range(SIZE):
-        pixels[13][x] = HI_VIS_DARK
-        pixels[14][x] = HI_VIS
-        pixels[15][x] = HI_VIS_DARK
+        pixels[5][x] = HI_VIS
+        pixels[6][x] = HI_VIS_DARK
     return pixels
 
 
-def base_top():
-    """A worn surface with a border, so the plinth reads as a thing you put things on."""
+def bench_top():
+    """The counter: worn, bordered, and scuffed where work lands."""
     pixels = speckle(blank(DESK), DESK_LIGHT, (5, 13))
     for i in range(SIZE):
         pixels[0][i] = PLANK_DARK
         pixels[SIZE - 1][i] = PLANK_DARK
         pixels[i][0] = PLANK_DARK
         pixels[i][SIZE - 1] = PLANK_DARK
+    for y in range(6, 11):
+        for x in range(4, 12):
+            if (x + y) % 3:
+                pixels[y][x] = DESK_LIGHT
     return pixels
 
 
-def post():
-    """Dark timber with iron banding, which is what carries the board's weight."""
-    pixels = speckle(blank(PLANK_DARK), PLANK, (3, 7))
-    for band in (3, 12):
-        for x in range(SIZE):
-            pixels[band][x] = IRON_DARK
-            pixels[band + 1][x] = IRON
-    return pixels
+def bench_bottom():
+    """Plain boards. Nobody sees this, but somebody will look."""
+    return speckle(blank(PLANK_DARK), PLANK, (3, 7))
 
 
-def board(hat):
-    """The board, with three pegs, and optionally work hung on the middle one."""
-    pixels = speckle(blank(BOARD), BOARD_LIGHT, (5, 9))
+def board_back():
+    """The board's back and edges: plain boarding, no pegs."""
+    return speckle(blank(BOARD), BOARD_LIGHT, (5, 9))
 
-    left, top, right, bottom = BOARD_WINDOW
-    for x in range(left, right):
-        pixels[top][x] = BOARD_EDGE
-        pixels[bottom - 1][x] = BOARD_EDGE
-    for y in range(top, bottom):
-        pixels[y][left] = BOARD_EDGE
-        pixels[y][right - 1] = BOARD_EDGE
 
-    pegs = (left + 2, (left + right) // 2 - 1, right - 3)
-    for peg in pegs:
-        pixels[top + 3][peg] = IRON_DARK
-        pixels[top + 4][peg] = IRON
+def board_front():
+    """The board a station hangs its work on: a row of pegs, and nothing on them.
 
-    if not hat:
-        return pixels
+    Empty on purpose. What is in a station is drawn as the hats themselves -- see the
+    note at the top of this file -- so the art here is the furniture, not the state.
+    """
+    pixels = board_back()
 
-    # A hard hat hung on the middle peg: a dome with its brim, seen face on.
-    middle = pegs[1]
-    for y in range(top + 5, top + 8):
-        for x in range(middle - 3, middle + 4):
-            reach = abs(x - middle)
-            if y == top + 5 and reach > 1:
-                continue
-            if y == top + 6 and reach > 2:
-                continue
-            pixels[y][x] = HI_VIS if reach < 2 else HI_VIS_DARK
-    for x in range(middle - 4, middle + 5):
-        pixels[top + 8][x] = HI_VIS_DARK
+    # Only the top BOARD_ROWS of this sheet ever show on the board's face, the box
+    # being five pixels tall; everything below is edge nobody sees from the front.
+    for x in range(SIZE):
+        pixels[0][x] = BOARD_EDGE
+        pixels[BOARD_ROWS - 1][x] = BOARD_EDGE
 
-    # A docket pinned beside it, because a board with one thing on it reads as
-    # decoration and a board with two reads as in use.
-    for y in range(top + 4, top + 9):
-        for x in range(left + 1, left + 4):
-            pixels[y][x] = PAPER
-    for x in range(left + 1, left + 4):
-        pixels[top + 4][x] = IRON_DARK
+    for peg in range(2, SIZE - 1, 3):
+        pixels[1][peg] = IRON_DARK
+        pixels[2][peg] = IRON
     return pixels
 
 
@@ -174,11 +151,11 @@ def png(pixels):
 
 
 SHEETS = {
-    'worker_station_base': base_side,
-    'worker_station_base_top': base_top,
-    'worker_station_post': post,
-    'worker_station_board': lambda: board(False),
-    'worker_station_board_staffed': lambda: board(True),
+    'worker_station_side': bench_side,
+    'worker_station_top': bench_top,
+    'worker_station_bottom': bench_bottom,
+    'worker_station_board': board_front,
+    'worker_station_board_back': board_back,
 }
 
 

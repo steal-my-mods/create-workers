@@ -540,15 +540,23 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   because what it is really asserting is that nothing in the brain gets a veto over a second hire.
   **`PoiCompetitorScan` (CORE 2) is the same shape of hazard** and is avoided for the same reason:
   nothing gives a worker a `POTENTIAL_JOB_SITE` any more.
-- **A block is read by its silhouette before anything else, and the Station was a cube.** Every Create
-  block worth the name is recognisable as a shape with no texture at all — an Arm, a Funnel, a Depot —
-  and a full cube with a stripe painted on it reads as scenery. The Station is a plinth, two posts and
-  a posted board, which is a shape that says what it is, and `HAS_JOB` swaps the *board* rather than
-  the top face so it can be told at a glance from the side, which is how a block on a factory floor is
-  mostly seen. The board's face carries **no explicit UVs**, so Minecraft derives them from the
-  element's coordinates and the drawn pegs stay square and on the block grid; that is what ties the
-  art's window (x 2..14, y 1..11 of the sheet) to the box's position, and moving one means moving the
-  other.
+- **A block that is not a full cube must say so, or the world shows through it.** `Properties.of()`
+  leaves a block **occluding**, so every neighbour culls the face it shares with it — and wherever the
+  model does not actually fill the block, that culled face is a hole you can see the sky through.
+  `noOcclusion()` on the Station. The same goes the other way in the model: `cullface` belongs only on
+  a face that really does span the block's boundary, and putting it on one that does not is the same
+  hole by another route.
+- **A block is read by its silhouette, and both of the first two shapes were wrong.** A full cube with
+  a stripe painted on it reads as scenery; a thin board on a low plinth, which was the correction,
+  reads as *slight* beside a lectern or a smithing table — a profession block wants the weight of one.
+  What it is now is a bench filling the footprint with a board rising from the back: an L from the
+  side, a counter from the front, and full height overall.
+- **What is in a station is drawn as the hats that are in it, not painted on.** Two versions painted
+  it: a hat on the top face, which you could only see by standing over the block, and then a hat on
+  the board, which was a drawing of a hat rather than the ones actually there. Both were a picture of
+  a state, and a picture cannot count — one job and six looked the same. `WorkerStationRenderer` hangs
+  the real items on the board, which costs no art, needs no second model, and says how many. That is
+  also why there is one model for both `HAS_JOB` states now.
 - **A blockstate file has to grow when a property does, and nothing but a test will say so.** Adding
   `FACING` took the Station from two states to eight, and a state with no variant renders as the
   black-and-magenta cube — silently, because resources are the client's business and the tests run on

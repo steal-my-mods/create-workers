@@ -53,15 +53,32 @@ public class WorkerStationBlock extends BaseEntityBlock {
 	public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
 
 	/**
-	 * A plinth with a board posted on it, rather than the cube this was.
+	 * A workbench with a board standing at the back of it.
 	 *
-	 * <p>Create's blocks are read by silhouette before anything else — an Arm, a Depot and a Funnel
-	 * are each recognisable as a shape with no texture at all — and a full cube with a stripe on it
-	 * reads as scenery. So the shape says what the block is: a base you could stand a clipboard on,
-	 * two posts, and a board wide enough to pin work to. The collision box is the whole block even so,
-	 * because a station is furniture a player walks up to rather than something to climb over.
+	 * <p>Create's blocks are read by silhouette before anything else, and a full cube with a stripe on
+	 * it reads as scenery — but the first attempt at fixing that went too far the other way, a thin
+	 * board on a low plinth that looked slight beside a lectern or a smithing table. A profession block
+	 * wants the weight of one. So: a bench filling the block's footprint, and a board rising from the
+	 * back of it, which is an L from the side and a counter you can put something on from the front.
+	 *
+	 * <p>Shaped honestly rather than as a full cube. The space over the counter is open, so a player
+	 * standing at one is standing at it rather than bumping into air.
 	 */
-	private static final VoxelShape SHAPE = Shapes.block();
+	private static final VoxelShape BENCH = Block.box(0, 0, 0, 16, 11, 16);
+	private static final VoxelShape[] SHAPES = new VoxelShape[Direction.values().length];
+
+	static {
+		// Authored facing north, which puts the board along the far edge -- the high-z side.
+		for (Direction facing : Direction.Plane.HORIZONTAL) {
+			VoxelShape board = switch (facing) {
+				case SOUTH -> Block.box(0, 11, 0, 16, 16, 6);
+				case WEST -> Block.box(0, 11, 0, 6, 16, 16);
+				case EAST -> Block.box(10, 11, 0, 16, 16, 16);
+				default -> Block.box(0, 11, 10, 16, 16, 16);
+			};
+			SHAPES[facing.ordinal()] = Shapes.or(BENCH, board);
+		}
+	}
 
 	public WorkerStationBlock(Properties properties) {
 		super(properties);
@@ -95,7 +112,8 @@ public class WorkerStationBlock extends BaseEntityBlock {
 
 	@Override
 	protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-		return SHAPE;
+		return SHAPES[state.getValue(FACING)
+			.ordinal()];
 	}
 
 	@Override

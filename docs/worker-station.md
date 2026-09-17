@@ -409,10 +409,18 @@ is idle, not absent, and firing it for a quiet shift would be wrong.
 
 ## What it looks like
 
-A plinth with two posts and a board pinned to it, facing whoever placed it. The shape is the point:
-Create's blocks are recognisable before their textures are, and the first version of this was a full
-cube with a hi-vis stripe, which reads as scenery. `HAS_JOB` changes the *board* rather than the top
-face, because a block on a factory floor is mostly seen from the side.
+A bench filling the block's footprint with a board rising from the back of it, facing whoever placed
+it — an L from the side, a counter from the front. The shape is the point: Create's blocks are
+recognisable before their textures are.
+
+It took three goes. A full cube with a hi-vis stripe read as scenery; a thin board on a low plinth,
+which was the correction, read as slight beside a lectern or a smithing table. A profession block
+wants the weight of one.
+
+**What is in it is drawn as the hats themselves**, hung on the board by a block entity renderer, up to
+the four that fit across it. The two attempts at painting the state on — a hat on the top face, then a
+hat on the board — were both a picture of having something rather than the thing, and neither could
+count: one job and six looked identical.
 
 ## Stress
 

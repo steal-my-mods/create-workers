@@ -21,7 +21,11 @@ public class CWBlocks {
 		() -> new WorkerStationBlock(BlockBehaviour.Properties.of()
 			.mapColor(MapColor.WOOD)
 			.strength(2.5F)
-			.sound(SoundType.WOOD)));
+			.sound(SoundType.WOOD)
+			// Not a full cube, so it must not claim to be one. Left occluding -- which is what
+			// Properties.of() gives you -- every neighbour culls the face it shares with this block,
+			// and the gap the model leaves shows straight through the world.
+			.noOcclusion()));
 
 	public static final DeferredItem<BlockItem> WORKER_STATION_ITEM =
 		CWItems.ITEMS.registerSimpleBlockItem("worker_station", WORKER_STATION, new Item.Properties());

@@ -1,6 +1,7 @@
 package com.createworkers.client.ponder;
 
 import com.createworkers.block.WorkerStationBlock;
+import com.createworkers.block.WorkerStationBlockEntity;
 import com.createworkers.registry.CWItems;
 import com.createworkers.worker.Shift;
 import com.createworkers.worker.Workers;
@@ -112,6 +113,11 @@ public class WorkerStationScene {
 		// at all. This is the moment it becomes one.
 		scene.world()
 			.cycleBlockProperty(STATION, WorkerStationBlock.HAS_JOB);
+		// And a real hat into the rack, because the block draws what is actually in it rather than a
+		// picture of having something. Nothing else happens: putHat's own bookkeeping is server-side,
+		// and a ponder level reports itself as a client.
+		scene.world()
+			.modifyBlockEntity(STATION, WorkerStationBlockEntity.class, rack -> rack.putHat(0, hat));
 		scene.effects()
 			.indicateSuccess(STATION);
 		scene.overlay()

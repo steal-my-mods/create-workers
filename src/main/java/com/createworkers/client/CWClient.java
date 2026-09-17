@@ -24,6 +24,7 @@ public class CWClient {
 		modBus.addListener(CWClient::registerClientExtensions);
 		modBus.addListener(CWClient::registerPonderScenes);
 		modBus.addListener(CWClient::registerScreens);
+		modBus.addListener(CWClient::registerRenderers);
 	}
 
 	/**
@@ -33,6 +34,12 @@ public class CWClient {
 	 */
 	private static void registerPonderScenes(FMLClientSetupEvent event) {
 		event.enqueueWork(() -> PonderIndex.addPlugin(new CWPonderPlugin()));
+	}
+
+	/** The Station draws the hats that are in it, which is the only thing that says what it holds. */
+	private static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+		event.registerBlockEntityRenderer(com.createworkers.registry.CWBlockEntities.WORKER_STATION.get(),
+			WorkerStationRenderer::new);
 	}
 
 	private static void registerScreens(net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {

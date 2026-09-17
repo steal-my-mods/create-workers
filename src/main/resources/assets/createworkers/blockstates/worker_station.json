@@ -5,21 +5,21 @@
       "y": 90
     },
     "facing=east,has_job=true": {
-      "model": "createworkers:block/worker_station_staffed",
+      "model": "createworkers:block/worker_station",
       "y": 90
     },
     "facing=north,has_job=false": {
       "model": "createworkers:block/worker_station"
     },
     "facing=north,has_job=true": {
-      "model": "createworkers:block/worker_station_staffed"
+      "model": "createworkers:block/worker_station"
     },
     "facing=south,has_job=false": {
       "model": "createworkers:block/worker_station",
       "y": 180
     },
     "facing=south,has_job=true": {
-      "model": "createworkers:block/worker_station_staffed",
+      "model": "createworkers:block/worker_station",
       "y": 180
     },
     "facing=west,has_job=false": {
@@ -27,7 +27,7 @@
       "y": 270
     },
     "facing=west,has_job=true": {
-      "model": "createworkers:block/worker_station_staffed",
+      "model": "createworkers:block/worker_station",
       "y": 270
     }
   }
