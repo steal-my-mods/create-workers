@@ -677,10 +677,27 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	}
 
 	/** Whether this villager is one a station may approach: an adult with no job of its own. */
+	/**
+	 * Who a Station will take on: an unemployed adult villager, or one that has worked before.
+	 *
+	 * <p>The second half arrived with trades. Vanilla locks a villager to its profession the moment it
+	 * trades — {@code ResetProfession} wants experience of zero and level one — so a Worker a player
+	 * has bought a stack of shafts from will never go back to being an ordinary villager, and without
+	 * this it could never be hired again either: a villager holding a profession whose job-site
+	 * predicates match nothing, forever.
+	 *
+	 * <p>Fighting that lock would mean stripping levels a player earned, on a villager vanilla thinks
+	 * is settled. Leaning on it is better and reads better: <b>somebody who has done this work before
+	 * is exactly who you would hire.</b> A career labourer, rather than a dead end.
+	 *
+	 * <p>Every other profession is still refused, which is the rule that has always been here — break
+	 * a librarian's lectern first, exactly as vanilla makes you.
+	 */
 	private boolean couldWork(Villager villager) {
+		VillagerProfession profession = villager.getVillagerData()
+			.getProfession();
 		return villager.isAlive() && !villager.isBaby() && !villager.isDeadOrDying()
-			&& villager.getVillagerData()
-				.getProfession() == VillagerProfession.NONE
+			&& (profession == VillagerProfession.NONE || Workers.isCareerWorker(villager))
 			&& !Workers.isEmployed(villager);
 	}
 

@@ -125,6 +125,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `worker/Shift` | Which crew a worker is on. **An offset into the configured working day, not a pair of times** — one third of a day per crew, so the span stays the operator's single choice |
 | `worker/WalkLocomotion` | Villagers. Also owns `returnTo`, the wander leash |
 | `worker/TeleportLocomotion` | Endermen. Holds the teleport cooldown, so locomotion instances are **per-worker**, not shared |
+| `worker/WorkerTrades` | What a Worker sells and buys. One rule: **nothing that skips a gate** — shafts, cogs, andesite alloy; never a hard hat |
 | `worker/WorkerEvents` | Hiring, retiring, drops, conversion, client sync, cleanup, and the vetoes that stop vanilla's own enderman AI from undoing the job |
 | `client/HatSelectionHandler` | Client-side programming UX (mirrors `ArmInteractionPointHandler`) |
 | `client/WorkerGearLayer` | Hard hat + hi-vis vest render layer |
@@ -733,6 +734,28 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   forgotten. What counts as food is the item's own `FOOD` component rather than a list kept here — a
   list is wrong the day any mod adds a bread, and the component is the same question `FOOD_POINTS`
   will be asking. (`aCanteenTakesFoodAndNothingElse`.)
+- **Trading locks a villager to its profession, which breaks retirement — and the fix is to lean on
+  that rather than fight it.** `ResetProfession` wants `getVillagerXp() == 0` **and**
+  `getLevel() <= 1`, so a worker a player has traded with is one vanilla will never hand back.
+  `Workers.dismiss` had already written the precondition down — retirement works "because nothing
+  raises its trade level any more" — and giving workers trades destroys it, leaving a villager holding
+  a profession whose job-site predicates match nothing, unemployable by us *and* by the village,
+  forever. Forcing a reset would mean stripping levels a player earned on a villager vanilla considers
+  settled, which is a rule it applies to every profession (a librarian you have bought from is a
+  librarian for good). So the lock stands and **a Station re-hires a former worker**: a career
+  labourer rather than a dead end. `Workers.isCareerWorker` is the one definition `allowReset` and
+  `couldWork` share, and **it must be narrower than "wears the Worker profession"** — a worker just
+  let go still wears it for the tick or two before `ResetProfession` clears it, so a station that
+  hired anything wearing it re-hired the villager it had that moment released
+  (`aWorkerWhoseShiftIsTurnedOffFinishesFirst` caught exactly that).
+  Also: **a worker can never restock by itself.** `WorkAtPoi` is what calls `shouldRestock`/`restock`
+  and it requires a `JOB_SITE`, which a worker deliberately has none of — so trades are restocked at
+  the start of a shift instead, guarded by vanilla's own public `shouldRestock()` so the twice-a-day
+  cap comes for free. And the trade list follows one rule, **nothing that skips a gate**: shafts, cogs
+  and andesite alloy, never precision mechanisms or brass casings, and **never a hard hat**, because
+  the hat is this mod's own gate and the rule applies to us first.
+  (`aWorkerHasTradesAndNoneOfThemIsAHardHat`, `aWorkerThatHasTradedIsACareerWorker`, both
+  mutation-checked.)
 - **Food has to be items, because a villager's hunger is unreachable.** `Villager.foodLevel` is
   **private**, nothing public reads it, and the only public thing that moves it is
   `eatAndDigestFood()` — which eats to full and spends twelve in one go for breeding. There is no way

@@ -62,6 +62,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -1259,6 +1260,86 @@ public class WorkerGameTests {
 		helper.assertTrue(data.fuel() == 4 * CWConfig.DELIVERIES_PER_FOOD_POINT.get() - 1,
 			"a loaf should be worth four points of deliveries, and left " + data.fuel());
 		helper.assertTrue(!data.isHungry(villager), "and it should not be hungry any more");
+		helper.succeed();
+	}
+
+	/**
+	 * A Worker has something to sell, and none of it is a Hard Hat.
+	 *
+	 * <p>The rule the trade list is built on is <b>nothing that skips a gate</b>: shafts, cogs and
+	 * andesite alloy are available in the first hour and gated behind nothing, and making them by hand
+	 * in quantity is exactly the tedium Create wants you to automate past. What a labourer has to sell
+	 * is the product of labour.
+	 *
+	 * <p><b>The Hard Hat is the assertion that matters</b>, and it is about this mod holding itself to
+	 * its own rule. The hat is this mod's gate: a player who can buy one has bought past the item the
+	 * mod is about. A list is easy to add to later and this is what will be there when somebody does.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aWorkerHasTradesAndNoneOfThemIsAHardHat(GameTestHelper helper) {
+		layFloor(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		villager.setVillagerData(villager.getVillagerData()
+			.setProfession(CWProfessions.WORKER.get()));
+
+		MerchantOffers offers = villager.getOffers();
+		helper.assertTrue(!offers.isEmpty(),
+			"a Worker should have trades -- NeoForge fires VillagerTradesEvent for every registered "
+				+ "profession, so an empty list here means nothing is listening for ours");
+
+		for (MerchantOffer offer : offers) {
+			helper.assertTrue(!offer.getResult()
+				.is(CWItems.HARD_HAT.get()), "a Worker must never sell a Hard Hat: that is this mod's own gate");
+			helper.assertTrue(!offer.getCostA()
+				.is(CWItems.HARD_HAT.get()), "and must never ask for one either");
+		}
+		helper.succeed();
+	}
+
+	/**
+	 * Trading locks a villager to its profession, and a Station hires such a worker back.
+	 *
+	 * <p>This is the interaction the trade design did not anticipate, and {@code Workers.dismiss}'s own
+	 * comment had already named the precondition it breaks: retirement works "because nothing raises
+	 * its trade level any more". {@code ResetProfession} wants experience of zero <em>and</em> trade
+	 * level one, so a Worker a player has bought a stack of shafts from is one vanilla will never hand
+	 * back — and without somewhere for it to go, that is a villager holding a profession whose
+	 * job-site predicates match nothing, unemployable by us and by the village, forever.
+	 *
+	 * <p>Forcing the reset would mean stripping levels a player earned. Leaning on the lock is better
+	 * and reads better: a career labourer. So {@code allowReset} hands back only a worker that never
+	 * really traded, and {@code isCareerWorker} is the one definition both sides use.
+	 *
+	 * <p>It has to be <b>narrower than "wears the Worker profession"</b>, which is the part that bit: a
+	 * worker just let go still wears it for the tick or two before {@code ResetProfession} clears it,
+	 * so a Station that hired anything wearing it re-hired the villager it had that moment released.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aWorkerThatHasTradedIsACareerWorker(GameTestHelper helper) {
+		layFloor(helper);
+		Villager fresh = helper.spawn(EntityType.VILLAGER, SPAWN);
+		fresh.setVillagerData(fresh.getVillagerData()
+			.setProfession(CWProfessions.WORKER.get()));
+		Workers.protectFromReset(fresh);
+
+		helper.assertTrue(!Workers.isCareerWorker(fresh),
+			"a worker holding only the protective point of experience has not traded, and vanilla will "
+				+ "take its profession back -- treating it as a career worker is what re-hired a villager "
+				+ "the station had just let go");
+		Workers.allowReset(fresh);
+		helper.assertTrue(fresh.getVillagerXp() == 0, "so retirement should hand it back to vanilla");
+
+		Villager traded = helper.spawn(EntityType.VILLAGER, SPAWN);
+		traded.setVillagerData(traded.getVillagerData()
+			.setProfession(CWProfessions.WORKER.get())
+			.setLevel(2));
+		traded.setVillagerXp(20);
+
+		helper.assertTrue(Workers.isCareerWorker(traded), "a worker that has actually traded is a career worker");
+		Workers.allowReset(traded);
+		helper.assertTrue(traded.getVillagerXp() == 20,
+			"and retirement must not strip the experience a player earned -- vanilla has already "
+				+ "refused to reset it, and taking the levels away to force the issue is not ours to do");
 		helper.succeed();
 	}
 

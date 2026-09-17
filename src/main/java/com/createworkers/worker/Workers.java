@@ -7,6 +7,7 @@ import com.createworkers.block.WorkerStationBlockEntity;
 import com.createworkers.net.WorkerStatePacket;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWAttachments;
+import com.createworkers.registry.CWProfessions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -216,8 +217,17 @@ public class Workers {
 	 */
 	public static void protectFromReset(Mob mob) {
 		if (mob instanceof Villager villager && villager.getVillagerXp() == 0)
-			villager.setVillagerXp(1);
+			villager.setVillagerXp(PROTECTIVE_XP);
 	}
+
+	/**
+	 * The single point of trading experience that keeps {@code ResetProfession} off a worker's back.
+	 *
+	 * <p>Named rather than written twice, because {@link #allowReset} has to be able to tell it from
+	 * experience a player earned by trading — and telling those apart is the whole of how trades and
+	 * retirement coexist.
+	 */
+	private static final int PROTECTIVE_XP = 1;
 
 	/**
 	 * Hands a retired worker back to vanilla, which cannot tidy up after one that still looks employed.
@@ -227,8 +237,49 @@ public class Workers {
 	 * the village's own hours back.
 	 */
 	public static void allowReset(Mob mob) {
-		if (mob instanceof Villager villager)
+		if (!(mob instanceof Villager villager))
+			return;
+		// **Only the point we put there, and only from a worker that never really traded.**
+		//
+		// Giving workers trades broke this, and the comment on dismiss() had already named the
+		// precondition: it works "because nothing raises its trade level any more". ResetProfession
+		// wants xp == 0 *and* level <= 1, so a worker that has traded is one vanilla will never reset
+		// -- and wiping its experience to force the issue would be taking away levels a player earned,
+		// on a villager vanilla considers settled in its job.
+		//
+		// That lock is vanilla's own rule, not damage: a librarian you have traded with is a librarian
+		// forever. So a worker that has traded stays a Worker, and what stops that being a dead end is
+		// the other half of this change -- a Station will re-hire a former worker. A career labourer
+		// is a better answer than a villager stuck holding a profession nothing can use.
+		if (!isCareerWorker(villager))
 			villager.setVillagerXp(0);
+	}
+
+	/**
+	 * Whether this villager is a Worker <em>vanilla will never take the profession back off</em>.
+	 *
+	 * <p>{@code ResetProfession} wants experience of zero and trade level one, so a villager that has
+	 * actually traded is settled in its job for good — that is vanilla's rule for every profession,
+	 * not something this mod introduced, and a librarian you have bought from is a librarian forever.
+	 *
+	 * <p>One definition, used by both sides of the deal. {@link #allowReset} hands back only a worker
+	 * this is false for, because taking the experience off one it is true for would be stripping
+	 * levels a player earned to force a reset vanilla has already refused. And a Station will re-hire
+	 * one it is true for, because the alternative is a villager holding a profession whose job-site
+	 * predicates match nothing — unemployable by us and unemployable by the village. Somebody who has
+	 * done this work before is exactly who you would hire.
+	 *
+	 * <p>It must be <b>narrower</b> than "has the Worker profession", and that is not a nicety. A
+	 * worker the station has just let go still wears the profession for the tick or two before
+	 * {@code ResetProfession} clears it, so a Station that hired anything wearing it would re-hire the
+	 * villager it had that moment released — which is exactly what
+	 * {@code aWorkerWhoseShiftIsTurnedOffFinishesFirst} caught.
+	 */
+	public static boolean isCareerWorker(Villager villager) {
+		return villager.getVillagerData()
+			.getProfession() == CWProfessions.WORKER.get()
+			&& (villager.getVillagerXp() > PROTECTIVE_XP || villager.getVillagerData()
+				.getLevel() > 1);
 	}
 
 	/**

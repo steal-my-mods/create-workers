@@ -1,6 +1,6 @@
 # Phase 4 — leisure, food, and trades
 
-**Status: leisure, muster, the canteen and food are built; trades are not started.** A worker eats as
+**Status: built.** Leisure, muster, the canteen, food and trades. A worker eats as
 it hauls, out of its own inventory, and slows to `hungryPace` when it runs out; a Canteen hands food
 to anybody short of it within `canteenRange`. This was the
 plan agreed before any code, so that the shape was argued once rather than discovered three times.
@@ -19,6 +19,17 @@ What the build changed, so far:
   A shortcut here was that block reimplemented on one block. So the shape is an Item Vault's — funnel,
   chute, belt, hopper or hatch in; comparator for how full; breaking it for the food back — with a
   goggle overlay saying *what* is in it, which a comparator cannot.
+- **Trading breaks retirement, and the fix is to lean on vanilla rather than fight it.** Not
+  anticipated here at all, and `Workers.dismiss` had already written down the precondition it
+  destroys: retirement works "because nothing raises its trade level any more". `ResetProfession`
+  wants experience of zero **and** trade level one, so a Worker a player has traded with is one
+  vanilla will never hand back — leaving a villager holding a profession whose job-site predicates
+  match nothing, unemployable by us and by the village, forever. Forcing the reset would mean
+  stripping levels a player earned on a villager vanilla considers settled. So the lock stands, which
+  is vanilla's rule for every profession, and **a Station re-hires a former Worker**: a career
+  labourer rather than a dead end. `Workers.isCareerWorker` is the single definition both sides use,
+  and it has to be narrower than "wears the profession" — one just let go still wears it for a tick or
+  two, and a Station that hired anything wearing it re-hired the villager it had that moment released.
 - **"Food" is vanilla's four, not everything edible.** `Villager.FOOD_POINTS` is public and holds
   bread, potato, carrot and beetroot; a villager eats nothing else. The canteen filtered on the `FOOD`
   component at first, so a trough of cooked beef read as stocked on every readout and would have fed

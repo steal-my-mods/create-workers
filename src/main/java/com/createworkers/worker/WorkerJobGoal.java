@@ -16,6 +16,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -373,7 +374,24 @@ public class WorkerJobGoal extends Goal {
 	 * would do it eventually: {@code WakeUp} only fires once the villager's brain leaves {@code REST},
 	 * and the operator's clock may well start the shift before the village's own morning.
 	 */
+	/**
+	 * Opening time, which for a worker with trades is also restocking time.
+	 *
+	 * <p><b>A worker would otherwise sell out once and stay sold out for the rest of the world's
+	 * life.</b> The thing that restocks a villager is {@code WorkAtPoi}, and it requires a
+	 * {@code JOB_SITE} memory — which a worker has none of, deliberately, because
+	 * {@code PoiCompetitorScan} would erase it from all but one of a rack's crew and
+	 * {@code ResetProfession} would strip the profession behind it. So restocking has to be ours.
+	 *
+	 * <p>The start of a shift is the natural hook: it is the villager equivalent of the shop opening,
+	 * it needs no clock of its own, and it inherits vanilla's limits for free — {@code shouldRestock}
+	 * is public and already enforces the twice-a-day cap through {@code numberOfRestocksToday}. Called
+	 * on every working tick and guarded by that, which is what makes a call this cheap safe to make
+	 * that often.
+	 */
 	private void clockOn() {
+		if (mob instanceof Villager villager && villager.shouldRestock())
+			villager.restock();
 		if (mob.isSleeping())
 			mob.stopSleeping();
 		bed = null;
