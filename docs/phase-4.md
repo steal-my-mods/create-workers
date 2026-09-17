@@ -1,8 +1,24 @@
 # Phase 4 — leisure, food, and trades
 
-**Status: designed, not built.** This is the plan agreed before any code, so that the shape is
-argued once rather than discovered three times. [shift-rotation.md](shift-rotation.md) holds the
-original thinking; where this document disagrees with it, this one is right and says why.
+**Status: leisure, muster and the canteen block are built; food and trades are not.** This was the
+plan agreed before any code, so that the shape was argued once rather than discovered three times.
+[shift-rotation.md](shift-rotation.md) holds the original thinking; where this document disagrees
+with it, this one is right and says why.
+
+What the build changed, so far:
+
+- **Leisure cost almost nothing**, as the design hoped — it is the job goal standing back, and
+  vanilla's idle package was already loaded and running. What it did cost was one rule that is not
+  obvious from here: leisure must pass `WANDER` explicitly and never read `idleBehaviour`, or a worker
+  on the default `PATROL` walks its rounds all evening, pinned in every way that matters.
+- **The canteen has no screen.** The design did not say either way. A trough has nothing to arrange,
+  so Right-Click puts food in, Right-Click empty-handed takes the last stack back, and a comparator
+  reads how full it is — the interface a composter offers, for the same reason.
+- **Its point of interest carries no tickets**, which the design did not anticipate needing to say. A
+  ticket is a claim and eating is not a claim; see the block's own notes.
+- **Its arm interaction point is deposit only.** The design said "it is a worker target" and stopped
+  there. Letting a worker take food *out* would invite a bread-in-bread-out loop and, worse, let a
+  belt keep a canteen empty — which is the one failure the block exists to prevent.
 
 ## In one sentence
 
@@ -294,8 +310,9 @@ children turns out to be a nuisance in play, that is the point to add a switch, 
    releasing the pin and one holding it, and muster is what keeps the shift boundary honest once
    leisure exists. Independently visible: workers socialise where they previously stood still, and a
    crew is at its post when its shift starts instead of setting off then.
-2. **The canteen block** — inventory, point of interest, arm interaction point. Useful before food
-   exists, because it is a place to put bread.
+2. **The canteen block** *(built)* — inventory, point of interest, arm interaction point. Useful
+   before food exists, because it is a place to put bread. Nothing hunts for one yet: finding a
+   canteen is a hungry worker's problem, and there is no hunger.
 3. **Food** — the drain, the hungry slowdown, the signal and the screen readout. Only fair once 1 and
    2 exist.
 4. **Trades**, which are decoration on top and want 1 to be visible at all.

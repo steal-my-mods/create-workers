@@ -574,7 +574,7 @@ fourth material on a block that reads correctly with three, and it would have pu
 cut through the panel rather than mounted on it, which is not where Create puts a fitting.
 
 **Anything hung on the front is drawn by the block entity renderer, and its numbers live in two files.**
-`WorkerStationRenderer` and `tools/generate_station_textures.py` both hold the lamp grid, in the model's
+`WorkerStationRenderer` and `tools/generate_block_textures.py` both hold the lamp grid, in the model's
 own units so the comparison is an equality with nowhere for a factor of sixteen to hide. The generator
 checks them against each other, against the model, and against `MAX_SLOTS`, on every build. This is not
 ceremony — the previous renderer shipped drawing every hat a fiftieth of a block *inside* an opaque

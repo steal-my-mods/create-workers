@@ -57,6 +57,34 @@ public class CWPoiTypes {
 	public static final DeferredHolder<PoiType, PoiType> WORKER_STATION =
 		REGISTER.register("worker_station", () -> new PoiType(staffableStates(), MAX_TICKETS, 1));
 
+	public static final ResourceKey<PoiType> CANTEEN_KEY =
+		ResourceKey.create(Registries.POINT_OF_INTEREST_TYPE, CreateWorkers.asResource("canteen"));
+
+	/**
+	 * The canteen, registered so that it can be <em>found</em> and for no other reason.
+	 *
+	 * <p><b>Zero tickets</b>, which is the whole design. A point of interest is the only thing in the
+	 * game that answers "where is the nearest one of these, within a radius, from here" without
+	 * walking every block — which is what a hungry worker needs and what the bed hunt already uses. But
+	 * a ticket is a <em>claim</em>, and nothing about eating is a claim: a canteen serves everybody, a
+	 * villager that is not hungry has no business holding one, and a ticket held by a worker in an
+	 * unloaded chunk would take a trough out of service for everyone else. With none to take,
+	 * {@code AcquirePoi} can never pick this block up and {@code ValidateNearbyPoi} has nothing to
+	 * validate; it is a landmark rather than a workstation.
+	 *
+	 * <p>It is also deliberately outside {@code minecraft:acquirable_job_site}, for the reason the
+	 * Station learned the hard way — a villager that walks to a block to take a job it cannot do is a
+	 * villager stuck with a profession and nothing to point it at.
+	 */
+	public static final DeferredHolder<PoiType, PoiType> CANTEEN =
+		REGISTER.register("canteen", () -> new PoiType(canteenStates(), 0, 1));
+
+	private static Set<BlockState> canteenStates() {
+		return Set.copyOf(CWBlocks.CANTEEN.get()
+			.getStateDefinition()
+			.getPossibleStates());
+	}
+
 	private static Set<BlockState> staffableStates() {
 		return CWBlocks.WORKER_STATION.get()
 			.getStateDefinition()

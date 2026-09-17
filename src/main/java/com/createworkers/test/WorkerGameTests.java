@@ -5,9 +5,11 @@ import java.util.List;
 
 import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
+import com.createworkers.block.CanteenBlockEntity;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.recipe.ClearProgramRecipe;
+import com.createworkers.registry.CWBlocks;
 import com.createworkers.registry.CWItems;
 import com.createworkers.registry.CWPoiTypes;
 import com.createworkers.registry.CWProfessions;
@@ -37,6 +39,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -1150,6 +1153,129 @@ public class WorkerGameTests {
 	}
 
 	/**
+	 * A Canteen takes food, and refuses everything else.
+	 *
+	 * <p>The filter is the block. A trough that accepted any item would be a chest with a worse
+	 * interface, and the one thing this block has to guarantee is that a hungry villager sent to it
+	 * finds something it can eat — a canteen packed with cobblestone by a misaimed funnel is a
+	 * starving crew standing next to a full inventory.
+	 *
+	 * <p>Asked of the {@code IItemHandler} rather than of the block, because that is the way in that
+	 * nothing supervises: a player's hand is checked by the block, but a funnel, a chute, a belt and a
+	 * worker all go straight through the capability.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aCanteenTakesFoodAndNothingElse(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
+		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
+			throw new GameTestAssertException("the canteen should have a block entity");
+
+		IItemHandler stock = canteen.stock();
+		ItemStack bread = new ItemStack(Items.BREAD, 8);
+		helper.assertTrue(ItemHandlerHelper.insertItem(stock, bread.copy(), false)
+			.isEmpty(), "a canteen should take bread");
+
+		ItemStack rubble = new ItemStack(Items.COBBLESTONE, 8);
+		ItemStack refused = ItemHandlerHelper.insertItem(stock, rubble.copy(), false);
+		helper.assertTrue(refused.getCount() == rubble.getCount(),
+			"a canteen should refuse everything that is not food, and it kept "
+				+ (rubble.getCount() - refused.getCount()) + " cobblestone");
+
+		// Stew is food with no nutrition worth arguing about and a stack size of one -- worth one
+		// assertion because "food" here is the item's own component and not a list kept by this mod,
+		// which is the only version of the rule that is still right the day a mod adds a bread.
+		helper.assertTrue(ItemHandlerHelper.insertItem(stock, new ItemStack(Items.MUSHROOM_STEW), false)
+			.isEmpty(), "a canteen should take any food, not a list of the ones we thought of");
+		helper.succeed();
+	}
+
+	/**
+	 * A worker can be sent to a Canteen, and can only ever put things in it.
+	 *
+	 * <p>Both halves matter. Being a valid destination on a hat is what makes "a line that hauls bread
+	 * into the canteen that feeds the workers running the line" something a player builds out of parts
+	 * they already have, and it costs this mod one registered {@code ArmInteractionPointType}.
+	 *
+	 * <p>Being <b>deposit only</b> is the other half and is deliberate. A trough machines could drain
+	 * is storage with a food filter, and the loop it invites — haul bread in, haul the same bread
+	 * out — is a worker doing nothing at some expense. The thing that is supposed to take food out is
+	 * a hungry villager eating, which is not an item transfer; a canteen a belt keeps emptying is a
+	 * canteen that never feeds anybody, which is the whole failure the block exists to prevent.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 400)
+	public static void aWorkerFillsACanteenAndNeverEmptiesIt(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, AllBlocks.DEPOT.getDefaultState());
+		helper.setBlock(TARGET, CWBlocks.CANTEEN.get());
+
+		WorkerTarget canteen = target(helper, TARGET);
+		helper.assertTrue(canteen.getMode() == Mode.DEPOSIT, "a canteen point should start as an output");
+		canteen.cycleMode();
+		helper.assertTrue(canteen.getMode() == Mode.DEPOSIT,
+			"a canteen point must refuse to become an input -- a deposit-only point is what stops a "
+				+ "worker hauling the crew's dinner back out again");
+
+		WorkerTarget depot = target(helper, SOURCE);
+		depot.cycleMode();
+		helper.assertTrue(depot.getMode() == Mode.TAKE, "precondition: the depot is the input");
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = Workers.getOrCreate(villager);
+		data.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.of(List.of(depot, canteen)));
+		stock(helper, SOURCE, new ItemStack(Items.BREAD, 4));
+
+		helper.succeedWhen(() -> {
+			if (!(helper.getBlockEntity(TARGET) instanceof CanteenBlockEntity stocked))
+				throw new GameTestAssertException("the canteen should have a block entity");
+			helper.assertTrue(!stocked.contents()
+				.isEmpty(), "a worker should have carried the bread into the canteen");
+		});
+	}
+
+	/**
+	 * A Canteen is a landmark, never a workstation.
+	 *
+	 * <p>It is registered as a point of interest so that a hungry worker can <em>find</em> one — that
+	 * query is the only thing in the game that answers "where is the nearest of these" without walking
+	 * every block, and the bed hunt already leans on it. But it is registered with <b>no tickets</b>,
+	 * because a ticket is a claim and nothing about eating is a claim: a trough serves everybody, and
+	 * one held by a worker in an unloaded chunk would be out of service for the rest of the village.
+	 *
+	 * <p>What that has to buy is the guarantee below. A block a villager can claim is a block a
+	 * villager will walk across a village to claim, and a villager that arrives at a workstation no
+	 * profession matches is one vanilla has no story for.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 300)
+	public static void aCanteenIsNeverTakenAsAJobSite(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
+
+		helper.assertTrue(CWPoiTypes.CANTEEN.get()
+			.maxTickets() == 0, "a canteen must offer no tickets, or a villager can claim one");
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		BlockPos canteen = helper.absolutePos(SOURCE);
+
+		helper.startSequence()
+			// Long enough for AcquirePoi to have looked, which it does on a jittered retry rather than
+			// every tick -- a test that asserted on the tick of the spawn would pass against anything.
+			.thenIdle(BRAIN_SETTLE_TICKS)
+			.thenExecute(() -> {
+				helper.assertTrue(villager.getVillagerData()
+					.getProfession() == VillagerProfession.NONE,
+					"nobody should take a job at a canteen, and this villager became a "
+						+ villager.getVillagerData()
+							.getProfession());
+				helper.assertTrue(!canteen.equals(villager.getBrain()
+					.getMemory(MemoryModuleType.JOB_SITE)
+					.map(GlobalPos::pos)
+					.orElse(null)), "and none of them should hold a canteen as a job site");
+			})
+			.thenSucceed();
+	}
+
+	/**
 	 * A target that would not resolve is tried again — and only that one.
 	 *
 	 * <p>Resolution runs once per load, so without a retry a target whose chunk was unloaded at the
@@ -1349,10 +1475,15 @@ public class WorkerGameTests {
 	}
 
 	private static void stock(GameTestHelper helper, BlockPos relative) {
+		stock(helper, relative, new ItemStack(Items.COBBLESTONE, STOCK));
+	}
+
+	/** The same, with something other than rubble in it — a canteen has no use for cobblestone. */
+	private static void stock(GameTestHelper helper, BlockPos relative, ItemStack goods) {
 		IItemHandler handler = handlerAt(helper, relative);
 		if (handler == null)
 			throw new IllegalStateException("no item handler at " + relative);
-		ItemHandlerHelper.insertItem(handler, new ItemStack(Items.COBBLESTONE, STOCK), false);
+		ItemHandlerHelper.insertItem(handler, goods, false);
 	}
 
 	private static IItemHandler handlerAt(GameTestHelper helper, BlockPos relative) {

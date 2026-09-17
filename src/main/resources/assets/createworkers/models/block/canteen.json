@@ -1,0 +1,51 @@
+{
+  "_comment": "A full cube with a distinct top, which is the face that says what the block is -- a trough you look down into. No facing property: a trough has no front, and a block with nothing to aim would only give a player a rotation to get wrong. Sides and bottom share their construction with the Station's casing; tools/generate_block_textures.py draws all of them and holds their frames to one another. The element is written out rather than inherited from block/cube_bottom_top so that every face states its own cullface and so that tools/render_block_model.py can draw it -- a model whose geometry lives in a vanilla parent is a model nothing in this repo can look at.",
+  "parent": "block/block",
+  "textures": {
+    "particle": "createworkers:block/canteen_side",
+    "side": "createworkers:block/canteen_side",
+    "top": "createworkers:block/canteen_top",
+    "bottom": "createworkers:block/canteen_bottom"
+  },
+  "elements": [
+    {
+      "__comment": "Every face spans the block boundary, so every face culls.",
+      "from": [
+        0,
+        0,
+        0
+      ],
+      "to": [
+        16,
+        16,
+        16
+      ],
+      "faces": {
+        "down": {
+          "texture": "#bottom",
+          "cullface": "down"
+        },
+        "up": {
+          "texture": "#top",
+          "cullface": "up"
+        },
+        "north": {
+          "texture": "#side",
+          "cullface": "north"
+        },
+        "south": {
+          "texture": "#side",
+          "cullface": "south"
+        },
+        "west": {
+          "texture": "#side",
+          "cullface": "west"
+        },
+        "east": {
+          "texture": "#side",
+          "cullface": "east"
+        }
+      }
+    }
+  ]
+}

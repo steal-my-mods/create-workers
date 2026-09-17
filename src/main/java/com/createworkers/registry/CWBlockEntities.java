@@ -1,6 +1,7 @@
 package com.createworkers.registry;
 
 import com.createworkers.CreateWorkers;
+import com.createworkers.block.CanteenBlockEntity;
 import com.createworkers.block.WorkerStationBlockEntity;
 
 import net.minecraft.core.registries.Registries;
@@ -17,4 +18,8 @@ public class CWBlockEntities {
 		REGISTER.register("worker_station",
 			() -> BlockEntityType.Builder.of(WorkerStationBlockEntity::new, CWBlocks.WORKER_STATION.get())
 				.build(null));
+
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CanteenBlockEntity>> CANTEEN =
+		REGISTER.register("canteen", () -> BlockEntityType.Builder.of(CanteenBlockEntity::new, CWBlocks.CANTEEN.get())
+			.build(null));
 }

@@ -30,7 +30,7 @@ it is programmed and short, dark when the slot is empty. So a board with any dim
 on it is a station that needs people, which is the question a player actually walks
 over to ask.
 
-    python3 tools/generate_station_textures.py [output-directory]
+    python3 tools/generate_block_textures.py [output-directory]
 """
 
 import os
@@ -60,6 +60,14 @@ GREY = [(0x38, 0x3D, 0x3B, 255), (0x42, 0x47, 0x44, 255), (0x4C, 0x51, 0x4E, 255
 TIMBER = [(0x4E, 0x36, 0x1F, 255), (0x5A, 0x40, 0x26, 255), (0x65, 0x48, 0x2B, 255),
           (0x71, 0x51, 0x31, 255), (0x7C, 0x5A, 0x37, 255), (0x87, 0x63, 0x3D, 255),
           (0x90, 0x6B, 0x43, 255)]
+
+# The inside of the Canteen, and the food in it. Deliberately outside the casing ranges
+# the rest of this file is held to: those describe a cast *surface*, and a trough's
+# opening is the one place on either block where there is no surface to describe.
+CAVITY = (0x2A, 0x21, 0x18, 255)
+CAVITY_LIT = (0x3B, 0x2F, 0x22, 255)
+BREAD = (0xAE, 0x80, 0x49, 255)
+BREAD_LIT = (0xC8, 0x9A, 0x60, 255)
 
 BEZEL = (0x24, 0x28, 0x26)
 LAMP_LIT = (0xFF, 0xD3, 0x5C)
@@ -321,6 +329,76 @@ def front():
     panel, not in a hole cut through it.
     """
     return casing()
+
+
+def canteen_side():
+    """The Canteen's sides: the same casing the Station wears.
+
+    Shared construction on purpose. Create's own blocks are a family before they are
+    individuals -- a dozen of them carry andesite casing on their flanks and are told
+    apart by the face that does something -- and two blocks from one addon that read as
+    the same kit is the intended effect, not a missed opportunity to differentiate.
+    What says "canteen" is the top, which is the face a player looks down at.
+    """
+    return casing()
+
+
+def canteen_bottom():
+    return casing_bottom()
+
+
+def canteen_top():
+    """The trough: the same frame, with a hole in it and food in the hole.
+
+    The one face that has to say what the block *is*, and the first version did not say
+    it. Drawn as boards a couple of steps down the timber ramp it read as a lid -- which
+    is what a panel always reads as, however dark, because a panel is a surface and this
+    has to be an absence of one. Two things fix that and neither is subtle:
+
+    **The cavity is far darker than anything else here.** The rule that nothing in a
+    Create casing goes below a luma of 57 is a rule about *casings*, and this is not one:
+    it is the inside of a box, where the light does not reach. Keeping it inside the
+    casing range is exactly what made it a lid.
+
+    **And there is food in it.** A dark rectangle is a hole; a dark rectangle with three
+    loaves in it is a canteen, and no amount of shading gets there on its own. It is also
+    the only place on either block where the timber ramp goes light, which is what makes
+    the loaves the first thing the eye lands on.
+
+    Depth comes from the far wall catching the light -- the same trick the lamp bezels
+    use, and the opposite of how a raised face is shaded. A recess lit like a bump reads
+    as a bump.
+    """
+    pixels = blank(TIMBER[0])
+    x1, y1, x2, y2 = PANEL_BOX
+    for y in range(y1, y2 + 1):
+        for x in range(x1, x2 + 1):
+            near = min(x - x1, y - y1)
+            far = min(x2 - x, y2 - y)
+            pixels[y][x] = CAVITY_LIT if far < near else CAVITY
+
+    # Three loaves, none of them aligned with another, because two things at the same
+    # height in a ten-pixel square read as a pattern rather than as objects.
+    for ox, oy in ((0, 1), (5, 0), (2, 5)):
+        loaf(pixels, x1 + ox, y1 + oy)
+
+    inner_shadow(pixels)
+    andesite_trim(pixels)
+    return pixels
+
+
+def loaf(pixels, x, y):
+    """One loaf: three by two, with its corners off and its top row catching the light."""
+    for dy in range(2):
+        for dx in range(3):
+            if dy == 0 and dx == 1:
+                continue  # the crown, drawn below
+            pixels[y + dy][x + dx] = BREAD_LIT if dy == 0 else BREAD
+    pixels[y][x + 1] = BREAD_LIT
+    # A pixel of shadow under it, so it sits *in* the trough rather than on a flat colour.
+    for dx in range(3):
+        if y + 2 < SIZE:
+            pixels[y + 2][x + dx] = CAVITY
 
 
 def lamp(colour):
@@ -647,6 +725,60 @@ def sides(rows, k):
     return [sum(v) / len(v) for v in (top, bottom, left, right)]
 
 
+def check_trim(name, rows):
+    """The cast frame, which every block in this family wears and which holds them together.
+
+    Split out of check_house_style because it covers more sheets than the panel rules do.
+    A Canteen's top is the inside of a box rather than a face of boards, so asking it about
+    grain direction or board spread would be asking it to be something it is not -- but its
+    *frame* is what makes it read as the same kit as the Station, and a frame that quietly
+    stopped matching is exactly how a block family drifts apart.
+    """
+    outer, inner, shadow = (ring(rows, k) for k in range(3))
+    assert not any(warm(p) for p in outer + inner), \
+        '%s: the trim is warm; Create puts neutral trim around a warm panel' % name
+    assert all(warm(p) for p in shadow), \
+        '%s: ring 2 is the shadow cast on the boards and should be timber, not trim' % name
+
+    outer_luma = sum(luma(p) for p in outer) / len(outer)
+    inner_luma = sum(luma(p) for p in inner) / len(inner)
+    for label, value, bounds in (('outer', outer_luma, HOUSE_STYLE['outer ring luma']),
+                                 ('inner', inner_luma, HOUSE_STYLE['inner ring luma'])):
+        low, high = bounds
+        assert low <= value <= high, \
+            '%s: %s trim ring luma %.0f outside %s' % (name, label, value, bounds)
+    assert inner_luma - outer_luma >= HOUSE_STYLE['trim step'], \
+        ('%s: the two trim rings are %.0f apart. A Create casing has a dark outer edge '
+         'and a bright inner one -- andesite runs 89 then 140 -- and collapsing them '
+         'to one mid grey is the single thing that stops a frame reading as a casting.'
+         % (name, inner_luma - outer_luma))
+
+    for k, label in ((0, 'outer'), (1, 'inner')):
+        # How rough the ring is *along itself*. This is the measurement that caught
+        # the trim reading as mottled beside a gearbox: picking one tone for the lit
+        # sides and another for the shadowed ones puts the whole bevel into the two
+        # corners where they meet, so neighbouring pixels there jump two ramp steps.
+        # Create carries the same bevel at a third of the roughness by sliding the
+        # tone round the ring instead, which a switch cannot do at any setting --
+        # andesite's outer ring steps 5.6 on average, this one used to step 19.2.
+        around = ring_path(rows, k)
+        steps = [abs(luma(around[i]) - luma(around[(i + 1) % len(around)]))
+                 for i in range(len(around))]
+        rough = sum(steps) / len(steps)
+        low_r, high_r = HOUSE_STYLE['ring roughness'][k]
+        assert low_r <= rough <= high_r, \
+            ('%s: the %s trim ring steps %.1f between neighbouring pixels, wanted %s. '
+             'Andesite steps 5.6 on its outer ring and 12.3 on its inner.'
+             % (name, label, rough, (low_r, high_r)))
+
+        spread = max(sides(rows, k)) - min(sides(rows, k))
+        low, high = HOUSE_STYLE['ring bevel']
+        assert low <= spread <= high, \
+            ('%s: the %s trim ring spreads %.0f across its sides, wanted %s -- Create '
+             'lights both rings from the top left and does it gently'
+             % (name, label, spread, (low, high)))
+
+
 def check_house_style():
     """Hold the sheets to what Create's own casings measure like, ring by ring.
 
@@ -660,52 +792,13 @@ def check_house_style():
 
     So this reads each ring separately, and it reads the panel's columns separately.
     """
-    for name in ('worker_station_casing', 'worker_station_front'):
+    # The frame first, over every sheet that wears one -- including the Canteen's top and both
+    # bottoms, which have no panel of boards for the rules below to read.
+    for name in TRIM_SHEETS:
+        check_trim(name, SHEETS[name]())
+
+    for name in CASING_SHEETS:
         rows = SHEETS[name]()
-
-        outer, inner, shadow = (ring(rows, k) for k in range(3))
-        assert not any(warm(p) for p in outer + inner), \
-            '%s: the trim is warm; Create puts neutral trim around a warm panel' % name
-        assert all(warm(p) for p in shadow), \
-            '%s: ring 2 is the shadow cast on the boards and should be timber, not trim' % name
-
-        outer_luma = sum(luma(p) for p in outer) / len(outer)
-        inner_luma = sum(luma(p) for p in inner) / len(inner)
-        for label, value, bounds in (('outer', outer_luma, HOUSE_STYLE['outer ring luma']),
-                                     ('inner', inner_luma, HOUSE_STYLE['inner ring luma'])):
-            low, high = bounds
-            assert low <= value <= high, \
-                '%s: %s trim ring luma %.0f outside %s' % (name, label, value, bounds)
-        assert inner_luma - outer_luma >= HOUSE_STYLE['trim step'], \
-            ('%s: the two trim rings are %.0f apart. A Create casing has a dark outer edge '
-             'and a bright inner one -- andesite runs 89 then 140 -- and collapsing them '
-             'to one mid grey is the single thing that stops a frame reading as a casting.'
-             % (name, inner_luma - outer_luma))
-
-        for k, label in ((0, 'outer'), (1, 'inner')):
-            # How rough the ring is *along itself*. This is the measurement that caught
-            # the trim reading as mottled beside a gearbox: picking one tone for the lit
-            # sides and another for the shadowed ones puts the whole bevel into the two
-            # corners where they meet, so neighbouring pixels there jump two ramp steps.
-            # Create carries the same bevel at a third of the roughness by sliding the
-            # tone round the ring instead, which a switch cannot do at any setting --
-            # andesite's outer ring steps 5.6 on average, this one used to step 19.2.
-            around = ring_path(rows, k)
-            steps = [abs(luma(around[i]) - luma(around[(i + 1) % len(around)]))
-                     for i in range(len(around))]
-            rough = sum(steps) / len(steps)
-            low_r, high_r = HOUSE_STYLE['ring roughness'][k]
-            assert low_r <= rough <= high_r, \
-                ('%s: the %s trim ring steps %.1f between neighbouring pixels, wanted %s. '
-                 'Andesite steps 5.6 on its outer ring and 12.3 on its inner.'
-                 % (name, label, rough, (low_r, high_r)))
-
-            spread = max(sides(rows, k)) - min(sides(rows, k))
-            low, high = HOUSE_STYLE['ring bevel']
-            assert low <= spread <= high, \
-                ('%s: the %s trim ring spreads %.0f across its sides, wanted %s -- Create '
-                 'lights both rings from the top left and does it gently'
-                 % (name, label, spread, (low, high)))
 
         shadow_sides = sides(rows, 2)
         low, high = HOUSE_STYLE['shadow ring luma']
@@ -886,7 +979,19 @@ SHEETS = {
     'worker_station_bottom': casing_bottom,
     'worker_station_front': front,
     'worker_station_lamps': lamps,
+    'canteen_side': canteen_side,
+    'canteen_bottom': canteen_bottom,
+    'canteen_top': canteen_top,
 }
+
+# Every sheet that is a panel in a cast frame, which is what check_house_style holds to
+# Create's own casings. The Canteen's top is deliberately not among them: its panel is
+# the inside of a box rather than a face of boards, so the grain and board-spread rules
+# would be asking it to be something it is not. **Its trim still is** -- the rings are
+# checked separately below, because a frame that stopped matching is exactly how this
+# block family would drift apart.
+CASING_SHEETS = ('worker_station_casing', 'worker_station_front', 'canteen_side')
+TRIM_SHEETS = CASING_SHEETS + ('canteen_top', 'canteen_bottom', 'worker_station_bottom')
 
 # Left behind by the bench-and-board shape. Removing them here rather than by hand is
 # what keeps a re-run of the generators a no-op, which both workflows check.

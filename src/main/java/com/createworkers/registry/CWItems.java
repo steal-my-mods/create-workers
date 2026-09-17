@@ -52,6 +52,7 @@ public class CWItems {
 			.displayItems((params, output) -> {
 				output.accept(HARD_HAT.get());
 				output.accept(CWBlocks.WORKER_STATION_ITEM.get());
+				output.accept(CWBlocks.CANTEEN_ITEM.get());
 			})
 			.build());
 }

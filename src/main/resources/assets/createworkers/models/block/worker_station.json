@@ -1,5 +1,5 @@
 {
-  "_comment": "A full cube, authored facing north; blockstates/worker_station.json turns it. The top uses the casing sheet, so its boards run the way the sides do rather than crosswise. One model for both has_job states, and one element on purpose: a block that fills its space occludes, lights and culls like any other solid block, which is what retires the holes and see-through edges the bench-and-board shape produced twice. What is in the rack is drawn by WorkerStationRenderer as lamps on the front face -- see generate_station_textures.py, which checks that this model, that renderer and the sheets still describe one block.",
+  "_comment": "A full cube, authored facing north; blockstates/worker_station.json turns it. The top uses the casing sheet, so its boards run the way the sides do rather than crosswise. One model for both has_job states, and one element on purpose: a block that fills its space occludes, lights and culls like any other solid block, which is what retires the holes and see-through edges the bench-and-board shape produced twice. What is in the rack is drawn by WorkerStationRenderer as lamps on the front face -- see generate_block_textures.py, which checks that this model, that renderer and the sheets still describe one block.",
   "parent": "block/block",
   "textures": {
     "particle": "createworkers:block/worker_station_casing",

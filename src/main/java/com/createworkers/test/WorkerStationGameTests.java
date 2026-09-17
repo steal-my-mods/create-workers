@@ -55,6 +55,7 @@ import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.block.Blocks;
@@ -1183,7 +1184,7 @@ public class WorkerStationGameTests {
 
 
 	/**
-	 * Every state the Worker Station can be in has a model, and every model has its textures.
+	 * Every state of every block this mod adds has a model, and every model has its textures.
 	 *
 	 * <p>Nothing else checks this. A blockstate file missing a variant renders as the black-and-magenta
 	 * cube, and a model naming a texture that is not there renders as the same thing — and both are
@@ -1193,17 +1194,26 @@ public class WorkerStationGameTests {
 	 * <p>The case that makes it worth having: adding a property to the block multiplies the number of
 	 * states, and it is the blockstate file rather than the code that has to grow to match. Adding
 	 * {@code facing} took the Station from two states to eight.
+	 *
+	 * <p>Every block, not just the Station: a second block is exactly the moment a check written for
+	 * the first stops covering the mod, and a Canteen whose texture was never generated would be a
+	 * magenta cube nothing in the build could see.
 	 */
 	@GameTest(template = "work_site", timeoutTicks = 200)
-	public static void everyStationStateHasAModelAndEveryModelItsTextures(GameTestHelper helper) {
-		JsonObject variants = readJson(helper, "/assets/createworkers/blockstates/worker_station.json")
+	public static void everyBlockStateHasAModelAndEveryModelItsTextures(GameTestHelper helper) {
+		checkStates(helper, CWBlocks.WORKER_STATION.get(), "worker_station");
+		checkStates(helper, CWBlocks.CANTEEN.get(), "canteen");
+		helper.succeed();
+	}
+
+	private static void checkStates(GameTestHelper helper, Block block, String name) {
+		JsonObject variants = readJson(helper, "/assets/createworkers/blockstates/" + name + ".json")
 			.getAsJsonObject("variants");
 
-		for (BlockState state : CWBlocks.WORKER_STATION.get()
-			.getStateDefinition()
+		for (BlockState state : block.getStateDefinition()
 			.getPossibleStates()) {
 			String key = variantKey(state);
-			helper.assertTrue(variants.has(key), "no blockstate variant for " + key);
+			helper.assertTrue(variants.has(key), name + ": no blockstate variant for \"" + key + "\"");
 
 			JsonElement variant = variants.get(key);
 			String model = (variant.isJsonArray() ? variant.getAsJsonArray()
@@ -1212,7 +1222,6 @@ public class WorkerStationGameTests {
 					.getAsString();
 			checkModel(helper, model);
 		}
-		helper.succeed();
 	}
 
 	/** The key a blockstate file uses: every property as name=value, sorted by name. */

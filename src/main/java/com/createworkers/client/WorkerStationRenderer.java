@@ -41,7 +41,7 @@ import net.minecraft.world.level.block.state.BlockState;
  *
  * <p>The lit ones are drawn full-bright, so a working station reads across a dark factory.
  *
- * <p><b>Every measurement here is shared with {@code tools/generate_station_textures.py}</b>, in the
+ * <p><b>Every measurement here is shared with {@code tools/generate_block_textures.py}</b>, in the
  * model's own units — sixteenths of a block — so the two can be compared without a conversion for a
  * factor of sixteen to hide in. That generator checks them against each other, against the model and
  * against {@code MAX_SLOTS} on every build. It is not ceremony: the previous version of this class

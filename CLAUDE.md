@@ -16,7 +16,7 @@ python3 tools/generate_logo.py         # the in-jar badge at 256
 python3 tools/generate_logo.py branding/icon-512.png --size 512   # ...and the 512 CurseForge wants
 python3 tools/generate_ponder_structure.py   # all three Ponder scenes' structure NBT
 python3 tools/generate_ponder_lang.py        # ...and their lang entries, read out of the storyboards
-python3 tools/generate_station_textures.py   # the Worker Station's textures, and the checks that hold its files together
+python3 tools/generate_block_textures.py      # the Station's and Canteen's textures, and the checks that hold their files together
 python3 tools/render_block_model.py <model.json> --hats N --lit N --dim N   # draw a block model without a client
 python3 tools/generate_gear_shifts.py        # the evening and night vests, off the day one
 python3 tools/generate_worker_profession.py  # the worker profession's clothing, both variants
@@ -138,6 +138,9 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/ponder/WorkingHoursScene` | Third: crews, the last delivery of the day, walk to bed, sleep, the enderman night shift, morning |
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
 | `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own. Its job-site predicates match the worker station **and nothing else** |
+| `block/CanteenBlock` | A trough of food, and the only way a night crew is ever fed — vanilla has no container a villager will take food out of. No screen: Right-Click to put food in or take the last stack back, and a comparator for how full it is |
+| `block/CanteenBlockEntity` | Its stock. Nine slots that accept food and nothing else, filtered at the `IItemHandler` because that is the way in nothing supervises |
+| `registry/CWArmInteractionPoints` | What a Mechanical Arm — and so a worker — can use of this mod's own blocks. The Canteen, **deposit only** |
 | `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over; `FACING` turns the board at whoever placed it |
 | `block/WorkerStationBlockEntity` | A line's roster: an ordered rack of hats, the shifts each runs on, who is wearing them, and the point-of-interest tickets it holds back |
 | `block/WorkerStationMenu` | The rack as real slots, over Create's `MenuBase`. Its geometry constants are shared with the screen, because slots are placed before any screen exists |
@@ -650,7 +653,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   short, **dark** when the slot is empty. Any dim lamp means the station needs people. Lit ones draw
   full-bright so a working station reads across a dark factory. One model serves both `HAS_JOB` states.
 - **The lamp grid lives in two files, and the generator is what holds them together.**
-  `WorkerStationRenderer` and `tools/generate_station_textures.py` both state the pitch, centre and
+  `WorkerStationRenderer` and `tools/generate_block_textures.py` both state the pitch, centre and
   size — **in the model's own units, sixteenths of a block**, so the comparison is an equality with
   nowhere for a factor of sixteen to hide. `check_against_model()` runs on every build (both workflows
   invoke the generator) and asserts: the constants match, the model is one full cube with every face
@@ -708,6 +711,32 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   variant key the same way a resource pack does, and follows each model to its parent checking that
   every texture it names is really there. Mutation-checked both ways — a dropped variant and a
   misspelt texture.
+- **The Canteen is a point of interest with *no tickets*, and that is the design rather than an
+  oversight.** A POI query is the only thing in the game that answers "where is the nearest of these,
+  within a radius" without walking every block, which is what a hungry worker needs and what the bed
+  hunt already leans on. But a ticket is a **claim**, and nothing about eating is a claim: a trough
+  serves everybody, a villager that is not hungry has no business holding one, and a ticket taken by a
+  worker whose chunk then unloads would put a canteen out of service for the whole village. With none
+  to take, `AcquirePoi` can never pick the block up and `ValidateNearbyPoi` has nothing to erase — it
+  is a landmark, not a workstation. It is outside `minecraft:acquirable_job_site` for the reason the
+  Station learned the hard way. (`aCanteenIsNeverTakenAsAJobSite`, mutation-checked by giving it one
+  ticket.)
+- **The Canteen's food filter lives on the `IItemHandler`, not on the block.** A player's hand is the
+  one way in that something supervises; a funnel, a chute, a belt and a worker all go straight through
+  the capability, so a filter written into `useItemOn` would be a filter with four holes in it. What
+  counts as food is the item's own `FOOD` component rather than a list kept here — a list is wrong the
+  day any mod adds a bread, and the component is the same question `FOOD_POINTS` will be asking.
+  (`aCanteenTakesFoodAndNothingElse`.)
+- **The Canteen's arm interaction point is deposit only.** Create's `DepositOnlyArmInteractionPoint`
+  refuses to extract and refuses to cycle out of `DEPOSIT`, so a worker or an arm can fill a canteen
+  and never empty one. A trough machines could drain is storage with a food filter, and the loop it
+  invites — haul bread in, haul the same bread out — is a worker doing nothing at some expense. The
+  thing that is *supposed* to take food out is a hungry villager eating, which is not an item transfer
+  and must not compete with one: a canteen a belt keeps emptying never feeds anybody, which is the
+  whole failure the block exists to prevent. The Station is deliberately **not** registered as a
+  point — its rack is reachable as an ordinary item handler, but a worker able to name its own Station
+  as a target could file a hat into the block that employs it.
+  (`aWorkerFillsACanteenAndNeverEmptiesIt`, mutation-checked by handing back a plain point.)
 - **An empty station must not be a job site, and `HAS_JOB` is how.** The POI is registered only over
   the states with a hat in them. Register it over all of them and a villager crosses a village, is
   turned into a Worker on arrival, finds nothing to do — and can then never take another job, because
@@ -735,7 +764,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 - **The Station's geometry is written down in three files, and the generator is what keeps them
   honest.** `models/block/worker_station.json` has the element; `WorkerStationBlockEntity` has
   `MAX_SLOTS`; `WorkerStationRenderer` restates the lamp grid — how many, how far apart, how big, and
-  how far out in front of the face they are drawn; and `generate_station_textures.py` restates all of
+  how far out in front of the face they are drawn; and `generate_block_textures.py` restates all of
   it again, because where a lamp lands on the block and where its sprite sits on the sheet are the
   same measurement made twice. Nothing in the build tied those together, and the first version of the
   renderer shipped with the standoff subtracted where it should have been added — which hung every
@@ -1181,12 +1210,13 @@ if the thinking changes — the point is that the analysis is not redone from sc
   recruits for itself. Holds the argument that a part-staffed shift produces nothing rather than less,
   why single-slot stations were rejected, why the block is a full cube, and the four corrections its
   texture took
-- `docs/phase-4.md` — leisure, food and trades **as agreed before building**: the work/leisure/sleep
-  schedule and why coverage fixes the working window at 8000, the canteen, and the trade list. Holds
-  three findings that moved the design — `Villager.foodLevel` is private so food has to be *items*,
-  the shift window is already `Activity.IDLE` so leisure is only "stop pinning", and `IDLE` carries
-  breeding and sharing while `MEET` would drag workers toward a village bell. Corrects
-  `shift-rotation.md` where the two disagree
+- `docs/phase-4.md` — leisure, food and trades, agreed before building and since annotated with what
+  the build changed. **Leisure, muster and the canteen block are built; food and trades are not.**
+  Holds the work/leisure/sleep schedule and why coverage fixes the working window at 8000, the
+  canteen, the trade list, and three findings that moved the design — `Villager.foodLevel` is private
+  so food has to be *items*, the shift window is already `Activity.IDLE` so leisure is only "stop
+  pinning", and `IDLE` carries breeding and sharing while `MEET` would drag workers toward a village
+  bell. Corrects `shift-rotation.md` where the two disagree
 - `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,
   and the things a shared server still wants that this mod deliberately does not do
 

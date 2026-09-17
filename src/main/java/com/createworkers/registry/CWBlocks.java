@@ -1,6 +1,7 @@
 package com.createworkers.registry;
 
 import com.createworkers.CreateWorkers;
+import com.createworkers.block.CanteenBlock;
 import com.createworkers.block.WorkerStationBlock;
 
 import net.minecraft.world.item.BlockItem;
@@ -29,4 +30,20 @@ public class CWBlocks {
 
 	public static final DeferredItem<BlockItem> WORKER_STATION_ITEM =
 		CWItems.ITEMS.registerSimpleBlockItem("worker_station", WORKER_STATION, new Item.Properties());
+
+	/**
+	 * The canteen: a trough of food, and the only way a night crew is ever fed.
+	 *
+	 * <p>A full cube for the same reason the Station is one — a shaped model cannot occlude, and every
+	 * face of it that does not span the block boundary is a hole waiting to be left undrawn. Wood,
+	 * because it is a fitting rather than a machine and has no business sounding like andesite.
+	 */
+	public static final DeferredBlock<CanteenBlock> CANTEEN = BLOCKS.register("canteen",
+		() -> new CanteenBlock(BlockBehaviour.Properties.of()
+			.mapColor(MapColor.WOOD)
+			.strength(2.0F)
+			.sound(SoundType.WOOD)));
+
+	public static final DeferredItem<BlockItem> CANTEEN_ITEM =
+		CWItems.ITEMS.registerSimpleBlockItem("canteen", CANTEEN, new Item.Properties());
 }

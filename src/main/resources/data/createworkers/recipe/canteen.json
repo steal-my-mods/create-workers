@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "P": {
+      "tag": "minecraft:planks"
+    },
+    "A": {
+      "item": "create:andesite_alloy"
+    },
+    "B": {
+      "item": "minecraft:bowl"
+    }
+  },
+  "pattern": [
+    "PBP",
+    "PAP"
+  ],
+  "result": {
+    "count": 1,
+    "id": "createworkers:canteen"
+  }
+}
