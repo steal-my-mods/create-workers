@@ -190,10 +190,11 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		this.station = pos;
 	}
 
-	/** Un-enrols a worker whose station has gone, leaving it exactly like a hand-hired one. */
-	public void forgetStation() {
-		this.station = null;
-	}
+	// No forgetStation. It existed to un-enrol a worker whose station had gone, and its only caller
+	// used it immediately before dismissing -- which is the one order that mints a second hat, because
+	// dismiss withholds the hat precisely while the station is still set. A station worker's hat
+	// belongs to the block and never to the worker, and with nothing able to clear the station early
+	// that is now true by construction rather than by everyone remembering. dismiss() clears it itself.
 
 	/** @return the crew this worker is on, and so the hours it keeps. */
 	public Shift getShift() {

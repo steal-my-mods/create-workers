@@ -406,6 +406,16 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 			hat.set(DataComponents.CUSTOM_NAME,
 				Component.literal(trimmed.length() > MAX_NAME_LENGTH ? trimmed.substring(0, MAX_NAME_LENGTH)
 					: trimmed));
+
+		// And the villagers already doing it, who wear a copy taken when they were hired and would
+		// otherwise keep answering to the old name until they died.
+		if (level instanceof ServerLevel server)
+			for (Shift shift : Shift.VALUES) {
+				UUID id = job.workers[shift.ordinal()];
+				if (id != null && server.getEntity(id) instanceof Villager worker)
+					Workers.renameWorker(worker, hat);
+			}
+
 		changed();
 	}
 
@@ -811,8 +821,9 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	/**
 	 * Gives a job away when its holder has stopped turning up.
 	 *
-	 * <p>The station can replace a worker that dies, because dying frees the ticket. It cannot replace
-	 * one that is merely never coming back — walled in, fallen somewhere, stranded across a gap — and
+	 * <p>The station can replace a worker that dies, because the roster audit finds the entity gone.
+	 * It cannot replace one that is merely never coming back — walled in, fallen somewhere, stranded
+	 * across a gap — and
 	 * that is the failure this whole block was built to answer: a line quietly running short with
 	 * nothing to say which villager to go and look for.
 	 *
@@ -840,9 +851,10 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 				if (data == null || server.getGameTime() - data.lastAtWork() <= timeout)
 					continue;
 
-				// The ticket has to go back by hand. A sacked absentee is alive and still holding this
-				// block as its job site, so its ticket would stay taken and nobody could ever replace
-				// it -- which is the exact failure this is meant to end.
+				// Let go on the spot. There is no point-of-interest ticket to hand back any more --
+				// a worker holds no job site, which is what YieldJobSite forced -- so the roster entry
+				// below is the whole of the bookkeeping, and freeing it is what lets somebody else be
+				// hired into the job this one stopped turning up to.
 				drop(worker);
 				slot.workers[shift.ordinal()] = null;
 				rosterChanged();

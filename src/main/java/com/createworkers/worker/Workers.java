@@ -161,6 +161,33 @@ public class Workers {
 	 * are near and looking at it. A dozen workers with a dozen labels floating over them is a factory
 	 * nobody can see.
 	 */
+	/**
+	 * Puts a job's new name on the worker already doing it.
+	 *
+	 * <p>The name lives on the hat in the rack, but a worker wears a <em>copy</em> taken when it was
+	 * hired — so without this a rename reached the block and never the villager, and the label floating
+	 * over the one standing in a hole stayed whatever the job was called when it was taken on. Which is
+	 * the entire point of being able to name a job.
+	 *
+	 * <p>The copy is renamed too, so it stays a copy.
+	 */
+	public static void renameWorker(Mob mob, ItemStack hat) {
+		WorkerData data = get(mob);
+		if (data == null || !data.isEmployed())
+			return;
+
+		Component name = hat.get(DataComponents.CUSTOM_NAME);
+		ItemStack worn = data.getHat();
+		if (!worn.isEmpty()) {
+			if (name == null)
+				worn.remove(DataComponents.CUSTOM_NAME);
+			else
+				worn.set(DataComponents.CUSTOM_NAME, name);
+		}
+		// Still refuses to write over a name a player gave the villager themselves.
+		wearTheName(mob, data, hat);
+	}
+
 	private static void wearTheName(Mob mob, WorkerData data, ItemStack hat) {
 		if (mob.hasCustomName() && !data.isNamedByStation())
 			return;
@@ -263,11 +290,16 @@ public class Workers {
 
 		if (!(mob.level()
 			.getBlockEntity(station.pos()) instanceof WorkerStationBlockEntity rack)) {
-			// The block is gone without having sacked anybody, which breaking it does -- so something
-			// removed it out from under the world. Nothing is left to employ this worker and nothing
-			// could ever fire it, and the hat it is wearing is no longer a copy of one in a rack, so
-			// it drops with the rest rather than ceasing to exist.
-			data.forgetStation();
+			// The block is gone without having sacked anybody -- something removed it out from under
+			// the world. Nothing is left to employ this worker, so it is let go.
+			//
+			// **It keeps nothing.** A station worker's hat belongs to the block and never to the
+			// worker: it wears a copy, and breaking a station already drops every hat in its rack. It
+			// used to forget the station first and then dismiss, which is the one order that mints a
+			// second hat -- dismiss withholds the hat precisely while the station is still set, so
+			// clearing it first turned the copy into a drop. The worker's own cargo still falls, as
+			// it does on any other dismissal. dismiss clears the station itself, so there is nothing
+			// left to forget afterwards.
 			for (ItemStack drop : dismiss(mob))
 				mob.spawnAtLocation(drop);
 			return;

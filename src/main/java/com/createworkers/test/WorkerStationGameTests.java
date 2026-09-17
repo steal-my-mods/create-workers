@@ -417,6 +417,40 @@ public class WorkerStationGameTests {
 			.thenSucceed();
 	}
 
+
+	/**
+	 * Naming a job names the villager doing it, and renaming it renames them again.
+	 *
+	 * <p>The name lives on the hat in the rack so that it survives the hat being moved or dropped, but
+	 * a worker wears a <em>copy</em> taken when it was hired. So a rename reached the block and stopped
+	 * there, and the label over the villager stayed whatever the job had been called when it took it
+	 * on — which is the one thing the feature exists to do.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 400)
+	public static void renamingAJobRenamesWhoeverIsDoingIt(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(Workers.isEmployed(villager), "the villager should be hired"))
+			.thenExecute(() -> station(helper).renameJob(0, "Smelting feed"))
+			.thenExecute(() -> {
+				helper.assertTrue(villager.hasCustomName(), "the worker should be wearing the job's name");
+				helper.assertTrue("Smelting feed".equals(villager.getCustomName()
+					.getString()), "and it should be the name the job was given");
+			})
+			.thenExecute(() -> station(helper).renameJob(0, "Ore line"))
+			.thenExecute(() -> helper.assertTrue("Ore line".equals(villager.getCustomName()
+				.getString()), "renaming the job should rename the worker again, not only the hat"))
+			// And clearing it takes the name back off rather than leaving the old one stuck on.
+			.thenExecute(() -> station(helper).renameJob(0, "   "))
+			.thenExecute(() -> helper.assertTrue(!villager.hasCustomName(),
+				"clearing a job's name should clear its worker's"))
+			.thenSucceed();
+	}
+
 	// --- helpers ---
 
 	/**

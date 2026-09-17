@@ -659,6 +659,18 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   `theJobOutlivesTheWorker` asserts no hat entity appears; without that guard every death mints a
   second hat. The station is forgotten when the block is broken or the hat taken out, after which the
   worker is indistinguishable from a hand-hired one and drops its hat as usual.
+  **Nothing may clear `station` before dismissing, and nothing can any more.** `WorkerData.dismiss`
+  withholds the hat precisely while `station` is set, so clearing it first turns the copy into a drop —
+  which is what `verifyEmployment` did when it found the block gone, minting a second hat beside the
+  one the break had already dropped from the rack. `forgetStation` existed only for that call and is
+  deleted: a station worker's hat belongs to the block, in every circumstance, and that is now true by
+  construction rather than by everyone remembering. `dismiss` clears the station itself.
+- **A rename has to reach the worker, not just the rack.** The name lives on the hat so it survives the
+  hat being moved or dropped, but a worker wears a *copy* taken when it was hired — so `renameJob`
+  editing the rack left the label over the villager saying whatever the job was called when it was
+  taken on, which is the one thing naming a job is for. `Workers.renameWorker` pushes it to the living
+  worker and to the copy it wears, and still refuses to write over a name a player gave the villager
+  themselves (`renamingAJobRenamesWhoeverIsDoingIt`, mutation-checked).
 - **The Station's geometry is written down in three files, and the generator is what keeps them
   honest.** `models/block/worker_station.json` has the elements; `WorkerStationBlock` restates their
   heights as collision; `WorkerStationRenderer` restates the board's face, height and clear span so it
