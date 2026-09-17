@@ -1262,6 +1262,10 @@ if the thinking changes — the point is that the analysis is not redone from sc
   bell. Corrects `shift-rotation.md` where the two disagree
 - `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,
   and the things a shared server still wants that this mod deliberately does not do
+- `docs/before-release.md` — **not a backlog of ideas**: the list of things wrong, unmeasured or
+  unfinished in code that is about to ship, each with what would settle it. Empty it or accept it
+  explicitly before pushing a `v*` tag. Add to it whenever something is knowingly deferred, because a
+  deferral nobody wrote down is a decision nobody made
 
 ## Conventions
 
