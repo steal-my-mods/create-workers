@@ -31,9 +31,15 @@ import net.minecraft.world.phys.BlockHitResult;
  *
  * <p>It is deliberately <b>not a machine</b>. No stress, no recipe, no processing: it is an inventory
  * that only accepts food, which is enough to make feeding a crew an ordinary Create automation
- * problem — a funnel, a chute, a belt or an arm fills it, and so does a worker whose hat names it,
- * which makes "a line that feeds the workers who run the line" something a player can build out of
- * parts they already have.
+ * problem — a funnel, a chute, a belt or a hopper fills it, exactly as they fill a chest.
+ *
+ * <p><b>And it is not an arm interaction point, deliberately.</b> It was one briefly, which made it a
+ * legal destination on a hard hat. The tell that this was wrong was having to invent a rule no other
+ * target in this mod has — deposit only — to stop a bread-in-bread-out loop that existed *because* of
+ * the registration. What it bought was one funnel. What it cost was the only answer a player can be
+ * given for why their chest needs one: a worker is an arm with legs, and an arm cannot reach into a
+ * chest either. So a line that feeds the workers who run the line is still something a player builds
+ * out of parts they already have, and the parts are the ordinary ones.
  *
  * <p><b>No screen, on purpose.</b> The Worker Station has one because its rack is an ordered list of
  * jobs with toggles on each; there is nothing to arrange in a trough. Right-Clicking with food puts

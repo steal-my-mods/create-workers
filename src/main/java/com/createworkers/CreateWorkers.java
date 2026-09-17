@@ -3,7 +3,6 @@ package com.createworkers;
 import com.createworkers.net.CWNetwork;
 import com.createworkers.registry.CWAttachments;
 import com.createworkers.registry.CWBlockEntities;
-import com.createworkers.registry.CWArmInteractionPoints;
 import com.createworkers.registry.CWBlocks;
 import com.createworkers.registry.CWCapabilities;
 import com.createworkers.registry.CWPoiTypes;
@@ -45,7 +44,6 @@ public class CreateWorkers {
 		CWProfessions.REGISTER.register(modBus);
 		CWRecipes.REGISTER.register(modBus);
 		CWMenuTypes.REGISTER.register(modBus);
-		CWArmInteractionPoints.REGISTER.register(modBus);
 
 		modBus.addListener(CWNetwork::register);
 		modBus.addListener(CWCapabilities::register);

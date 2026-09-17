@@ -16,9 +16,15 @@ What the build changed, so far:
   reads how full it is — the interface a composter offers, for the same reason.
 - **Its point of interest carries no tickets**, which the design did not anticipate needing to say. A
   ticket is a claim and eating is not a claim; see the block's own notes.
-- **Its arm interaction point is deposit only.** The design said "it is a worker target" and stopped
-  there. Letting a worker take food *out* would invite a bread-in-bread-out loop and, worse, let a
-  belt keep a canteen empty — which is the one failure the block exists to prevent.
+- **It is not a worker target at all**, which reverses what this document said. The design had it as
+  a registered `ArmInteractionPointType` so a worker could be sent to fill one; built, that turned out
+  to need a rule no other target in the mod has — deposit only — to stop a bread-in-bread-out loop
+  that existed *because* of the registration, and **that was the tell**. Being a point bought one
+  funnel and cost the only answer there is to "why does my chest need one": a worker is an arm with
+  legs, and an arm cannot reach into a chest either. A funnel, chute, belt or hopper stocks a canteen,
+  exactly as it stocks everything else, and a worker delivers into the funnel. The loop the design
+  wanted — a line that feeds the workers running the line — is unchanged; it just uses the ordinary
+  parts.
 
 ## In one sentence
 
@@ -218,7 +224,9 @@ harvesting. So feeding a workforce needs a block of our own, and it solves sever
   ordinary Create automation problem. That is exactly this mod's genre.
 - **It is a worker target.** Registering an `ArmInteractionPointType` for it makes it a valid
   destination on a hat, so a worker hauling bread to the canteen that feeds the workers is a loop that
-  costs nothing to build.
+  costs nothing to build. *(Built and then reversed — see the status note at the top. The loop still
+  costs nothing; the worker delivers into a funnel on the canteen, the way it delivers into a funnel
+  on a chest.)*
 - **It is found the way a bed is found** — designated, or the nearest one with a path that reaches —
   reusing `findBed`'s paced, path-verified shape. A canteen hunt is a point-of-interest query and an
   A\*, and the worker that wants one most is the one that cannot reach any, so it wants the same
@@ -310,9 +318,9 @@ children turns out to be a nuisance in play, that is the point to add a switch, 
    releasing the pin and one holding it, and muster is what keeps the shift boundary honest once
    leisure exists. Independently visible: workers socialise where they previously stood still, and a
    crew is at its post when its shift starts instead of setting off then.
-2. **The canteen block** *(built)* — inventory, point of interest, arm interaction point. Useful
-   before food exists, because it is a place to put bread. Nothing hunts for one yet: finding a
-   canteen is a hungry worker's problem, and there is no hunger.
+2. **The canteen block** *(built)* — inventory and point of interest. Not an arm interaction point,
+   in the end: see above. Useful before food exists, because it is a place to put bread. Nothing hunts
+   for one yet either — finding a canteen is a hungry worker's problem, and there is no hunger.
 3. **Food** — the drain, the hungry slowdown, the signal and the screen readout. Only fair once 1 and
    2 exist.
 4. **Trades**, which are decoration on top and want 1 to be visible at all.

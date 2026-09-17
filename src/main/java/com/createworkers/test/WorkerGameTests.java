@@ -116,32 +116,51 @@ public class WorkerGameTests {
 	/** Ticks to let the funnels latch onto the chests beneath them. */
 	private static final int FUNNEL_WARMUP = 10;
 
+	/** Directly over TARGET, for the funnel that stocks a Canteen standing there. */
+	private static final BlockPos CANTEEN_FUNNEL = new BlockPos(9, 2, 9);
+
 	/** Comfortably longer than WorkerData's retry interval for targets that would not resolve. */
 	private static final int RESOLVE_RETRY_WAIT = 110;
 
 	/** Longer than the idle grace plus the stall timeout, so the rounds would have written a stop off. */
 	private static final int ROUNDS_WOULD_HAVE_GIVEN_UP = 320;
 
-	/** Workers must accept exactly what an arm accepts — Create blocks yes, plain inventories no. */
+	/**
+	 * Workers must accept exactly what an arm accepts — Create blocks yes, plain inventories no.
+	 *
+	 * <p><b>This mod's own inventories are on the "no" side of that line, and the Canteen is the one
+	 * that had to be argued.</b> It was briefly a registered {@code ArmInteractionPointType}, which
+	 * made it a legal destination on a hat — and the tell that it was wrong was having to invent a
+	 * rule no other target here has (deposit only) to stop a bread-in-bread-out loop that existed
+	 * <em>because</em> of the registration. It bought one funnel, and it cost the only answer a player
+	 * can be given for why a chest needs one: because a worker is an arm with legs, and an arm cannot
+	 * reach into a chest either.
+	 */
 	@GameTest(template = "work_site", timeoutTicks = 200)
 	public static void targetsMatchTheMechanicalArm(GameTestHelper helper) {
 		layFloor(helper);
 		helper.setBlock(SOURCE, AllBlocks.DEPOT.getDefaultState());
 		helper.setBlock(TARGET, Blocks.CHEST);
+		helper.setBlock(SOURCE_B, CWBlocks.CANTEEN.get());
 
 		ServerLevel level = helper.getLevel();
 		BlockPos depot = helper.absolutePos(SOURCE);
 		BlockPos chest = helper.absolutePos(TARGET);
+		BlockPos canteen = helper.absolutePos(SOURCE_B);
 
 		helper.assertTrue(WorkerTarget.isTargetable(level, depot, level.getBlockState(depot)),
 			"a depot should be a valid worker target");
 		helper.assertTrue(!WorkerTarget.isTargetable(level, chest, level.getBlockState(chest)),
 			"a plain chest should not be a worker target, just as it is not an arm target");
+		helper.assertTrue(!WorkerTarget.isTargetable(level, canteen, level.getBlockState(canteen)),
+			"a canteen is an inventory like any other: put a funnel on it, the same as a chest");
 
 		WorkerTarget target = WorkerTarget.create(level, depot, level.getBlockState(depot));
 		helper.assertTrue(target != null, "a depot should produce a target");
 		helper.assertTrue(WorkerTarget.create(level, chest, level.getBlockState(chest)) == null,
 			"a chest should produce no target");
+		helper.assertTrue(WorkerTarget.create(level, canteen, level.getBlockState(canteen)) == null,
+			"and neither should a canteen");
 		helper.succeed();
 	}
 
@@ -1191,45 +1210,47 @@ public class WorkerGameTests {
 	}
 
 	/**
-	 * A worker can be sent to a Canteen, and can only ever put things in it.
+	 * A worker stocks a Canteen the way it stocks anything else: through a funnel on it.
 	 *
-	 * <p>Both halves matter. Being a valid destination on a hat is what makes "a line that hauls bread
-	 * into the canteen that feeds the workers running the line" something a player builds out of parts
-	 * they already have, and it costs this mod one registered {@code ArmInteractionPointType}.
+	 * <p>This is the whole of the automation story, and it is deliberately an <em>unremarkable</em>
+	 * one. "A line that hauls bread into the canteen that feeds the workers running the line" is
+	 * something a player builds out of parts they already have, and the parts are the ones every other
+	 * inventory needs — because the alternative, registering the block as an arm interaction point,
+	 * buys exactly one funnel and costs the only answer there is to "why does my chest need one".
 	 *
-	 * <p>Being <b>deposit only</b> is the other half and is deliberate. A trough machines could drain
-	 * is storage with a food filter, and the loop it invites — haul bread in, haul the same bread
-	 * out — is a worker doing nothing at some expense. The thing that is supposed to take food out is
-	 * a hungry villager eating, which is not an item transfer; a canteen a belt keeps emptying is a
-	 * canteen that never feeds anybody, which is the whole failure the block exists to prevent.
+	 * <p>What the funnel is standing in for here is every other way in: a chute, a belt, a hopper, a
+	 * player's hand. They all arrive at the same {@code IItemHandler}, which is where the food filter
+	 * lives for exactly that reason.
 	 */
-	@GameTest(template = "work_site", timeoutTicks = 400)
-	public static void aWorkerFillsACanteenAndNeverEmptiesIt(GameTestHelper helper) {
+	@GameTest(template = "work_site", timeoutTicks = 600)
+	public static void aWorkerStocksACanteenThroughAFunnel(GameTestHelper helper) {
 		layFloor(helper);
 		helper.setBlock(SOURCE, AllBlocks.DEPOT.getDefaultState());
 		helper.setBlock(TARGET, CWBlocks.CANTEEN.get());
+		// Facing up and not extracting: the funnel's job is to take what is handed to it and push it
+		// down into the block beneath, which is the shape every Create inventory is stocked through.
+		helper.setBlock(CANTEEN_FUNNEL, AllBlocks.ANDESITE_FUNNEL.getDefaultState()
+			.setValue(AbstractDirectionalFunnelBlock.FACING, Direction.UP)
+			.setValue(FunnelBlock.EXTRACTING, false));
 
-		WorkerTarget canteen = target(helper, TARGET);
-		helper.assertTrue(canteen.getMode() == Mode.DEPOSIT, "a canteen point should start as an output");
-		canteen.cycleMode();
-		helper.assertTrue(canteen.getMode() == Mode.DEPOSIT,
-			"a canteen point must refuse to become an input -- a deposit-only point is what stops a "
-				+ "worker hauling the crew's dinner back out again");
+		helper.runAfterDelay(FUNNEL_WARMUP, () -> {
+			WorkerTarget depot = target(helper, SOURCE);
+			depot.cycleMode();
+			helper.assertTrue(depot.getMode() == Mode.TAKE, "precondition: the depot is the input");
+			WorkerTarget funnel = target(helper, CANTEEN_FUNNEL);
+			helper.assertTrue(funnel.getMode() == Mode.DEPOSIT, "precondition: the funnel is the output");
 
-		WorkerTarget depot = target(helper, SOURCE);
-		depot.cycleMode();
-		helper.assertTrue(depot.getMode() == Mode.TAKE, "precondition: the depot is the input");
+			Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+			WorkerData data = Workers.getOrCreate(villager);
+			data.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.of(List.of(depot, funnel)));
+			stock(helper, SOURCE, new ItemStack(Items.BREAD, 4));
 
-		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
-		WorkerData data = Workers.getOrCreate(villager);
-		data.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.of(List.of(depot, canteen)));
-		stock(helper, SOURCE, new ItemStack(Items.BREAD, 4));
-
-		helper.succeedWhen(() -> {
-			if (!(helper.getBlockEntity(TARGET) instanceof CanteenBlockEntity stocked))
-				throw new GameTestAssertException("the canteen should have a block entity");
-			helper.assertTrue(!stocked.contents()
-				.isEmpty(), "a worker should have carried the bread into the canteen");
+			helper.succeedWhen(() -> {
+				if (!(helper.getBlockEntity(TARGET) instanceof CanteenBlockEntity stocked))
+					throw new GameTestAssertException("the canteen should have a block entity");
+				helper.assertTrue(!stocked.contents()
+					.isEmpty(), "the bread should have reached the canteen through the funnel");
+			});
 		});
 	}
 

@@ -140,7 +140,6 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own. Its job-site predicates match the worker station **and nothing else** |
 | `block/CanteenBlock` | A trough of food, and the only way a night crew is ever fed — vanilla has no container a villager will take food out of. No screen: Right-Click to put food in or take the last stack back, and a comparator for how full it is |
 | `block/CanteenBlockEntity` | Its stock. Nine slots that accept food and nothing else, filtered at the `IItemHandler` because that is the way in nothing supervises |
-| `registry/CWArmInteractionPoints` | What a Mechanical Arm — and so a worker — can use of this mod's own blocks. The Canteen, **deposit only** |
 | `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over; `FACING` turns the board at whoever placed it |
 | `block/WorkerStationBlockEntity` | A line's roster: an ordered rack of hats, the shifts each runs on, who is wearing them, and the point-of-interest tickets it holds back |
 | `block/WorkerStationMenu` | The rack as real slots, over Create's `MenuBase`. Its geometry constants are shared with the screen, because slots are placed before any screen exists |
@@ -727,16 +726,17 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   counts as food is the item's own `FOOD` component rather than a list kept here — a list is wrong the
   day any mod adds a bread, and the component is the same question `FOOD_POINTS` will be asking.
   (`aCanteenTakesFoodAndNothingElse`.)
-- **The Canteen's arm interaction point is deposit only.** Create's `DepositOnlyArmInteractionPoint`
-  refuses to extract and refuses to cycle out of `DEPOSIT`, so a worker or an arm can fill a canteen
-  and never empty one. A trough machines could drain is storage with a food filter, and the loop it
-  invites — haul bread in, haul the same bread out — is a worker doing nothing at some expense. The
-  thing that is *supposed* to take food out is a hungry villager eating, which is not an item transfer
-  and must not compete with one: a canteen a belt keeps emptying never feeds anybody, which is the
-  whole failure the block exists to prevent. The Station is deliberately **not** registered as a
-  point — its rack is reachable as an ordinary item handler, but a worker able to name its own Station
-  as a target could file a hat into the block that employs it.
-  (`aWorkerFillsACanteenAndNeverEmptiesIt`, mutation-checked by handing back a plain point.)
+- **Nothing this mod adds is an arm interaction point, and the Canteen is the one that had to be
+  argued.** It was registered as one for exactly one commit, which made it a legal destination on a
+  hat. **The tell that it was wrong was having to invent a rule no other target here has** — deposit
+  only — to stop a bread-in-bread-out loop that existed *because* of the registration. What it bought
+  was one funnel. What it cost was the only answer a player can be given for why their chest needs
+  one: a worker is an arm with legs, and an arm cannot reach into a chest either. So the Canteen is
+  stocked through a funnel, a chute, a belt or a hopper, exactly as a chest is, and
+  `targetsMatchTheMechanicalArm` now names it beside the chest. Registering one would also invite the
+  Station next, and a worker able to name its own Station as a target could file a hat into the block
+  that employs it. (`aWorkerStocksACanteenThroughAFunnel` covers the path that replaced it,
+  mutation-checked by dropping the Canteen's item-handler capability.)
 - **An empty station must not be a job site, and `HAS_JOB` is how.** The POI is registered only over
   the states with a hat in them. Register it over all of them and a villager crosses a village, is
   turned into a Worker on arrival, finds nothing to do — and can then never take another job, because
