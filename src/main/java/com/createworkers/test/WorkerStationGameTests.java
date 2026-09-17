@@ -92,6 +92,9 @@ public class WorkerStationGameTests {
 	private static final BlockPos CELL = new BlockPos(9, 1, 1);
 	/** Short enough to watch, long enough that a worker at its post is plainly not being sacked for time. */
 	private static final int ABSENTEE_TICKS = 100;
+	/** Midnight, which the shipped clock puts well outside the day crew's hours. */
+	private static final int MIDNIGHT = 18000;
+	private static final int WORKING_HOURS = 1000;
 	private static final int TIGHT_WANDER_RADIUS = 4;
 
 	private static int absenteeWas = 6000;
@@ -117,6 +120,28 @@ public class WorkerStationGameTests {
 	public static void patience(ServerLevel level) {
 		CWConfig.ABSENTEE_TIMEOUT.set(absenteeWas);
 		CWConfig.WANDER_RADIUS.set(wanderRadiusWas);
+	}
+
+	/**
+	 * The same impatience, at midnight — so the crew is off shift for the whole test.
+	 *
+	 * <p>Its own batch because it changes two things that are one value for the whole server, the time
+	 * of day and the timeout, and the existing absentee batch deliberately runs in working hours.
+	 */
+	@BeforeBatch(batch = "absentee_at_night")
+	public static void impatienceAfterDark(ServerLevel level) {
+		absenteeWas = CWConfig.ABSENTEE_TIMEOUT.get();
+		wanderRadiusWas = CWConfig.WANDER_RADIUS.get();
+		CWConfig.ABSENTEE_TIMEOUT.set(ABSENTEE_TICKS);
+		CWConfig.WANDER_RADIUS.set(TIGHT_WANDER_RADIUS);
+		level.setDayTime(MIDNIGHT);
+	}
+
+	@AfterBatch(batch = "absentee_at_night")
+	public static void patienceAtDawn(ServerLevel level) {
+		CWConfig.ABSENTEE_TIMEOUT.set(absenteeWas);
+		CWConfig.WANDER_RADIUS.set(wanderRadiusWas);
+		level.setDayTime(WORKING_HOURS);
 	}
 
 	/**
@@ -358,6 +383,37 @@ public class WorkerStationGameTests {
 			.thenExecute(() -> helper.spawn(EntityType.VILLAGER, BESIDE_STATION))
 			.thenWaitUntil(() -> helper.assertTrue(someoneIsEmployed(helper),
 				"so that somebody else can take the job on"))
+			.thenSucceed();
+	}
+
+
+	/**
+	 * A worker asleep at midnight is not an absentee.
+	 *
+	 * <p>The absentee clock is only ever refreshed from {@code keepNearPost}, and the job goal returns
+	 * before it for the whole of the night — so left alone the clock runs out partway through every
+	 * night and the station strikes off a crew that is doing exactly what it should. With the shipped
+	 * defaults that is 6000 ticks into a 16000-tick night, on every worker on the server, every night:
+	 * woken, dropped from the roster, name stripped, and replaced by a fresh hire at dawn.
+	 *
+	 * <p>Nothing caught it. The absentee tests run in working hours by design, and the night tests are
+	 * about bedtime and run a few hundred ticks. It wants a test that is off shift <em>and</em> patient.
+	 */
+	@GameTest(template = "work_site", batch = "absentee_at_night", timeoutTicks = 900)
+	public static void aSleepingWorkerIsNotAnAbsentee(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(Workers.isEmployed(villager), "the villager should be hired"))
+			// Several times the timeout, off shift throughout. Standing at its own post is not the
+			// point here and would not save it: the clock is not being refreshed at all.
+			.thenExecuteAfter(ABSENTEE_TICKS * 5, () -> helper.assertTrue(Workers.isEmployed(villager),
+				"a worker off shift should still have its job after several timeouts' worth of night"))
+			.thenExecute(() -> helper.assertTrue(someoneIsEmployed(helper),
+				"and the station should still think somebody is doing it"))
 			.thenSucceed();
 	}
 

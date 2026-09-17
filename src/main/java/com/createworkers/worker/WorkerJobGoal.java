@@ -144,6 +144,17 @@ public class WorkerJobGoal extends Goal {
 		locomotion.tickEmployed(mob);
 
 		if (isOffShift()) {
+			// **Off shift is not absence, and the clock has to be told so.** The station sacks a worker
+			// whose lastAtWork is older than absenteeTimeout, and the only thing that ever refreshes it
+			// is keepNearPost -- which the return below skips for the whole of the night. With the
+			// shipped defaults a crew is off shift for 16000 ticks against a 6000-tick timeout, so
+			// every loaded worker was struck off its own roster partway through every night, woken,
+			// stripped of its name and replaced by a fresh hire at dawn. Stamping here freezes the
+			// clock across the night exactly as loading freezes it across an unloaded chunk: a worker
+			// asleep in its bed at two in the morning is doing precisely what it is supposed to.
+			//
+			// Marking it *before* clockOff, because clockOff returns true in the ordinary case.
+			data.markAtWork(now);
 			if (clockOff(data))
 				return;
 		} else {

@@ -146,9 +146,8 @@ public class CWConfig {
 		CLOCK_ON = builder
 			.comment("The time of day the day crew starts, in ticks. The default is first light.",
 				"Setting this later than clockOff inverts the two, which is how a night shift is made --",
-				"and it moves every worker on the server, not one of them. Note that a shift whose off",
-				"hours are daylight rests standing rather than sleeping: workers may only lie down during",
-				"the village's own resting hours, so they walk to their bed and wait beside it instead.")
+				"and it moves every worker on the server, not one of them. Each crew gets working hours",
+				"of its own, so a crew whose off hours fall in daylight sleeps through them.")
 			.defineInRange("clockOn", 0, 0, 23999);
 
 		BED_SEARCH_RADIUS = builder

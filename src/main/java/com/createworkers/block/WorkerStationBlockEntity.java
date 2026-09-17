@@ -1,6 +1,5 @@
 package com.createworkers.block;
 
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -12,7 +11,6 @@ import com.createworkers.CWConfig;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWBlockEntities;
-import com.createworkers.registry.CWPoiTypes;
 import com.createworkers.registry.CWProfessions;
 import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
@@ -30,7 +28,6 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.level.pathfinder.Path;
@@ -187,11 +184,11 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * The rack as an inventory, so a funnel or an arm can stock it and the station screen can have
 	 * real slots rather than a picture of some.
 	 *
-	 * <p>It is a <b>list</b> wearing an inventory's clothes, and the two disagree in one place that
-	 * matters: the order of the rack is the player's priority lever, so index {@code i} has to be the
-	 * {@code i}th job and cannot be a hole. A hat therefore goes in at the end and nowhere else —
-	 * {@link #isItemValid} admits only the first free index — and taking one out closes the gap behind
-	 * it, moving everything below up a place exactly as pulling it out by hand does.
+	 * <p>It is a set of <b>places</b> wearing an inventory's clothes. The order of the rack is the
+	 * player's priority lever, so a job's index is a statement about what matters most and is theirs
+	 * to choose: {@link #isItemValid} admits any free place, not merely the next one, and taking a hat
+	 * out leaves the gap behind it rather than promoting everything below into a priority nobody asked
+	 * for.
 	 */
 	private final IItemHandlerModifiable rack = new IItemHandlerModifiable() {
 
@@ -372,6 +369,20 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		// stood at its job site, hired it straight back onto whichever shift had just been switched on.
 		slot.shifts.clear();
 		slot.shifts.addAll(wanted);
+
+		// Turning a shift back on cancels the notice its worker was given, and this is where that
+		// belongs -- it is an answer to a thing the player just did, not a condition to re-test
+		// twenty times a second against every worker on the rack.
+		if (level instanceof ServerLevel server)
+			for (Shift shift : wanted) {
+				UUID id = slot.workers[shift.ordinal()];
+				if (id != null && server.getEntity(id) instanceof Villager worker) {
+					WorkerData data = Workers.get(worker);
+					if (data != null)
+						data.clearNotice();
+				}
+			}
+
 		changed();
 	}
 
@@ -720,11 +731,30 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 			;
 	}
 
+	/** Lets a worker off a notice nobody is waiting on any more. */
+	private void releaseNotice(ServerLevel server, Position position) {
+		Slot slot = slots[position.slot()];
+		UUID id = slot.workers[position.shift()
+			.ordinal()];
+		if (id == null || !(server.getEntity(id) instanceof Villager worker))
+			return;
+		WorkerData data = Workers.get(worker);
+		if (data != null && data.isServingNotice())
+			data.clearNotice();
+	}
+
 	private boolean promoteOne(ServerLevel server) {
 		Position vacancy = nextVacancy();
 		Position last = lastStaffed();
-		if (vacancy == null || last == null || order(last) < order(vacancy))
+		if (vacancy == null || last == null || order(last) < order(vacancy)) {
+			// Nothing to promote any more -- the vacancy was filled by a new hire, or the shifts
+			// changed under it. Whoever was waiting to be moved is let off, because a notice is also
+			// what stops a worker picking anything new up, and one left set on a worker nobody is
+			// waiting for is a worker that quietly stops working.
+			if (last != null)
+				releaseNotice(server, last);
 			return false;
+		}
 
 		Slot from = slots[last.slot()];
 		UUID id = from.workers[last.shift()
@@ -757,6 +787,12 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 			vacancy.shift());
 		to.workers[vacancy.shift()
 			.ordinal()] = id;
+		// Stamped, exactly as hire does. The place being moved into may have held somebody who died
+		// or was struck off, and its seen clock would still carry that worker's last sighting -- so a
+		// promoted worker that unloaded before the next audit was struck off on the strength of its
+		// predecessor's timestamp, and sacked itself on its next load for a job it was doing properly.
+		to.seen[vacancy.shift()
+			.ordinal()] = server.getGameTime();
 		rosterChanged();
 		return true;
 	}
@@ -838,9 +874,15 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 				WorkerData data = server.getEntity(id) instanceof Villager worker ? Workers.get(worker) : null;
 				if (slot.runs(shift)) {
-					// Put back. Nothing to finish after all.
-					if (data != null && data.isServingNotice())
-						data.clearNotice();
+					// Its place is one the job still runs, so there is nothing to hand over. **It does
+					// not clear the notice here**, although it used to: a worker being promoted is by
+					// definition at a position its job still runs, so this branch cancelled the
+					// promotion's notice on every twenty-tick look. giveNotice deliberately refuses to
+					// push an existing deadline back, so re-setting it against a field something else
+					// had just cleared meant the deadline never actually arrived -- and a worker
+					// holding a stack none of its outputs would accept was therefore never moved and
+					// never released, which is the one case the deadline exists to bound. Cancelling a
+					// handover now happens in setShifts, where the thing that warrants it happens.
 					continue;
 				}
 

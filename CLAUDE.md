@@ -415,6 +415,16 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   is away and a worker returning after an hour of game time is not an absentee.
   (`aWorkerThatStopsTurningUpLosesTheJob`, mutation-checked both ways: by never sacking, and by
   stamping the clock regardless of position.)
+  **And off shift is not absence — the clock has to be stamped for the night too.** `keepNearPost` is
+  the only thing that ever refreshes it, and `WorkerJobGoal.tick` returns before it for the whole of
+  the night, because `clockOff` returns true in the ordinary case. Left alone the timeout therefore
+  expires *during every night*: with the shipped defaults a crew is off shift for 16000 ticks against
+  a 6000-tick timeout, so every loaded worker was struck off its own roster in the small hours, woken,
+  stripped of its name, and replaced by a fresh hire at dawn. It shipped, and nothing caught it — the
+  absentee tests run in working hours by design and the night tests run a few hundred ticks, so a test
+  has to be off shift **and** patient (`aSleepingWorkerIsNotAnAbsentee`, in a batch of its own because
+  it moves both the clock and the config). The same reasoning as the load stamp: the clock measures a
+  worker failing to turn up to work it is supposed to be doing, and a villager asleep at 2am is not.
 - **Sacking an absentee has to release the POI ticket by hand.** Unlike a death or a hat being taken
   out, the villager is alive and still holding the station as its `JOB_SITE`, so the one ticket would
   stay taken and nobody could ever replace it — which is the exact failure the block exists to end.
@@ -965,6 +975,21 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   shift toggled against that stale view wrote the client's fiction back over the truth. They set
   `rosterChanged` now and the tick syncs once at the end, which is also why it is a flag rather than a
   packet per worker.
+- **Nothing but `setShifts` may cancel a notice, and `promoteOne` must release its own.** A worker
+  being promoted is by definition at a position its job still runs, so `finishHandovers`' "put back"
+  branch used to cancel the promotion's notice on every twenty-tick look. `giveNotice` deliberately
+  refuses to push an existing deadline back, so re-setting it against a field something else had just
+  cleared meant the deadline never arrived: a worker holding a stack none of its outputs would accept
+  was never moved and never released, which is precisely the case `NOTICE_TICKS` exists to bound.
+  Cancelling a handover belongs in `setShifts`, where the thing that warrants it happens. The mirror
+  of that is that `promoteOne` has to release the notice when the promotion is abandoned — a notice is
+  also what stops a worker picking anything up, so one left set on a worker nobody is waiting for is a
+  worker that quietly stops working.
+- **A promotion stamps `seen`, exactly as hiring does.** The place being moved into may have held
+  somebody who died or was struck off, and its `seen` clock still carries that worker's last sighting.
+  Left unstamped, a promoted worker that unloads before the next `auditRoster` is struck off on the
+  strength of its predecessor's timestamp — and then sacks itself on its next load, via
+  `verifyEmployment`, for a job it was doing correctly.
 - **A worker being moved or let go serves notice; it is never stopped mid-delivery.** Dropping a
   half-finished delivery on the floor is items out of the player's own machines scattered for a reason
   nothing in the world explains. So `WorkerData.noticeUntil` makes the worker stop taking new pickups

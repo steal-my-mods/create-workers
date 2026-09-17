@@ -14,7 +14,6 @@
   "createworkers.shift.night": "Night",
   "createworkers.message.hat_not_programmed": "Assign some Arm-compatible blocks to the hard hat first",
   "createworkers.message.already_employed": "They are already on the clock",
-  "createworkers.message.too_young": "Far too young for a job — come back when they have grown up",
   "createworkers.message.hired": "Clocked in with %1$s assigned inventories",
   "createworkers.message.retired": "Clocked out",
   "createworkers.message.selection_cleared": "All inventories cleared",
@@ -24,7 +23,6 @@
   "createworkers.message.bed_assigned": "They will sleep here",
   "createworkers.message.bed_cleared": "Bed cleared — they will find their own",
   "createworkers.message.bed_too_far": "Too far from the work to walk home (%1$s blocks, limit %2$s)",
-
   "createworkers.ponder.hard_hat.header": "Programming a Hard Hat",
   "createworkers.ponder.hard_hat.text_1": "Workers carry items between inventories, much like a Mechanical Arm that can walk",
   "createworkers.ponder.hard_hat.text_2": "Right-Click Arm-compatible blocks while holding the Hard Hat to assign them",
