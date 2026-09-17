@@ -345,11 +345,16 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   next. Grep the lang file and `CWConfig`'s comments for *still, no longer, used to, any more,
   instead of, as before* when touching either.
 - **Ponder text windows overlap if the clock is not counted, and only `idle` advances it.** A
-  `showText(d)` at clock T is on screen until T + d; `showControls`, `addInstruction` and a
-  non-blocking `TickingInstruction` all return immediately and move nothing. So the next `showText`
-  has to be at least `d` further along in `idle` calls, and getting it wrong puts two windows on
-  screen at once — which nothing catches, because Ponder does not load on a dedicated server. Walk
-  the calls in order and add up the `idle`s.
+  `showText(d)` at clock T is on screen until T + d; `showControls`, `showOutline`, `addInstruction`
+  and a non-blocking `TickingInstruction` all return immediately and move nothing. So the next
+  `showText` has to be at least `d` further along in `idle` calls, and getting it wrong puts two
+  windows on screen at once. **`generate_ponder_lang.py` checks it now** — it is already parsing the
+  storyboards in order, so it walks the `showText`/`idle` calls, resolves each duration against the
+  scene's own `private static final int` constants, and fails with how many ticks are missing. Both
+  workflows run it. A duration it cannot resolve is a **hard error** rather than a skip, because a
+  silently unmeasured beat makes the check blind; keep durations as numbers or arithmetic over the
+  scene's constants. Mutation-checked by lengthening a window into the next beat and by naming a
+  constant that does not exist.
 - **A Ponder scene is the mod's most easily-forgotten documentation, and the only one shipped inside
   the jar.** The hiring scene went on teaching "right-click a villager with a hat" for several
   versions after stations took that away — which is the worst kind of wrong, because nothing in the
@@ -1165,16 +1170,17 @@ if the thinking changes — the point is that the analysis is not redone from sc
 - `docs/professions.md` — what hiring does to a villager's village job, and the several ways of
   doing it that look equivalent and are not
 - `docs/shift-rotation.md` — shifts, food and leisure as one feature, because `GoToWantedItem` needs
-  `WALK_TARGET` absent and so a pinned worker can never feed itself. **Shifts are built**; food and
-  leisure are not. Holds what a shift turned out to be (an offset, on the worker, set by the slot) and
-  the correction
+  `WALK_TARGET` absent and so a pinned worker can never feed itself. **Shifts and leisure are built**;
+  food is not. Superseded by `phase-4.md` wherever the two disagree. Holds what a shift turned out to
+  be (an offset, on the worker, set by the slot) and the correction
   to the one thing `working-hours.md` got wrong (a worker **can** be given its own `Schedule`), the
   canteen block nothing in vanilla provides, and the revised case *for* giving workers trades
 - `docs/worker-station.md` — the block that hires workers: a rack of programmed hats for one
-  production *line*, filled through the vanilla point-of-interest route, so a lost worker's job
-  refills itself. **Built, except the screen.** Holds the argument that a part-staffed shift produces
-  nothing rather than less, why single-slot stations were rejected, and how a block advertises fewer
-  openings than its point-of-interest type allows
+  production *line*, so a lost worker's job refills itself. **Built**, screen and lamp readout
+  included; the point-of-interest route it was designed around is gone (`YieldJobSite`), and the block
+  recruits for itself. Holds the argument that a part-staffed shift produces nothing rather than less,
+  why single-slot stations were rejected, why the block is a full cube, and the four corrections its
+  texture took
 - `docs/phase-4.md` — leisure, food and trades **as agreed before building**: the work/leisure/sleep
   schedule and why coverage fixes the working window at 8000, the canteen, and the trade list. Holds
   three findings that moved the design — `Villager.foodLevel` is private so food has to be *items*,

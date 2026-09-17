@@ -409,18 +409,35 @@ is idle, not absent, and firing it for a quiet shift would be wrong.
 
 ## What it looks like
 
-A bench filling the block's footprint with a board rising from the back of it, facing whoever placed
-it — an L from the side, a counter from the front. The shape is the point: Create's blocks are
-recognisable before their textures are.
+**A full cube**, its front a sunk panel of boards inside a two-pixel andesite trim, carrying a grid of
+twelve lamps — one per place in the rack. Lit when the job is staffed on every shift it runs, dim when
+it is programmed and short, dark when the place is empty. Any dim lamp means *this Station needs
+people*, which is the question a player walks over to ask. The details, and the four corrections the
+texture took, are under [what was built](#what-was-built-a-lamp-bank) below.
 
-It took three goes. A full cube with a hi-vis stripe read as scenery; a thin board on a low plinth,
-which was the correction, read as slight beside a lectern or a smithing table. A profession block
-wants the weight of one.
+The rest of this section is how it got there, which is worth keeping because both halves — the
+silhouette and what the front says — were wrong more than once, and in each case the wrong version
+looked perfectly reasonable until something specific was measured.
 
-**What is in it is drawn as the hats themselves**, hung on the board by a block entity renderer, up to
-the four that fit across it. The two attempts at painting the state on — a hat on the top face, then a
-hat on the board — were both a picture of having something rather than the thing, and neither could
-count: one job and six looked identical.
+### The silhouette took three goes, and the third was still wrong
+
+A full cube with a hi-vis stripe read as scenery; a thin board on a low plinth, which was the
+correction, read as slight beside a lectern or a smithing table — a profession block wants the weight
+of one. The third was a bench filling the footprint with a board rising from the back, an L from the
+side and a counter from the front, on the principle that Create's blocks are recognisable before
+their textures are.
+
+That principle is sound and it still lost, for a reason nothing about the silhouette could answer: a
+shaped model cannot occlude. See [what was built](#what-was-built-a-lamp-bank).
+
+### The hats were drawn for real, and then dropped
+
+For two versions **what was in the block was drawn as the hats themselves**, hung on the board by a
+block entity renderer, up to the four that fit across it. That was already the third attempt: painting
+a hat on the top face, then painting one on the board, were both a picture of having something rather
+than the thing, and neither could count — one job and six looked identical.
+
+Hanging the real items fixed the counting. What it could not fix is below.
 
 ### Then the hats were dropped, and the readout got better for it
 

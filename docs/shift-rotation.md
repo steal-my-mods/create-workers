@@ -1,6 +1,9 @@
 # Shifts, food, and what a worker does off the clock
 
-**Status: shifts are built; food and leisure are not.** Written because
+**Status: shifts and leisure are built; food is not.** Leisure and the muster before a shift went in
+with phase 4 — see [phase-4.md](phase-4.md), which supersedes this file wherever the two disagree and
+records the finding that made leisure cheap: the shift window is already `Activity.IDLE`, so leisure
+is the job goal *standing back* rather than anything new. Written because
 [working hours](working-hours.md) shipped with a standing objection against it, and because the three
 ideas below turned out to be one idea.
 

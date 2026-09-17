@@ -42,9 +42,60 @@ SCENES = (
 TITLE = re.compile(r'scene\.title\("([^"]+)",\s*"((?:[^"\\]|\\.)*)"\)')
 TEXT = re.compile(r'\.text\("((?:[^"\\]|\\.)*)"\)')
 
+# The two calls that move the clock against each other: showText opens a window that
+# stays on screen for its own duration, and only idle advances the scene past it.
+CLOCK = re.compile(r'\.(showText|idle)\(([^()]*(?:\([^()]*\)[^()]*)*)\)')
+CONSTANT = re.compile(r'private static final int (\w+)\s*=\s*([^;]+);')
+
 
 def unescape(literal):
     return literal.replace('\\"', '"').replace('\\\\', '\\')
+
+
+def check_text_windows(scene, source, body):
+    """No two text windows may be on screen at once.
+
+    `showText(d)` at clock T is up until T + d, and **only `idle` advances the clock**:
+    `showControls`, `showOutline`, `addInstruction` and a non-blocking TickingInstruction
+    all return immediately and move nothing. So the next `showText` has to be at least d
+    further along in idle calls, and getting it wrong puts two windows on screen on top of
+    one another.
+
+    Nothing could catch that before. Ponder does not load on a dedicated server, so no game
+    test can render a scene, and the arithmetic is spread over a hundred lines of
+    storyboard with the durations written as expressions over the scene's own constants --
+    which is exactly the shape of thing that is checked by hand once and then never again
+    as beats are added. It is read out of the source here because this script is already
+    parsing these files in order, and both workflows run it.
+    """
+    constants = {}
+    for name, value in CONSTANT.findall(body):
+        try:
+            constants[name] = int(eval(value, {'__builtins__': {}}, dict(constants)))
+        except Exception:
+            pass  # not an arithmetic constant; nothing here needs it
+
+    clock = 0
+    open_until = 0
+    opened_at = None
+    for call, argument in CLOCK.findall(body):
+        try:
+            ticks = int(eval(argument, {'__builtins__': {}}, dict(constants)))
+        except Exception:
+            raise SystemExit('%s: cannot work out how long .%s(%s) is -- every duration in a '
+                             'storyboard has to be a number or arithmetic over the scene\'s own '
+                             'int constants, or the overlap check is blind to it'
+                             % (source, call, argument.strip()))
+        if call == 'idle':
+            clock += ticks
+            continue
+        if clock < open_until:
+            raise SystemExit(
+                '%s: the text beat at tick %d is on screen until %d, and the next one opens at %d '
+                '-- two windows would be drawn on top of each other. Add %d more ticks of idle '
+                'between them.' % (source, opened_at, open_until, clock, open_until - clock))
+        opened_at = clock
+        open_until = clock + ticks
 
 
 def scene_entries(scene, source):
@@ -56,6 +107,8 @@ def scene_entries(scene, source):
     if title.group(1) != scene:
         raise SystemExit('%s: titles itself "%s" but is registered as "%s"'
                          % (source, title.group(1), scene))
+
+    check_text_windows(scene, source, body)
 
     entries = [('createworkers.ponder.%s.header' % scene, unescape(title.group(2)))]
     for n, text in enumerate(TEXT.findall(body), start=1):

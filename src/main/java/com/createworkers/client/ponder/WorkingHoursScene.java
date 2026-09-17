@@ -58,10 +58,18 @@ public class WorkingHoursScene {
 	private static final Vec3 BESIDE_INPUT = new Vec3(2.5, 1, 1.5);
 	private static final Vec3 BESIDE_OUTPUT = new Vec3(4.5, 1, 5.5);
 	private static final Vec3 BESIDE_BED = new Vec3(4.5, 1, 1.5);
+	/**
+	 * The middle of the yard, which is the one place on this plate that is nobody's workstation.
+	 *
+	 * <p>Leisure has nowhere of its own to point at — it is the absence of being sent somewhere — so
+	 * what stands for it is the worker being somewhere it has no reason to be.
+	 */
+	private static final Vec3 YARD = new Vec3(3.5, 1, 3.5);
 
 	/** Roughly a villager's own pace, about ten ticks to the block. */
 	private static final int WALK_TO_OUTPUT = 45;
-	private static final int WALK_TO_BED = 40;
+	private static final int WALK_TO_YARD = 25;
+	private static final int WALK_TO_BED = 25;
 	private static final int WALK_TO_WORK = 20;
 
 	/** Head height, for pointing at a worker rather than at its feet. */
@@ -113,12 +121,12 @@ public class WorkingHoursScene {
 		scene.idle(10);
 
 		scene.overlay()
-			.showText(80)
-			.text("At the end of its crew's day a Worker downs tools, walks to a bed and sleeps until morning")
+			.showText(90)
+			.text("A Worker's day has four parts: its shift, an evening of its own, sleep, and a muster before the next shift starts")
 			.attachKeyFrame()
 			.pointAt(BESIDE_INPUT.add(EYE))
 			.placeNearTarget();
-		scene.idle(90);
+		scene.idle(100);
 
 		scene.overlay()
 			.showText(90)
@@ -148,10 +156,27 @@ public class WorkingHoursScene {
 			.indicateSuccess(OUTPUT_DEPOT);
 		scene.idle(40);
 
+		// --- the evening is the worker's own ---------------------------------------------
+
+		// Nothing here is an instruction to the worker, which is the point: off the clock the job goal
+		// stands back and the villager's own behaviours -- strolling, gossiping, trading, breeding --
+		// are what move it. A scene has no way to show an absence, so what it shows instead is the
+		// worker somewhere it was never sent.
+		scene.addKeyframe();
+		scene.overlay()
+			.showText(WALK_TO_YARD + 60)
+			.text("Off the clock they are villagers again — they wander, gossip and trade until it is time to turn in")
+			.attachKeyFrame()
+			.pointAt(YARD.add(EYE))
+			.placeNearTarget();
+		scene.addInstruction(new WalkInstruction(worker, BESIDE_OUTPUT, YARD, WALK_TO_YARD));
+		scene.idle(WALK_TO_YARD + 5);
+		scene.idle(55);
+
 		// --- off to bed ------------------------------------------------------------------
 
 		scene.addKeyframe();
-		scene.addInstruction(new WalkInstruction(worker, BESIDE_OUTPUT, BESIDE_BED, WALK_TO_BED));
+		scene.addInstruction(new WalkInstruction(worker, YARD, BESIDE_BED, WALK_TO_BED));
 		scene.idle(WALK_TO_BED + 5);
 		scene.world()
 			.modifyEntity(worker, entity -> {
@@ -234,8 +259,12 @@ public class WorkingHoursScene {
 			.indicateSuccess(OUTPUT_DEPOT);
 		scene.idle(40);
 
-		// --- morning ---------------------------------------------------------------------
+		// --- muster --------------------------------------------------------------------
 
+		// Not "morning": a crew's shift may start at any hour, and what gets it out of bed is its own
+		// clock rather than the sky. The walk is the whole reason muster exists -- three crews covering
+		// the day exactly still leave a gap at every changeover if each one sets off only once the
+		// last has stopped.
 		scene.addKeyframe();
 		scene.world()
 			.modifyEntity(worker, entity -> {
@@ -246,12 +275,12 @@ public class WorkingHoursScene {
 		scene.idle(15);
 
 		scene.overlay()
-			.showText(80)
-			.text("At first light they are up and back at work")
+			.showText(90)
+			.text("A crew is woken before its shift and walks to its post, so the work is covered the moment the last crew stops")
 			.attachKeyFrame()
 			.pointAt(BESIDE_BED.add(EYE))
 			.placeNearTarget();
-		scene.idle(20);
+		scene.idle(30);
 		scene.addInstruction(new WalkInstruction(worker, BESIDE_BED, BESIDE_INPUT, WALK_TO_WORK));
 		scene.idle(WALK_TO_WORK + 40);
 
