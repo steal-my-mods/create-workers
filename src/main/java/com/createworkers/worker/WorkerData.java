@@ -6,6 +6,7 @@ import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
 import com.createworkers.CWConfig;
+import com.createworkers.block.CanteenBlockEntity;
 import com.createworkers.CreateWorkers;
 import com.createworkers.program.WorkerProgram;
 import com.simibubi.create.AllBlockEntityTypes;
@@ -21,7 +22,10 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.common.util.INBTSerializable;
@@ -84,6 +88,9 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	/** How long to leave a target that would not resolve before trying it again. */
 	private static final int RESOLVE_RETRY_TICKS = 100;
 
+	/** What a new hire arrives having eaten, in food points. A loaf, which is vanilla's own figure. */
+	private static final int STARTING_RATIONS = 4;
+
 	private final List<WorkerTarget> inputs = new ArrayList<>();
 	private final List<WorkerTarget> outputs = new ArrayList<>();
 	/** Stored points that could not be turned into targets yet — see {@link #retryPending}. */
@@ -123,6 +130,17 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	 * tell, and its station will give it notice again on the next look.
 	 */
 	private long noticeUntil;
+	/**
+	 * How much work this worker has eaten for, counted in deliveries.
+	 *
+	 * <p>The mod's own gauge rather than the villager's, and it has to be: {@code Villager.foodLevel}
+	 * is <b>private</b>, unreadable from outside, and the only public thing that moves it is
+	 * {@code eatAndDigestFood()}, which eats to full and spends twelve in one go for breeding. There
+	 * is no way to ask a villager how hungry it is, or to make it a little hungrier. So food here is
+	 * <em>items</em>: this counts down as the worker hauls, and when it runs out the worker eats one
+	 * thing out of its own inventory and adds what vanilla says that thing is worth.
+	 */
+	private int fuel;
 	@Nullable
 	private ArmBlockEntity host;
 
@@ -234,8 +252,90 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		return noticeUntil != 0L && gameTime >= noticeUntil;
 	}
 
+	// --- food ----------------------------------------------------------------------------
+
+	/**
+	 * Charges this worker for one delivery, eating if it has to.
+	 *
+	 * <p><b>Per delivery, not per item</b>, which is a small departure from what the design said. The
+	 * intent there is right and unchanged — a worker that moved two hundred items should cost more
+	 * than one that stood at a dry depot all shift — but the unit that matches the work is the
+	 * <em>trip</em>: carrying one item and carrying a full stack are the same walk, and pricing them
+	 * differently would tax a well-built line for filling its stacks, which is the opposite of what
+	 * Create asks you to do.
+	 *
+	 * @return whether the worker is hungry afterwards — out of fuel with nothing left to eat.
+	 */
+	public boolean chargeForDelivery(Mob mob) {
+		if (!CWConfig.REQUIRE_FOOD.get())
+			return false;
+		if (fuel <= 0 && !eat(mob))
+			return true; // nothing in the gauge and nothing in its pockets
+		// The delivery that emptied the gauge is still a delivery, so it is charged for after the meal
+		// rather than covered by it -- otherwise every loaf quietly buys one trip more than it is worth.
+		fuel--;
+		return false;
+	}
+
+	/**
+	 * Eats one item out of the villager's own inventory.
+	 *
+	 * <p>One item, not "until full". Vanilla's {@code eatUntilFull} exists, is private, and has the
+	 * wrong shape for this anyway: it fills a hidden gauge nothing can read back, where this has to
+	 * turn a countable thing into a countable amount of work, so that "how much bread does a shift
+	 * cost" is a question with an answer.
+	 *
+	 * @return whether there was anything to eat.
+	 */
+	private boolean eat(Mob mob) {
+		if (!(mob instanceof Villager villager))
+			return false; // endermen do not eat -- see docs/shift-rotation.md
+
+		SimpleContainer inventory = villager.getInventory();
+		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+			int points = CanteenBlockEntity.foodPoints(inventory.getItem(slot));
+			if (points <= 0)
+				continue;
+			inventory.removeItem(slot, 1);
+			fuel += points * CWConfig.DELIVERIES_PER_FOOD_POINT.get();
+			return true;
+		}
+		return false;
+	}
+
+	/** @return whether this worker has run out of food, which is what makes it slow. */
+	public boolean isHungry(Mob mob) {
+		return CWConfig.REQUIRE_FOOD.get() && fuel <= 0 && !hasFood(mob);
+	}
+
+	/** @return whether there is anything in the villager's inventory it could eat. */
+	public boolean hasFood(Mob mob) {
+		if (!(mob instanceof Villager villager))
+			return false;
+		SimpleContainer inventory = villager.getInventory();
+		for (int slot = 0; slot < inventory.getContainerSize(); slot++)
+			if (CanteenBlockEntity.foodPoints(inventory.getItem(slot)) > 0)
+				return true;
+		return false;
+	}
+
+	/** How many deliveries this worker has eaten for. Diagnostics and tests; nothing reads it to decide. */
+	public int fuel() {
+		return fuel;
+	}
+
 	/** Puts the entity to work with the given hat. */
 	public void employ(ItemStack hatStack, WorkerProgram program) {
+		// **A worker turns up having eaten.** Starting on empty makes it hungry on its first delivery,
+		// which is a villager that was fine a second ago and is now visibly limping for reasons a
+		// player has had no chance to do anything about -- food as a punishment for hiring rather than
+		// as a supply line to build. A loaf's worth of work is enough to get the first shift done and
+		// to make running out a thing that happens *later*, which is where the mechanic is interesting.
+		//
+		// Only on a fresh hire. employ() is also how a station promotes a worker into the job above,
+		// and a rations top-up there would make toggling a shift a way to feed a crew for nothing.
+		if (!isEmployed())
+			fuel = STARTING_RATIONS * CWConfig.DELIVERIES_PER_FOOD_POINT.get();
 		this.hat = hatStack.copyWithCount(1);
 		this.program = program.copy();
 		this.jobSite = this.program.centre();
@@ -754,6 +854,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		tag.putInt("LastInput", lastInputIndex);
 		tag.putInt("LastOutput", lastOutputIndex);
 		tag.putInt("Cooldown", cooldown);
+		tag.putInt("Fuel", fuel);
 		tag.putString("Shift", shift.getSerializedName());
 		if (namedByStation)
 			tag.putBoolean("NamedByStation", true);
@@ -775,6 +876,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		lastInputIndex = tag.getInt("LastInput");
 		lastOutputIndex = tag.getInt("LastOutput");
 		cooldown = tag.getInt("Cooldown");
+		fuel = tag.getInt("Fuel");
 		shift = Shift.byName(tag.getString("Shift"), Shift.DAY);
 		namedByStation = tag.getBoolean("NamedByStation");
 		station = null;

@@ -1217,6 +1217,88 @@ public class WorkerGameTests {
 	}
 
 	/**
+	 * A worker eats what it hauls for, out of its own pocket.
+	 *
+	 * <p>Food has to be <b>items</b>, and that is not a preference. {@code Villager.foodLevel} is
+	 * private, nothing public reads it, and the only public thing that moves it is
+	 * {@code eatAndDigestFood()}, which fills it and spends twelve in one go for breeding — so there
+	 * is no way to ask a villager how hungry it is or to make it slightly hungrier. The gauge here is
+	 * this mod's own, and the thing that refills it is a loaf leaving the villager's inventory, which
+	 * is the half a player can see and count.
+	 *
+	 * <p>Charged per <em>delivery</em> rather than per item, which the design doc said the other way.
+	 * Carrying one item and carrying a full stack are the same walk, and pricing them differently
+	 * would tax a line for filling its stacks — the opposite of what Create asks of you.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aWorkerEatsWhatItHaulsFor(GameTestHelper helper) {
+		layFloor(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = Workers.getOrCreate(villager);
+		data.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.EMPTY);
+
+		int rations = data.fuel();
+		helper.assertTrue(rations > 0,
+			"a new hire should turn up having eaten -- starting empty makes it hungry on its first "
+				+ "delivery, which is a punishment for hiring rather than a supply line to build");
+
+		helper.assertTrue(!data.chargeForDelivery(villager), "a fed worker is not hungry");
+		helper.assertTrue(data.fuel() == rations - 1, "and a delivery costs it one");
+
+		// Run it dry with nothing in its pockets.
+		for (int delivery = 0; delivery < rations + 4; delivery++)
+			data.chargeForDelivery(villager);
+		helper.assertTrue(data.isHungry(villager), "a worker out of food and out of fuel is hungry");
+
+		// A loaf is worth four points, and one point is worth deliveriesPerFoodPoint deliveries.
+		villager.getInventory()
+			.addItem(new ItemStack(Items.BREAD, 1));
+		helper.assertTrue(!data.chargeForDelivery(villager), "with bread in its pocket it should eat rather than starve");
+		helper.assertTrue(villager.getInventory()
+			.countItem(Items.BREAD) == 0, "and the loaf should be gone -- eaten, not merely counted");
+		helper.assertTrue(data.fuel() == 4 * CWConfig.DELIVERIES_PER_FOOD_POINT.get() - 1,
+			"a loaf should be worth four points of deliveries, and left " + data.fuel());
+		helper.assertTrue(!data.isHungry(villager), "and it should not be hungry any more");
+		helper.succeed();
+	}
+
+	/**
+	 * A hungry worker is slow, and never stopped.
+	 *
+	 * <p>A line that halts is a line whose owner has to go and find out why, and food must not be the
+	 * one mechanic here that fails invisibly — but a hard stop turns a supply hiccup into an outage,
+	 * which over-corrects in the other direction. So {@code hungryPace} is a <b>floor</b>: it is as
+	 * slow as hunger ever makes anybody, and a base that runs out of bread limps rather than dies.
+	 *
+	 * <p>Asserted as a comparison against the fed pace rather than against a number, so the test says
+	 * what the rule is rather than what the config currently holds.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aHungryWorkerIsSlowedAndNeverStopped(GameTestHelper helper) {
+		layFloor(helper);
+		Villager fed = helper.spawn(EntityType.VILLAGER, SPAWN);
+		Villager starving = helper.spawn(EntityType.VILLAGER, SPAWN);
+
+		Workers.getOrCreate(fed)
+			.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.EMPTY);
+		WorkerData hungry = Workers.getOrCreate(starving);
+		hungry.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.EMPTY);
+		while (!hungry.isHungry(starving))
+			hungry.chargeForDelivery(starving);
+
+		float fedPace = WalkLocomotion.workingSpeed(fed);
+		float hungryPace = WalkLocomotion.workingSpeed(starving);
+		helper.assertTrue(hungryPace < fedPace,
+			"a hungry worker should walk slower than a fed one (" + hungryPace + " against " + fedPace + ")");
+		helper.assertTrue(hungryPace > 0,
+			"and it should still be walking -- hunger is a limp, not a halt, or a supply hiccup becomes "
+				+ "an outage nobody can see the cause of");
+		helper.assertTrue(fedPace == WalkLocomotion.workingSpeed(),
+			"a fed worker should be at the ordinary pace, or this test is measuring the wrong thing");
+		helper.succeed();
+	}
+
+	/**
 	 * To a machine, a Canteen is an ordinary inventory — fillable <em>and</em> drainable.
 	 *
 	 * <p>This is a decision that has now been made twice, in opposite directions, which is why it is

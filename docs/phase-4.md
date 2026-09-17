@@ -1,6 +1,9 @@
 # Phase 4 — leisure, food, and trades
 
-**Status: leisure, muster and the canteen block are built; food and trades are not.** This was the
+**Status: leisure, muster, the canteen block and the food drain are built. What is left of food is
+the canteen trip; trades are not started.** A worker eats as it hauls, eats out of its own inventory,
+and slows to `hungryPace` when it runs out — but nothing yet sends it to a canteen to restock, so for
+now a crew is fed by what a player or a farmer puts in its pockets. This was the
 plan agreed before any code, so that the shape was argued once rather than discovered three times.
 [shift-rotation.md](shift-rotation.md) holds the original thinking; where this document disagrees
 with it, this one is right and says why.
@@ -17,6 +20,20 @@ What the build changed, so far:
   A shortcut here was that block reimplemented on one block. So the shape is an Item Vault's — funnel,
   chute, belt, hopper or hatch in; comparator for how full; breaking it for the food back — with a
   goggle overlay saying *what* is in it, which a comparator cannot.
+- **"Food" is vanilla's four, not everything edible.** `Villager.FOOD_POINTS` is public and holds
+  bread, potato, carrot and beetroot; a villager eats nothing else. The canteen filtered on the `FOOD`
+  component at first, so a trough of cooked beef read as stocked on every readout and would have fed
+  nobody.
+- **The drain is per delivery, not per item**, which reverses a line above. The intent there is
+  unchanged — a worker that moved two hundred items should cost more than one that stood at a dry
+  depot — but carrying one item and carrying a full stack are the same walk, and pricing them apart
+  taxes a line for filling its stacks.
+- **A new hire arrives having eaten.** Not in the design, and needed: starting empty makes a worker
+  hungry on its first delivery, which is food as a punishment for hiring rather than as a supply line
+  to build.
+- **The hungry slowdown is a flat floor rather than a slide.** The design said "down to a floor",
+  implying a ramp. One multiplier is simpler, satisfies "never worse than", and there is nothing a
+  ramp would tell a player that the particles and the screen do not.
 - **Machines can fill a canteen and empty one**, exactly as for any other inventory. A funnel on the
   side draining it was reported as a bug and briefly "fixed" by making the capability insert-only;
   that lasted one commit. No Create block behaves that way — its deposit-only idea is about arm

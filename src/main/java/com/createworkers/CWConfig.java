@@ -42,6 +42,12 @@ public class CWConfig {
 	public static final ModConfigSpec.EnumValue<IdleBehaviour> IDLE_BEHAVIOUR;
 	/** Whether workers knock off at the end of the day and go to bed. */
 	public static final ModConfigSpec.BooleanValue WORKING_HOURS;
+	/** Whether villager workers eat, and slow down when they cannot. */
+	public static final ModConfigSpec.BooleanValue REQUIRE_FOOD;
+	/** How many deliveries one point of villager food is worth. */
+	public static final ModConfigSpec.IntValue DELIVERIES_PER_FOOD_POINT;
+	/** The fraction of normal pace a hungry worker manages. Also the floor: it never gets worse. */
+	public static final ModConfigSpec.DoubleValue HUNGRY_PACE;
 	/** The time of day a worker downs tools. */
 	public static final ModConfigSpec.IntValue CLOCK_OFF;
 	/** The time of day it picks them up again. */
@@ -139,6 +145,29 @@ public class CWConfig {
 				"stops overnight -- turn this off and they work around the clock.",
 				"Endermen are exempt whatever this says. They have no beds and no schedule.")
 			.define("workingHours", true);
+
+		REQUIRE_FOOD = builder
+			.comment("Whether Villager Workers eat. They spend one point of food per delivery, taken",
+				"from their own inventory -- a loaf of bread is four points -- and a Worker with none",
+				"left keeps working at a reduced pace rather than stopping. Feeding a crew is what a",
+				"Canteen is for. Turn this off and Workers never eat and never slow down.",
+				"Endermen are exempt whatever this says. They eat nothing.")
+			.define("requireFood", true);
+
+		DELIVERIES_PER_FOOD_POINT = builder
+			.comment("How far one point of food goes, counted in deliveries. Vanilla values a loaf of",
+				"bread at four points and a carrot, potato or beetroot at one, so at the default a",
+				"loaf carries a Worker through a hundred deliveries -- roughly a shift on a busy line.",
+				"Lower numbers make feeding a crew the thing your factory is mostly doing.")
+			.defineInRange("deliveriesPerFoodPoint", 25, 1, 10000);
+
+		HUNGRY_PACE = builder
+			.comment("How fast a hungry Worker works, as a fraction of its normal pace: it walks this",
+				"much slower and pauses this much longer between items. This is a floor rather than a",
+				"slide -- a Worker with nothing to eat is slow, and never becomes slower than this, and",
+				"never stops. A line that halts is a line whose owner has to go and find out why; a",
+				"line running at a third is one that is plainly limping.")
+			.defineInRange("hungryPace", 0.35D, 0.05D, 1.0D);
 
 		CLOCK_OFF = builder
 			.comment("The time of day a worker downs tools, in ticks: 0 is dawn, 6000 noon, 12000 dusk,",

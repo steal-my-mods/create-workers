@@ -64,7 +64,7 @@ public class WalkLocomotion implements WorkerLocomotion {
 
 		mob.getBrain()
 			.setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(post));
-		walkTo(mob, post, workingSpeed(), RETURN_CLOSE_ENOUGH);
+		walkTo(mob, post, workingSpeed(mob), RETURN_CLOSE_ENOUGH);
 	}
 
 	/**
@@ -85,7 +85,7 @@ public class WalkLocomotion implements WorkerLocomotion {
 		if (isPanicking(mob))
 			return;
 
-		walkTo(mob, station, workingSpeed(), STATION_CLOSE_ENOUGH);
+		walkTo(mob, station, workingSpeed(mob), STATION_CLOSE_ENOUGH);
 	}
 
 	/** Ambles towards somewhere on the worker's rounds, looking where it is going. */
@@ -120,7 +120,7 @@ public class WalkLocomotion implements WorkerLocomotion {
 
 		mob.getBrain()
 			.setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(destination));
-		walkTo(mob, destination, workingSpeed(), closeEnough);
+		walkTo(mob, destination, workingSpeed(mob), closeEnough);
 	}
 
 	@Override
@@ -146,9 +146,24 @@ public class WalkLocomotion implements WorkerLocomotion {
 			.stop();
 	}
 
-	/** The pace of a worker on the clock. */
+	/** The pace of a worker on the clock, with nothing slowing it down. */
 	public static float workingSpeed() {
 		return (float) (double) CWConfig.WALK_SPEED.get();
+	}
+
+	/**
+	 * The pace this particular worker manages, which is the working pace unless it is hungry.
+	 *
+	 * <p>Hunger is felt in two places and this is the one a player sees first: a worker with nothing
+	 * to eat walks its beat visibly slower, long before anybody works out that the line's throughput
+	 * has dropped. The other is the pause between items. Neither ever stops it — see
+	 * {@code WorkerJobGoal.transferCooldown} for why a floor rather than a halt.
+	 */
+	public static float workingSpeed(Mob mob) {
+		WorkerData data = Workers.get(mob);
+		if (data == null || !data.isHungry(mob))
+			return workingSpeed();
+		return workingSpeed() * (float) (double) CWConfig.HUNGRY_PACE.get();
 	}
 
 	/** The pace of a worker on its rounds: an amble, not a commute. */

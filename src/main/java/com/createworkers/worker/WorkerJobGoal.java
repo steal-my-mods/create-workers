@@ -50,6 +50,8 @@ public class WorkerJobGoal extends Goal {
 	private static final int LEASH_LOST_AFTER = 3;
 	/** How often a lost worker says so. */
 	private static final int LOST_SIGNAL_TICKS = 100;
+	/** How often a hungry one does. Slower: hunger is a condition, not an emergency. */
+	private static final int HUNGER_SIGNAL_TICKS = 160;
 	/** Vanilla's "this villager is unhappy" entity event, which is what the signal borrows. */
 	private static final byte ANGRY_PARTICLES = 13;
 	/** How long a worker keeps trying to hand over what is already in its hands after the whistle. */
@@ -104,6 +106,8 @@ public class WorkerJobGoal extends Goal {
 	private int musterRest;
 	/** Ticks until a lost worker next says so. */
 	private int lostSignal;
+	/** Ticks until a hungry one next says so. */
+	private int hungerSignal;
 
 	public WorkerJobGoal(Mob mob, WorkerLocomotion locomotion) {
 		this.mob = mob;
@@ -184,6 +188,7 @@ public class WorkerJobGoal extends Goal {
 		}
 
 		keepNearPost(data, now);
+		signalIfHungry(data);
 
 		if (data.tickCooldown())
 			return;
@@ -724,6 +729,43 @@ public class WorkerJobGoal extends Goal {
 		idleTicks = 0;
 	}
 
+	/**
+	 * How long the worker pauses after moving something, which is where hunger is felt most.
+	 *
+	 * <p>Slower, never stopped. A line that halts is a line whose owner has to go and find out why,
+	 * and food should not be the one mechanic here that fails invisibly — but a hard stop turns a
+	 * supply hiccup into an outage, which is over-correcting in the other direction. So a hungry
+	 * worker limps, and {@code hungryPace} is a <b>floor</b> rather than a slide: it is as slow as
+	 * hunger ever makes anybody. Without a floor, "my base has been at twenty per cent for three
+	 * days" is the same invisible failure in slow motion.
+	 */
+	private int transferCooldown(WorkerData data) {
+		int normal = CWConfig.TRANSFER_COOLDOWN.get();
+		if (!data.isHungry(mob))
+			return normal;
+		return (int) Math.ceil(normal / CWConfig.HUNGRY_PACE.get());
+	}
+
+	/**
+	 * Says, to anyone near enough to look, that this worker has nothing to eat.
+	 *
+	 * <p>The same unhappy-villager particles a lost worker broadcasts, on the same kind of slow clock,
+	 * and for the same reason: a worker quietly working at a third speed is a factory that has slowed
+	 * down for no visible cause, which is the worst shape a mechanic can fail in. The station screen
+	 * says it too, for a player who is not standing there.
+	 */
+	private void signalIfHungry(WorkerData data) {
+		if (!data.isHungry(mob)) {
+			hungerSignal = 0;
+			return;
+		}
+		if (hungerSignal-- > 0)
+			return;
+		hungerSignal = HUNGER_SIGNAL_TICKS;
+		mob.level()
+			.broadcastEntityEvent(mob, ANGRY_PARTICLES);
+	}
+
 	/** Gives the leash a clean slate: whatever it was doing, the worker has moved on from it. */
 	private void forgetLeash(WorkerData data) {
 		homeward.reset();
@@ -779,9 +821,14 @@ public class WorkerJobGoal extends Goal {
 
 			boolean acted = collecting ? data.collectFrom(point, gameTime) : data.depositTo(point);
 
+			// The delivery is what costs a worker its dinner, so it is charged for here and nowhere
+			// else -- a pickup is half a trip and a scan that finds nothing is no trip at all.
+			if (acted && !collecting)
+				data.chargeForDelivery(mob);
+
 			locomotion.stop(mob);
 			travel.reset();
-			data.setCooldown(CWConfig.TRANSFER_COOLDOWN.get());
+			data.setCooldown(transferCooldown(data));
 
 			if (acted || !ItemStack.matches(before, data.getHeld())) {
 				Workers.updateCargoAppearance(mob, data.getHeld());

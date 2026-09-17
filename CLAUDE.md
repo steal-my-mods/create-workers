@@ -733,6 +733,29 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   forgotten. What counts as food is the item's own `FOOD` component rather than a list kept here — a
   list is wrong the day any mod adds a bread, and the component is the same question `FOOD_POINTS`
   will be asking. (`aCanteenTakesFoodAndNothingElse`.)
+- **Food has to be items, because a villager's hunger is unreachable.** `Villager.foodLevel` is
+  **private**, nothing public reads it, and the only public thing that moves it is
+  `eatAndDigestFood()` — which eats to full and spends twelve in one go for breeding. There is no way
+  to ask a villager how hungry it is or to make it slightly hungrier. So `WorkerData.fuel` is the
+  mod's own gauge, counted in deliveries, and what refills it is a loaf leaving the villager's
+  inventory: the half a player can see and count. **`Villager.FOOD_POINTS` is public and is the whole
+  list** — bread 4, potato, carrot and beetroot 1 apiece — which is also what the Canteen filters on,
+  because a trough of cooked beef reads as stocked and feeds nobody.
+  Three decisions worth keeping: it is charged **per delivery, not per item** (carrying one item and
+  carrying a stack are the same walk, and pricing them apart would tax a line for filling its stacks);
+  the delivery that empties the gauge is charged for **after** the meal, or every loaf quietly buys a
+  trip more than it is worth; and a new hire arrives with `STARTING_RATIONS` already eaten, **on a
+  fresh hire only**, since `employ` is also how a station promotes and a top-up there would make
+  toggling a shift a way to feed a crew for nothing. Starting empty makes a worker hungry on its first
+  delivery, which is food as a punishment for hiring rather than a supply line to build — and it
+  failed `workFoundOnTheRoundsIsWalkedAtWorkingPace`, because every test villager has empty pockets.
+  (`aWorkerEatsWhatItHaulsFor`, `aHungryWorkerIsSlowedAndNeverStopped`, both mutation-checked.)
+- **A hungry worker is slowed and never stopped, and `hungryPace` is a floor rather than a slide.** A
+  line that halts is a line whose owner has to go and find out why, and food must not be the one
+  mechanic here that fails invisibly — but a hard stop turns a supply hiccup into an outage. It is
+  felt in two places, the pause between items and the walking pace, and it says so with the same
+  unhappy-villager particles a lost worker broadcasts. Without a floor, "my base has been at twenty
+  per cent for three days" is the same invisible failure in slow motion.
 - **A block entity's contents never reach a client on their own, and a goggle overlay is drawn on the
   client.** The Canteen shipped without `getUpdateTag`/`getUpdatePacket`, so a chute could fill it all
   morning while a pair of goggles read **Empty** — both correct, about different worlds, with nothing
