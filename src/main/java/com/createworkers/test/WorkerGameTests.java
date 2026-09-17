@@ -1211,6 +1211,85 @@ public class WorkerGameTests {
 	}
 
 	/**
+	 * Machines can fill a Canteen and can never empty one.
+	 *
+	 * <p>A funnel on the side of a canteen was pulling the bread straight back out. That is correct
+	 * behaviour for a chest and for the Item Vault this block otherwise copies — storage is for taking
+	 * things out of — and it is wrong here, because **the only thing that should ever empty a Canteen
+	 * is a villager eating**, which is not an item transfer. A belt that keeps a trough empty is a
+	 * trough that never feeds anybody, and from the outside the machinery looks like it is working.
+	 *
+	 * <p>Asked through the capability, because that is what a funnel, a chute, a belt and a hopper all
+	 * actually hold — the block's own handler still extracts, since this mod's own code has to be able
+	 * to take food out when a worker eats it.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void machinesFillACanteenAndNeverEmptyIt(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
+		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
+			throw new GameTestAssertException("the canteen should have a block entity");
+
+		IItemHandler machines = handlerAt(helper, SOURCE);
+		helper.assertTrue(machines != null, "a canteen should expose an item handler, or nothing can fill it");
+		helper.assertTrue(ItemHandlerHelper.insertItem(machines, new ItemStack(Items.BREAD, 6), false)
+			.isEmpty(), "a machine should be able to fill a canteen");
+
+		for (int slot = 0; slot < machines.getSlots(); slot++)
+			helper.assertTrue(machines.extractItem(slot, 64, false)
+				.isEmpty(), "a machine should never be able to take food out of a canteen");
+		helper.assertTrue(canteen.contents()
+			.size() == 1, "and the bread should still be in there");
+
+		// The block's own handler is not the one machines hold, and it must still work: eating is
+		// taking food out, and it is this mod's code that will do it.
+		helper.assertTrue(!canteen.stock()
+			.extractItem(0, 1, false)
+			.isEmpty(), "the canteen's own handler must still extract, or nothing can ever eat from it");
+		helper.succeed();
+	}
+
+	/**
+	 * A Canteen's stock reaches the client, or the goggles lie about it.
+	 *
+	 * <p>This shipped broken: a chute filled a canteen all morning and a pair of goggles read "Empty"
+	 * the whole time. Both were right, about different worlds. **A block entity's contents are the
+	 * server's and reach a client only if the block sends them**, and the goggle overlay is drawn on
+	 * the client from the client's copy — which, for a block that never syncs, is whatever it was
+	 * given when the chunk loaded. Nothing in the game says so, and the natural reading is that the
+	 * chute is not working.
+	 *
+	 * <p>What a server can check is the half that was missing: that the update tag a client would be
+	 * sent actually carries the stock. The Worker Station has had these overrides since its screen was
+	 * built; this block simply never got them.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aCanteenSendsItsStockToTheClient(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
+		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
+			throw new GameTestAssertException("the canteen should have a block entity");
+
+		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.BREAD, 5), false);
+
+		CompoundTag update = canteen.getUpdateTag(helper.getLevel()
+			.registryAccess());
+		// Read back the way a client would: build a fresh block entity and load the tag into it.
+		CanteenBlockEntity asClientSeesIt =
+			new CanteenBlockEntity(helper.absolutePos(SOURCE), CWBlocks.CANTEEN.get()
+				.defaultBlockState());
+		asClientSeesIt.loadWithComponents(update, helper.getLevel()
+			.registryAccess());
+
+		helper.assertTrue(!asClientSeesIt.contents()
+			.isEmpty(), "the update a client is sent should carry the canteen's stock, and carried nothing");
+		helper.assertTrue(asClientSeesIt.goggleSummary()
+			.size() == canteen.goggleSummary()
+				.size(), "so a client's goggles should say what the server's canteen holds");
+		helper.succeed();
+	}
+
+	/**
 	 * A Canteen says what is in it to a pair of Engineer's Goggles.
 	 *
 	 * <p>Nothing goes in or out of one by hand, so a player's only other way to know is a comparator —

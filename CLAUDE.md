@@ -733,6 +733,25 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   forgotten. What counts as food is the item's own `FOOD` component rather than a list kept here — a
   list is wrong the day any mod adds a bread, and the component is the same question `FOOD_POINTS`
   will be asking. (`aCanteenTakesFoodAndNothingElse`.)
+- **A block entity's contents never reach a client on their own, and a goggle overlay is drawn on the
+  client.** The Canteen shipped without `getUpdateTag`/`getUpdatePacket`, so a chute could fill it all
+  morning while a pair of goggles read **Empty** — both correct, about different worlds, with nothing
+  in the game to say so and "the chute is broken" the natural reading. Any block whose *state a player
+  can see* has to send it: the Worker Station has carried the same three overrides since its screen
+  was built, and this one simply never got them. **The Canteen syncs on a clock where the Station
+  syncs on every change**, and the difference is the rate: a rack changes a handful of times an hour,
+  a canteen under a belt several times a second, and the whole inventory to every tracking client per
+  item is a packet storm for a readout nobody can perceive at that rate. A dirty flag plus a
+  ten-tick floor. (`aCanteenSendsItsStockToTheClient`, mutation-checked by emptying the update tag.)
+- **The Canteen's capability is insert-only, which is where the Item Vault analogy stops.** A funnel
+  on the side of one was pulling the bread straight back out — right for a chest, right for a Vault,
+  and wrong here, because **the only thing that should ever empty a Canteen is a villager eating**,
+  which is not an item transfer. A belt that keeps a trough empty is a trough that never feeds
+  anybody, and from the outside the machinery looks like it is working. `intake()` is what the
+  capability hands out; `stock()` is the real handler and stays extractable, because eating *is*
+  taking food out and this mod's own code has to do it. The rule is about who is asking, not about
+  what is being moved. (`machinesFillACanteenAndNeverEmptyIt`, mutation-checked by letting the view
+  extract.)
 - **A goggle overlay is the readout for a block with no screen, and `forGoggles` cannot run on a
   server.** `IHaveGoggleInformation` is a plain `instanceof` check in Create's overlay renderer, so
   any `BlockEntity` can implement it — Create's own Item Vault does not, but a Canteen holds only food

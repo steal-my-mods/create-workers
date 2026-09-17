@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.jetbrains.annotations.Nullable;
+
 import com.createworkers.CreateWorkers;
 import com.createworkers.registry.CWBlockEntities;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
@@ -15,11 +17,15 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.IItemHandlerModifiable;
 import net.neoforged.neoforge.items.ItemStackHandler;
 
@@ -49,6 +55,9 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	 */
 	public static final int SLOTS = 9;
 
+	/** Ticks between syncs while the stock is moving. Twice a second, which an overlay cannot outpace. */
+	private static final int SYNC_INTERVAL = 10;
+
 	private final ItemStackHandler stock = new ItemStackHandler(SLOTS) {
 
 		@Override
@@ -59,13 +68,60 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		@Override
 		protected void onContentsChanged(int slot) {
 			setChanged();
-			// A comparator reading this block is the only thing that can see inside it, so the level
-			// has to be told the signal may have moved. setChanged alone saves the block and updates
-			// nothing.
-			if (level != null && !level.isClientSide())
-				level.updateNeighbourForOutputSignal(worldPosition, getBlockState().getBlock());
+			if (level == null || level.isClientSide())
+				return;
+			// A comparator is one of the two things that can see inside this block, so the level has to
+			// be told the signal may have moved. setChanged alone saves the block and updates nothing.
+			level.updateNeighbourForOutputSignal(worldPosition, getBlockState().getBlock());
+			// The other is a pair of goggles, and that one needs the *client* to know. See serverTick.
+			stockChanged = true;
 		}
 	};
+
+	/**
+	 * The same stock with its extraction taken away, which is what every machine sees.
+	 *
+	 * <p>Wrapped at the capability rather than filtered inside the handler because this mod's own code
+	 * still has to be able to take food out — that is what eating will be — and the rule being applied
+	 * is about who is asking, not about what is being moved.
+	 */
+	private final IItemHandler intake = new IItemHandler() {
+
+		@Override
+		public int getSlots() {
+			return stock.getSlots();
+		}
+
+		@Override
+		public ItemStack getStackInSlot(int slot) {
+			return stock.getStackInSlot(slot);
+		}
+
+		@Override
+		public ItemStack insertItem(int slot, ItemStack toInsert, boolean simulate) {
+			return stock.insertItem(slot, toInsert, simulate);
+		}
+
+		@Override
+		public ItemStack extractItem(int slot, int amount, boolean simulate) {
+			return ItemStack.EMPTY;
+		}
+
+		@Override
+		public int getSlotLimit(int slot) {
+			return stock.getSlotLimit(slot);
+		}
+
+		@Override
+		public boolean isItemValid(int slot, ItemStack stack) {
+			return stock.isItemValid(slot, stack);
+		}
+	};
+
+	/** Set when the stock moves, cleared by the one sync that follows. */
+	private boolean stockChanged;
+	/** Ticks before the next sync is allowed, so a belt filling a canteen cannot send a packet an item. */
+	private int untilSync;
 
 	public CanteenBlockEntity(BlockPos pos, BlockState state) {
 		super(CWBlockEntities.CANTEEN.get(), pos, state);
@@ -76,9 +132,27 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		return !stack.isEmpty() && stack.has(DataComponents.FOOD);
 	}
 
-	/** @return the stock as an inventory, for anything piping food in — funnel, chute, arm or worker. */
+	/** @return the stock itself. This mod's own code only; everything outside gets {@link #intake}. */
 	public IItemHandlerModifiable stock() {
 		return stock;
+	}
+
+	/**
+	 * What machines get: the stock, with no way to take anything out of it.
+	 *
+	 * <p>A funnel on the side of a Canteen was pulling the bread straight back out, which is correct
+	 * behaviour for a chest and wrong for this block. **The thing that is supposed to empty a canteen
+	 * is a villager eating**, and that is not an item transfer — so anything that *is* one is
+	 * competing with the only reason the block exists. A belt that keeps a trough empty is a trough
+	 * that never feeds anybody, and the failure would look like the machinery working.
+	 *
+	 * <p>It is the one place this block departs from the Item Vault it otherwise copies, and the
+	 * departure is about purpose rather than shape: a Vault is storage, and taking things out of
+	 * storage is what storage is for. A player who fills a Canteen with the wrong thing gets it back
+	 * by breaking the block, which drops the lot.
+	 */
+	public IItemHandler intake() {
+		return intake;
 	}
 
 	/**
@@ -178,6 +252,43 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		if (filled == 0)
 			return 0;
 		return Math.max(1, Math.round(filled / SLOTS * 14) + 1);
+	}
+
+	/**
+	 * Pushes the stock to anybody watching, on a clock.
+	 *
+	 * <p><b>Without this the goggles read "Empty" forever, however much bread is in the block.</b> A
+	 * block entity's contents are the server's; nothing sends them to a client on its own, and the
+	 * goggle overlay is drawn on the client from the client's copy — which, for a block that never
+	 * syncs, is the one it was given when the chunk loaded. A chute filling a canteen and the overlay
+	 * saying it is empty are both correct, about different worlds, and nothing in the game says so.
+	 * The Worker Station has carried the same three overrides since its screen was built; this block
+	 * simply never got them.
+	 *
+	 * <p><b>On a clock, unlike the Station's.</b> A rack changes a handful of times an hour, so it
+	 * sends on every change. A canteen under a belt changes several times a second, and the whole
+	 * inventory to every tracking client per item is a packet storm for a readout nobody can perceive
+	 * at that rate. Twice a second is well past what an overlay needs.
+	 */
+	public static void serverTick(Level level, BlockPos pos, BlockState state, CanteenBlockEntity canteen) {
+		if (canteen.untilSync > 0)
+			canteen.untilSync--;
+		if (!canteen.stockChanged || canteen.untilSync > 0)
+			return;
+		canteen.stockChanged = false;
+		canteen.untilSync = SYNC_INTERVAL;
+		level.sendBlockUpdated(pos, state, state, Block.UPDATE_CLIENTS);
+	}
+
+	@Override
+	public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+		return saveWithoutMetadata(registries);
+	}
+
+	@Nullable
+	@Override
+	public ClientboundBlockEntityDataPacket getUpdatePacket() {
+		return ClientboundBlockEntityDataPacket.create(this);
 	}
 
 	@Override

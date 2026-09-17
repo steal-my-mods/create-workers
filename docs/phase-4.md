@@ -17,6 +17,10 @@ What the build changed, so far:
   A shortcut here was that block reimplemented on one block. So the shape is an Item Vault's — funnel,
   chute, belt, hopper or hatch in; comparator for how full; breaking it for the food back — with a
   goggle overlay saying *what* is in it, which a comparator cannot.
+- **Machines can fill a canteen and cannot empty one**, which is where the Vault analogy stops. A
+  funnel on the side of one pulled the bread straight back out — right for storage, wrong for a
+  trough, because the only thing that should ever empty a canteen is a villager eating. Found by
+  playing, not by reasoning, which is the argument for getting a block into a world early.
 - **Its point of interest carries no tickets**, which the design did not anticipate needing to say. A
   ticket is a claim and eating is not a claim; see the block's own notes.
 - **It is not a worker target at all**, which reverses what this document said. The design had it as

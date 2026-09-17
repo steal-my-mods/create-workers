@@ -21,8 +21,10 @@ public class CWCapabilities {
 		// The Canteen, on every side. Filling a trough of food by funnel, chute, belt or arm is what
 		// turns feeding a crew into an ordinary automation problem, which is the entire reason the
 		// block is an inventory rather than a counter. Its own handler refuses anything that is not
-		// food, so there is nothing to gate here on top of that.
+		// food, and it hands out an insert-only view -- a funnel on the side of a canteen was pulling
+		// the bread straight back out, which is right for a chest and wrong for a trough whose whole
+		// purpose is to be eaten from. See CanteenBlockEntity.intake.
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CWBlockEntities.CANTEEN.get(),
-			(canteen, side) -> canteen.stock());
+			(canteen, side) -> canteen.intake());
 	}
 }

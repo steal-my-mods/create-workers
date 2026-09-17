@@ -1,6 +1,8 @@
 package com.createworkers.block;
 
+import org.jetbrains.annotations.Nullable;
 
+import com.createworkers.registry.CWBlockEntities;
 import com.mojang.serialization.MapCodec;
 
 import net.minecraft.core.BlockPos;
@@ -10,6 +12,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
@@ -42,8 +46,13 @@ import net.minecraft.world.level.block.state.BlockState;
  * this block got a shortcut nobody asked for; the first was being an arm interaction point.
  *
  * <p>So the ways in are a funnel, a chute, a belt, a hopper or an Item Hatch, exactly as for a Vault,
- * and the ways to read it are a comparator and a pair of Engineer's Goggles. Breaking it drops what
- * is inside, which is the only way anything comes back out short of a machine taking it.
+ * and the ways to read it are a comparator and a pair of Engineer's Goggles.
+ *
+ * <p><b>There is no way out except breaking it</b>, which is where the Vault analogy stops. A funnel
+ * on the side of a Vault pulls items back out, which is what storage is for; doing that to a trough
+ * empties the thing the crew eats from, and the only thing that should ever empty a Canteen is a
+ * villager eating. Breaking the block drops the lot, so a canteen filled with the wrong food is a
+ * mistake a player can undo.
  */
 public class CanteenBlock extends BaseEntityBlock {
 
@@ -66,6 +75,23 @@ public class CanteenBlock extends BaseEntityBlock {
 	@Override
 	public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
 		return new CanteenBlockEntity(pos, state);
+	}
+
+	/**
+	 * The tick exists only to push the stock out to clients, on a clock.
+	 *
+	 * <p>Nothing here processes anything. What it is for is that a block entity's contents never reach
+	 * a client on their own, and the goggle overlay is drawn on the client — so without it, a canteen
+	 * a chute has been filling all morning reads as empty through a pair of goggles, correctly, about
+	 * a world the player is not in.
+	 */
+	@Nullable
+	@Override
+	public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state,
+		BlockEntityType<T> type) {
+		if (level.isClientSide())
+			return null;
+		return createTickerHelper(type, CWBlockEntities.CANTEEN.get(), CanteenBlockEntity::serverTick);
 	}
 
 	/**
