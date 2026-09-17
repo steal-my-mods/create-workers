@@ -78,20 +78,63 @@ Vanilla, exactly, from `Schedule.VILLAGER_DEFAULT`:
 to 8000, and why an earlier default of 12000 had two crews on at once. Work is fixed at 8000; leisure
 and rest divide the remaining 16000.
 
-**Proposed: 8000 work / 4000 leisure / 12000 rest.**
+**Proposed: 8000 work / 600 muster / 5000 leisure / 10400 rest.**
 
-That keeps vanilla's night *exactly* — 12000 against its 12010 — which matters because `SleepInBed`,
-`WakeUp` and the bed machinery are all tuned around a full night, and because sleep is the part a
-player recognises. Work absorbs the coverage requirement (7000 → 8000) and leisure absorbs the
-remainder (4990 → 4000). The shape is vanilla's; only the proportions shift, and only as far as
-coverage forces.
+**Leisure is kept at vanilla's length and the extra comes out of sleep**, which is both how a real
+shift worker's day differs from a nine-to-five and — checked below — free.
 
-For the day crew that is: **work 0–8000, leisure 8000–12000, sleep 12000–24000.** The other two crews
-are the same thing offset by 8000 and 16000.
+| | vanilla | worker | why |
+|---|---|---|---|
+| work | 7000 | **8000** | forced: three crews of 8000 cover the day |
+| leisure | 4990 | **5000** | kept, near enough exactly |
+| muster | — | **600** | new; see below |
+| rest | 12010 | **10400** | the remainder |
 
-There is no morning idle before the shift, where vanilla has ~1990 ticks of it. A shift worker clocks
-on when its shift starts; waking up an hour early to mill about is a thing a villager does and a thing
-an employee does not.
+For the day crew: **muster 23400–24000, work 0–8000, leisure 8000–13000, sleep 13000–23400.** The
+other two crews are the same thing offset by 8000 and 16000.
+
+### Nothing punishes a short night
+
+Checked rather than assumed, because trimming sleep is only free if nothing depends on its length. The
+one sleep-dependent mechanic on `Villager` is iron-golem spawning:
+
+```java
+private boolean golemSpawnConditionsMet(long gameTime) {
+    Optional<Long> lastSlept = brain.getMemory(MemoryModuleType.LAST_SLEPT);
+    return lastSlept.isPresent() && (gameTime - lastSlept.get()) < 24000L;
+}
+```
+
+It asks whether the villager slept *at some point in the last day*, not for how long — `LAST_SLEPT` is
+stamped when sleep begins. A single tick satisfies it. There is no well-rested mechanic for villagers,
+nothing scales with sleep duration, and restocking is tied to working rather than resting.
+
+So 10400 costs nothing. What it does mean is that a crew with **no bed** never stamps `LAST_SLEPT` and
+so never contributes to a golem — which is already true today and is a reason to give a crew beds
+beyond the obvious one.
+
+### Muster: the commute belongs off the clock
+
+Three crews of exactly 8000 look seamless and are not. At a changeover the outgoing crew stops and the
+incoming crew is **in bed** — up to `bedSearchRadius` (16) away, further if the hat designates one —
+so there is a walk of a few hundred ticks before anything is hauled. Coverage was already imperfect;
+the 8000 constraint was buying a seamlessness the commute took straight back.
+
+The fix is not to relax coverage but to move the commute off the clock, which is exactly what vanilla's
+pre-work window is for. **Muster** is a short window before the shift in which the worker is awake and
+the goal walks it to its post without hauling. The incoming crew arrives while the outgoing crew is
+still working — a handover — and starts the moment the other stops.
+
+It keeps the invariant that no two crews ever *work* at once, which `theShippedCrewsDoNotOverlap`
+pins, and it reuses machinery that exists: walking a worker to its job site is what `walkHome` already
+does.
+
+**Vanilla's own pre-work window is 1990 ticks, not 10.** Its schedule starts `10 → IDLE`, and the 10 is
+where that window begins rather than how long it lasts; `Timeline.getValueAt` wraps to the final
+keyframe before the first, so ticks 0–9 fall back to `REST`. The 10 buys nothing we want and copying it
+would leave a crew whose `clockOn` is 0 asleep for the first ten ticks of its own shift. The useful
+half of that window is the idea, and muster is it — shorter, because a worker walking to a post it can
+see does not need two thousand ticks.
 
 ### A consequence worth knowing: crews never share leisure
 
@@ -175,6 +218,19 @@ tedium Create wants you to automate past. What a labourer has to sell is the pro
 Mechanically it is one event — `VillagerTrades.TRADES` is a plain mutable map keyed by profession, and
 NeoForge's `VillagerTradesEvent` is the supported way in.
 
+### A worker would never restock, and that is ours to fix
+
+`WorkAtPoi` is what calls `shouldRestock()` and `restock()`, and it requires a `JOB_SITE` memory. **A
+worker has none** — that is what `YieldJobSite` and `PoiCompetitorScan` forced, and it is why the
+station recruits rather than advertising. So a worker given trades would sell out once and stay sold
+out for the rest of the world's life, which would read as a bug the first time a player traded with
+one.
+
+**Restock on clocking on.** It is the villager equivalent of the shop opening, it needs no new clock,
+and it inherits vanilla's own limits for free: `shouldRestock()` is public and already enforces the
+twice-a-day cap through `numberOfRestocksToday` and `lastRestockCheckDayTime`. One guarded call at the
+start of a shift, and a worker's trades behave like any other villager's.
+
 **Trades want to ship with leisure, not after it.** `ShowTradesToPlayer` and `GiveGiftToHero` only
 ever fire while idling, so before leisure exists a worker's trades would be unreachable. Leisure is
 what makes them visible; trades are what make leisure legible to a player walking past.
@@ -208,12 +264,18 @@ children turns out to be a nuisance in play, that is the point to add a switch, 
    obvious place to spend a stress connection if the station never gets one.
 4. **Is leisure configurable?** `workingHours` already turns the whole clock off. A separate
    `leisureLength` of 0 would mean straight from work to bed, which is the current behaviour and a
-   reasonable thing for a server to want.
+   reasonable thing for a server to want. Muster wants the same treatment and a different default.
+5. **How long is muster really?** 600 ticks is sized for a bed within `bedSearchRadius` at
+   `walkSpeed` 0.6, with room for pathing. It wants measuring against a real commute rather than
+   guessing, and it is the one number here that a player would notice being wrong — too short and the
+   crew is still walking when the shift starts, which is the stall it exists to remove.
 
 ## Ordering
 
-1. **The leisure window**, alone. It is the smallest piece, it is independently visible (workers
-   socialise where they previously stood still), and everything else needs it.
+1. **The leisure window and muster**, together — they are the same change to the same method, one
+   releasing the pin and one holding it, and muster is what keeps the shift boundary honest once
+   leisure exists. Independently visible: workers socialise where they previously stood still, and a
+   crew is at its post when its shift starts instead of setting off then.
 2. **The canteen block** — inventory, point of interest, arm interaction point. Useful before food
    exists, because it is a place to put bread.
 3. **Food** — the drain, the hungry slowdown, the signal and the screen readout. Only fair once 1 and
