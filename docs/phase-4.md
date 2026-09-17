@@ -78,20 +78,39 @@ Vanilla, exactly, from `Schedule.VILLAGER_DEFAULT`:
 to 8000, and why an earlier default of 12000 had two crews on at once. Work is fixed at 8000; leisure
 and rest divide the remaining 16000.
 
-**Proposed: 8000 work / 600 muster / 5000 leisure / 10400 rest.**
+**The awake-and-not-working budget is vanilla's 4990, exactly, and the night pays for the longer
+shift.** That is how a real shift worker's day differs from a nine-to-five, and — checked below — it
+is free.
 
-**Leisure is kept at vanilla's length and the extra comes out of sleep**, which is both how a real
-shift worker's day differs from a nine-to-five and — checked below — free.
+Vanilla's 4990 is 1990 before work plus 3000 after it. Muster replaces the *before* half, so the
+budget to match is `muster + leisure`, not leisure on its own.
 
 | | vanilla | worker | why |
 |---|---|---|---|
 | work | 7000 | **8000** | forced: three crews of 8000 cover the day |
-| leisure | 4990 | **5000** | kept, near enough exactly |
-| muster | — | **600** | new; see below |
-| rest | 12010 | **10400** | the remainder |
+| before work | 1990 | **590** (muster) | a worker walking to a post it can see needs less |
+| after work | 3000 | **4390** (leisure) | the remainder of the 4990 |
+| rest | 12010 | **11020** | pays for the extra 1000 of work |
 
-For the day crew: **muster 23400–24000, work 0–8000, leisure 8000–13000, sleep 13000–23400.** The
-other two crews are the same thing offset by 8000 and 16000.
+For the day crew, as keyframes rather than durations:
+
+```
+restAt    12390 → REST     11020   sleep, including the lie-in below
+musterAt  23410 → IDLE       590   awake; goal walks it to its post, no hauling
+clockOn       0              8000   work
+clockOff   8000              4390   leisure; goal stops pinning
+```
+
+The other two crews are the same thing offset by 8000 and 16000. Only `restAt` and `musterAt` are
+keyframes — all three awake phases are `IDLE`, and the goal tells them apart by the clock, which is
+what it already does for `clockOn` and `clockOff`.
+
+**Vanilla's ten ticks are kept.** Its schedule's first keyframe sits at 10 rather than 0, so a villager
+lies in for ten ticks past the nominal end of its night; ours puts the same offset on `musterAt`. It
+buys nothing measurable and it costs nothing, and matching the shape of a vanilla profession is a goal
+in its own right — a reason does not have to be visible for the idiom to be worth keeping. (An earlier
+draft of this document argued for dropping them on the grounds that no function could be found, which
+is a bias dressed as an argument: "I cannot see why" is a fact about the search, not about the code.)
 
 ### Nothing punishes a short night
 
@@ -129,12 +148,11 @@ It keeps the invariant that no two crews ever *work* at once, which `theShippedC
 pins, and it reuses machinery that exists: walking a worker to its job site is what `walkHome` already
 does.
 
-**Vanilla's own pre-work window is 1990 ticks, not 10.** Its schedule starts `10 → IDLE`, and the 10 is
-where that window begins rather than how long it lasts; `Timeline.getValueAt` wraps to the final
-keyframe before the first, so ticks 0–9 fall back to `REST`. The 10 buys nothing we want and copying it
-would leave a crew whose `clockOn` is 0 asleep for the first ten ticks of its own shift. The useful
-half of that window is the idea, and muster is it — shorter, because a worker walking to a post it can
-see does not need two thousand ticks.
+**Vanilla's pre-work window is 1990 ticks; the 10 is where it starts, not how long it lasts.**
+`Timeline.getValueAt` wraps to the final keyframe before the first, so vanilla's ticks 0–9 fall back to
+`REST` — a ten-tick lie-in, not a ten-tick idle. Muster is the useful half of that window and is
+shorter than 1990, because a worker walking to a post it can see does not need two thousand ticks to
+get there.
 
 ### A consequence worth knowing: crews never share leisure
 
@@ -265,7 +283,7 @@ children turns out to be a nuisance in play, that is the point to add a switch, 
 4. **Is leisure configurable?** `workingHours` already turns the whole clock off. A separate
    `leisureLength` of 0 would mean straight from work to bed, which is the current behaviour and a
    reasonable thing for a server to want. Muster wants the same treatment and a different default.
-5. **How long is muster really?** 600 ticks is sized for a bed within `bedSearchRadius` at
+5. **How long is muster really?** 590 ticks is sized for a bed within `bedSearchRadius` at
    `walkSpeed` 0.6, with room for pathing. It wants measuring against a real commute rather than
    guessing, and it is the one number here that a player would notice being wrong — too short and the
    crew is still walking when the shift starts, which is the stall it exists to remove.
