@@ -2,6 +2,7 @@ package com.createworkers.net;
 
 import com.createworkers.CreateWorkers;
 import com.createworkers.registry.CWComponents;
+import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -18,7 +19,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  * synchronised on their own, and vanilla entities have no spare synched data slots to borrow,
  * so the render state travels in its own packet.
  */
-public record WorkerStatePacket(int entityId, ItemStack hat, ItemStack held) implements CustomPacketPayload {
+public record WorkerStatePacket(int entityId, ItemStack hat, ItemStack held, Shift shift)
+	implements CustomPacketPayload {
 
 	public static final Type<WorkerStatePacket> TYPE = new Type<>(CreateWorkers.asResource("worker_state"));
 
@@ -27,6 +29,10 @@ public record WorkerStatePacket(int entityId, ItemStack hat, ItemStack held) imp
 			ByteBufCodecs.VAR_INT, WorkerStatePacket::entityId,
 			ItemStack.OPTIONAL_STREAM_CODEC, WorkerStatePacket::hat,
 			ItemStack.OPTIONAL_STREAM_CODEC, WorkerStatePacket::held,
+			// One byte for the crew, which is what the vest's colour is read off. It rides along here
+			// rather than on the hat because a worker's crew is the worker's, not the job's -- one hat
+			// can have three villagers on it.
+			ByteBufCodecs.idMapper(ordinal -> Shift.VALUES[ordinal], Shift::ordinal), WorkerStatePacket::shift,
 			WorkerStatePacket::new);
 
 	@Override
@@ -35,7 +41,8 @@ public record WorkerStatePacket(int entityId, ItemStack hat, ItemStack held) imp
 	}
 
 	public static WorkerStatePacket of(Entity entity, WorkerData data) {
-		return new WorkerStatePacket(entity.getId(), withoutProgram(data.getHat()), data.getHeld());
+		return new WorkerStatePacket(entity.getId(), withoutProgram(data.getHat()), data.getHeld(),
+			data.getShift());
 	}
 
 	/**

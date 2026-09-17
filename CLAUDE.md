@@ -17,6 +17,7 @@ python3 tools/generate_logo.py branding/icon-512.png --size 512   # ...and the 5
 python3 tools/generate_ponder_structure.py   # all three Ponder scenes' structure NBT
 python3 tools/generate_ponder_lang.py        # ...and their lang entries, read out of the storyboards
 python3 tools/generate_station_textures.py   # the Worker Station's block textures
+python3 tools/generate_gear_shifts.py        # the evening and night vests, off the day one
 python3 tools/generate_worker_profession.py  # the worker profession's clothing, both variants
 ```
 
@@ -362,6 +363,18 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   dresses every villager in a vest half a unit too small (which is exactly what the first draft
   did). The corollary is that a model carrying its bulk in a deformation rather than in its boxes is
   fitted to the boxes.
+- **A worker's crew is the colour of its vest, which means three sets of UVs rather than a tint.** A
+  multiply over an orange texture cannot produce white and would drag the reflective stripe with it,
+  so the day vest is the drawn artwork and `tools/generate_gear_shifts.py` derives the evening and
+  night ones from it — preserving each pixel's shading and moving only the colour, with the nearly-grey
+  stripe picked out and given a base of its own. All three are baked as separate parts and
+  `WorkerGearLayer` draws the one the worker's shift names; the shift rides on `WorkerStatePacket`
+  beside the cargo, so a promotion recolours without anything new being sent. **The hat is the same
+  colour on every crew**, so a worker reads as a worker first.
+  The coordinates live twice — in that script and in `VEST_REGIONS` — so the script **reads the Java
+  table back and fails if they disagree**, which both workflows run. Out of step, a worker wears
+  whatever is at those texels, and on a mostly-empty sheet that is nothing at all: an invisible vest
+  with no error anywhere to say why.
 - **The vest's declared depth is the one measurement the texture has an opinion about.** A box's UV
   footprint is a function of its size, so an arbitrary torso depth cannot be declared directly: the
   vest is declared at whichever of the sheet's two vest regions (6 deep at 0,28 and 4 at 32,28) is
@@ -446,6 +459,13 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   than as safety gear, and the vest is the thing a worker should be recognised by. Per-shift colour, if
   it is ever wanted, belongs on the vest geometry. The generator still writes both sheets because a
   profession with no texture renders as missing texture, per renderer.
+- **A name a player put on a villager is never overwritten.** A hat's `CUSTOM_NAME` goes onto its
+  wearer — which is the cheap answer to *which villager is it?*, the question every diagnostic here
+  runs into — but a villager may well have been named before it was ever hired. `WorkerData`
+  remembers whether the name it is wearing is the job's, so a station only ever replaces its own
+  handiwork and only ever clears a name it gave. It is not made permanently visible either: vanilla's
+  rules show a name when you are near and looking at it, and a dozen workers with a dozen floating
+  labels is a factory nobody can see.
 - **A profession needs a clothing overlay for every renderer that looks one up.** Vanilla ships a
   full set under both `villager/profession/` and `zombie_villager/profession/`, so a modded
   profession that ships only the first renders as missing texture the moment a worker is bitten — a

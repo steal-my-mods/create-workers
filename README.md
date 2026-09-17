@@ -66,6 +66,10 @@ fallen somewhere it cannot climb out of — the station gives the job away after
 hires a replacement, so a line never quietly runs short over one lost villager. A factory built on
 stations repairs its own workforce.
 
+Workers wear their crew's colour: **orange** on days, **yellow** on evenings, **white** at night. The
+hard hat is the same on all three, so a worker still reads as a worker. Name a job in the station and
+its workers wear that name too, which is how you find the one standing in a hole.
+
 Right-click the station to open the rack. Each job shows its hat, three shift toggles —
 sunken for off, yellow for wanted, green for covered — and arrows to move it up or down the order.
 Underneath is the count for each crew. **Click a job's name to rename it**, no anvil and no experience:

@@ -1,6 +1,7 @@
 package com.createworkers.client.ponder;
 
 import com.createworkers.registry.CWItems;
+import com.createworkers.worker.Shift;
 import com.createworkers.worker.Workers;
 import com.simibubi.create.content.logistics.depot.DepotBehaviour;
 import com.simibubi.create.content.logistics.depot.DepotBlockEntity;
@@ -265,6 +266,6 @@ public class WorkingHoursScene {
 		ItemStack held) {
 		scene.world()
 			.modifyEntity(worker, entity -> Workers.getOrCreate(entity)
-				.applyClientState(hat.copy(), held.copy()));
+				.applyClientState(hat.copy(), held.copy(), Shift.DAY));
 	}
 }

@@ -2,6 +2,7 @@ package com.createworkers.client;
 
 import com.createworkers.CreateWorkers;
 import com.createworkers.client.model.WorkerGearModels;
+import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.Workers;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -23,7 +24,8 @@ public class WorkerGearLayer<T extends LivingEntity, M extends EntityModel<T>> e
 	private static final ResourceLocation TEXTURE = CreateWorkers.asResource("textures/entity/worker_gear.png");
 
 	private final ModelPart hat;
-	private final ModelPart vest;
+	/** One per crew, baked together and drawn one at a time. */
+	private final ModelPart[] vests;
 
 	/**
 	 * @param gear a gear root already fitted to the parent's model by
@@ -33,7 +35,9 @@ public class WorkerGearLayer<T extends LivingEntity, M extends EntityModel<T>> e
 	public WorkerGearLayer(RenderLayerParent<T, M> parent, ModelPart gear) {
 		super(parent);
 		this.hat = gear.getChild(WorkerGearModels.HAT);
-		this.vest = gear.getChild(WorkerGearModels.VEST);
+		this.vests = new ModelPart[Shift.VALUES.length];
+		for (Shift shift : Shift.VALUES)
+			this.vests[shift.ordinal()] = gear.getChild(WorkerGearModels.vest(shift));
 	}
 
 	@Override
@@ -63,7 +67,11 @@ public class WorkerGearLayer<T extends LivingEntity, M extends EntityModel<T>> e
 		if (body != null) {
 			poseStack.pushPose();
 			body.translateAndRotate(poseStack);
-			vest.render(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY);
+			// The crew's own vest. A worker's shift is on its WorkerData, which WorkerStatePacket
+			// already keeps on the client for the cargo -- so the colour follows a promotion without
+			// anything new being sent.
+			vests[data.getShift()
+				.ordinal()].render(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY);
 			poseStack.popPose();
 		}
 	}

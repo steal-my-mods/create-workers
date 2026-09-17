@@ -15,6 +15,8 @@ import com.createworkers.worker.target.WorkerTarget;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -134,11 +136,46 @@ public class Workers {
 			data.rememberStation(station);
 
 		protectFromReset(mob);
+		wearTheName(mob, data, hat);
 		WorkerShift.applySchedule(mob, shift);
 		data.markAtWork(mob.level()
 			.getGameTime());
 		updateCargoAppearance(mob, data.getHeld());
 		WorkerStatePacket.sync(mob, data);
+	}
+
+	/**
+	 * Puts the hat's name on its wearer, so a worker can be found again.
+	 *
+	 * <p>Every diagnostic in this mod runs into the same question — <i>which villager is it?</i> — and
+	 * this is the cheap answer: name a job "Smelting feed" in the station screen and that is what
+	 * floats over the villager standing in a hole. Nothing new is stored on the hat; it is the same
+	 * {@code CUSTOM_NAME} an anvil would have set.
+	 *
+	 * <p><b>A name the player put there is never touched.</b> A villager may well have been named
+	 * before it was ever hired, and a station that overwrote that would be taking something away and
+	 * then, on retirement, clearing a name it never gave. So the worker remembers whether the name it
+	 * is wearing is the job's, and only ever replaces its own handiwork.
+	 *
+	 * <p>Not made permanently visible either: this follows vanilla's rules, which show a name when you
+	 * are near and looking at it. A dozen workers with a dozen labels floating over them is a factory
+	 * nobody can see.
+	 */
+	private static void wearTheName(Mob mob, WorkerData data, ItemStack hat) {
+		if (mob.hasCustomName() && !data.isNamedByStation())
+			return;
+
+		Component name = hat.get(DataComponents.CUSTOM_NAME);
+		mob.setCustomName(name);
+		data.setNamedByStation(name != null);
+	}
+
+	/** Takes back a name this mod gave, and leaves alone one it did not. */
+	private static void dropTheName(Mob mob, WorkerData data) {
+		if (!data.isNamedByStation())
+			return;
+		mob.setCustomName(null);
+		data.setNamedByStation(false);
 	}
 
 	/**
@@ -183,6 +220,7 @@ public class Workers {
 
 		wake(mob);
 		allowReset(mob);
+		dropTheName(mob, data);
 		// Tell the station before the worker forgets which one it was. Whatever ends a job -- a death,
 		// a conversion, a hat coming out -- comes through here, and a station that is loaded should not
 		// have to notice on its own clock.

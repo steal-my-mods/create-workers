@@ -20,6 +20,6 @@ public class ClientWorkerState {
 		if (entity == null)
 			return;
 		WorkerData data = Workers.getOrCreate(entity);
-		data.applyClientState(packet.hat(), packet.held());
+		data.applyClientState(packet.hat(), packet.held(), packet.shift());
 	}
 }

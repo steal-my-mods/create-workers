@@ -65,6 +65,15 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	 * crew's hours and never consults them, having no schedule at all.
 	 */
 	private Shift shift = Shift.DAY;
+	/**
+	 * Whether the name this worker is wearing came off its hat.
+	 *
+	 * <p>The one thing that has to be remembered about a name, because a villager may already have
+	 * had one. Without it a worker cannot tell a label it was given by a station from a name a player
+	 * put on it with an anvil, and retiring would either strip the player's name or leave the job's
+	 * behind on an ordinary villager.
+	 */
+	private boolean namedByStation;
 	private int targetIndex = -1;
 	private int lastInputIndex = -1;
 	private int lastOutputIndex = -1;
@@ -195,6 +204,15 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		this.shift = shift;
 	}
 
+	/** @return whether the worker's custom name is the one its hat gave it. */
+	public boolean isNamedByStation() {
+		return namedByStation;
+	}
+
+	public void setNamedByStation(boolean named) {
+		this.namedByStation = named;
+	}
+
 	/** @return whether this worker is finishing up before its station moves it or lets it go. */
 	public boolean isServingNotice() {
 		return noticeUntil != 0L;
@@ -252,6 +270,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		station = null;
 		shift = Shift.DAY;
 		noticeUntil = 0L;
+		namedByStation = false;
 		releasePoints();
 		return drops;
 	}
@@ -260,9 +279,10 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	 * Applies the render state pushed from the server. Only the visible parts travel, so this
 	 * must never touch the program or the transfer bookkeeping.
 	 */
-	public void applyClientState(ItemStack hat, ItemStack held) {
+	public void applyClientState(ItemStack hat, ItemStack held, Shift shift) {
 		this.hat = hat;
 		this.held = held;
+		this.shift = shift;
 	}
 
 	// --- point resolution ------------------------------------------------------------------
@@ -729,6 +749,8 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		tag.putInt("LastOutput", lastOutputIndex);
 		tag.putInt("Cooldown", cooldown);
 		tag.putString("Shift", shift.getSerializedName());
+		if (namedByStation)
+			tag.putBoolean("NamedByStation", true);
 		if (station != null)
 			GlobalPos.CODEC.encodeStart(NbtOps.INSTANCE, station)
 				.resultOrPartial(CreateWorkers.LOGGER::error)
@@ -748,6 +770,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		lastOutputIndex = tag.getInt("LastOutput");
 		cooldown = tag.getInt("Cooldown");
 		shift = Shift.byName(tag.getString("Shift"), Shift.DAY);
+		namedByStation = tag.getBoolean("NamedByStation");
 		station = null;
 		if (tag.contains("Station"))
 			GlobalPos.CODEC.parse(NbtOps.INSTANCE, tag.get("Station"))

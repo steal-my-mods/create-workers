@@ -32,6 +32,7 @@ import com.simibubi.create.AllBlocks;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -887,6 +888,74 @@ public class WorkerStationGameTests {
 			.state()
 			.getValue(WorkerStationBlock.HAS_JOB), "and it should start with no job in it");
 		helper.succeed();
+	}
+
+
+	/**
+	 * A named hat names its wearer, and gives the name back when the job ends.
+	 *
+	 * <p>Which villager is it? — the question every diagnostic in this mod runs into. Naming a job in
+	 * the station screen and having that name float over the villager standing in a hole is the whole
+	 * answer, and it costs one component copy.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void aNamedHatNamesItsWearer(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		station(helper).renameJob(0, "Smelting feed");
+
+		claimant(helper);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1, "somebody is hired"))
+			.thenExecute(() -> {
+				Villager worker = (Villager) helper.getLevel()
+					.getEntity(station(helper).jobAt(0)
+						.worker(Shift.DAY));
+				helper.assertTrue(worker.hasCustomName(), "a worker on a named job should wear that name");
+				helper.assertTrue("Smelting feed".equals(worker.getCustomName()
+					.getString()), "and it should be the job's name, not " + worker.getCustomName());
+				// Vanilla's own rules: shown when you are near and looking at it. A dozen workers with a
+				// dozen permanent labels is a factory nobody can see.
+				helper.assertTrue(!worker.isCustomNameVisible(),
+					"but not floating over it permanently");
+
+				station(helper).removeHat(0);
+				helper.assertTrue(!worker.hasCustomName(),
+					"and the name should go back when the job does");
+			})
+			.thenSucceed();
+	}
+
+	/**
+	 * A villager that already had a name keeps it, and keeps it through being hired and let go.
+	 *
+	 * <p>Somebody may well have named a villager before it ever saw a station. Overwriting that would
+	 * be taking something away — and then, on retirement, clearing a name this mod never gave.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900)
+	public static void aVillagersOwnNameSurvivesTheJob(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		station(helper).renameJob(0, "Smelting feed");
+
+		Villager villager = claimant(helper);
+		villager.setCustomName(Component.literal("Bob"));
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1, "somebody is hired"))
+			.thenExecute(() -> {
+				helper.assertTrue("Bob".equals(villager.getCustomName()
+					.getString()), "a villager's own name should survive being hired, and it is now "
+						+ villager.getCustomName());
+
+				station(helper).removeHat(0);
+				helper.assertTrue(villager.hasCustomName() && "Bob".equals(villager.getCustomName()
+					.getString()), "and survive being let go, rather than being cleared with the job's");
+			})
+			.thenSucceed();
 	}
 
 	/**

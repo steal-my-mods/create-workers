@@ -2,6 +2,7 @@ package com.createworkers.client.model;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.createworkers.worker.Shift;
 import com.mojang.blaze3d.vertex.PoseStack;
 
 import java.util.HashSet;
@@ -89,7 +90,15 @@ import net.minecraft.client.model.geom.builders.PartDefinition;
 public class WorkerGearModels {
 
 	public static final String HAT = "hat";
-	public static final String VEST = "vest";
+
+	/**
+	 * One vest per crew, because the colour is UVs rather than a tint — a multiply over an orange
+	 * texture cannot produce white, and it would take the reflective stripe with it. All three are
+	 * baked and the render layer draws whichever the worker's shift calls for.
+	 */
+	public static String vest(Shift shift) {
+		return "vest_" + shift.getSerializedName();
+	}
 
 	public static final int TEXTURE_WIDTH = 128;
 	public static final int TEXTURE_HEIGHT = 64;
@@ -113,9 +122,17 @@ public class WorkerGearModels {
 	/** The vest boxes on the sheet, each laid out for one torso depth. */
 	private record VestRegion(int depth, int u, int v) {}
 
-	private static final VestRegion[] VEST_REGIONS = {
-		new VestRegion(6, 0, 28),
-		new VestRegion(4, 32, 28),
+	/**
+	 * The vest boxes on the sheet, by crew and then by the torso depth each was laid out for.
+	 *
+	 * <p>Indexed by {@code Shift.ordinal()}, so the order here is the order of the enum. The day row
+	 * is the drawn artwork; {@code tools/generate_gear_shifts.py} derives the other two from it and
+	 * writes them into the free parts of the sheet, which is what keeps them in step.
+	 */
+	private static final VestRegion[][] VEST_REGIONS = {
+		{ new VestRegion(6, 0, 28), new VestRegion(4, 32, 28) },
+		{ new VestRegion(6, 60, 28), new VestRegion(4, 92, 28) },
+		{ new VestRegion(6, 0, 44), new VestRegion(4, 32, 44) },
 	};
 
 	/**
@@ -255,29 +272,41 @@ public class WorkerGearModels {
 		return skull.overlaid ? OVERLAY_MARGIN : 0.0F;
 	}
 
+	/**
+	 * Adds one vest per crew — same geometry, fitted the same way, differing only in where it reads
+	 * its texels from. Three parts rather than one tinted part: see {@link #vest}.
+	 */
 	private static void addVest(PartDefinition root, Surface torso) {
-		VestRegion region = nearestRegion(torso.ownHalfDepth * 2.0F);
-		float depth = region.depth();
+		int nearest = nearestRegion(torso.ownHalfDepth * 2.0F);
 		float clearance = VEST_CLEARANCE + (torso.overlaid ? OVERLAY_SCALE : 0.0F);
-		float growX = torso.ownHalfWidth + clearance - NOMINAL_HALF_WIDTH;
-		float growZ = torso.ownHalfDepth + clearance - depth / 2.0F;
 
-		float grownX = growWithoutInverting(growX, 8.0F);
-		float grownZ = growWithoutInverting(growZ, depth);
+		for (Shift shift : Shift.VALUES) {
+			VestRegion region = VEST_REGIONS[shift.ordinal()][nearest];
+			float depth = region.depth();
+			float growX = torso.ownHalfWidth + clearance - NOMINAL_HALF_WIDTH;
+			float growZ = torso.ownHalfDepth + clearance - depth / 2.0F;
 
-		root.addOrReplaceChild(VEST, CubeListBuilder.create()
-			.texOffs(region.u(), region.v())
-			.addBox(-4.0F, 0.5F, -depth / 2.0F, 8.0F, 9.0F, depth,
-				new CubeDeformation(grownX, Math.min(grownX, grownZ), grownZ)),
-			PartPose.ZERO);
+			float grownX = growWithoutInverting(growX, 8.0F);
+			float grownZ = growWithoutInverting(growZ, depth);
+
+			root.addOrReplaceChild(vest(shift), CubeListBuilder.create()
+				.texOffs(region.u(), region.v())
+				.addBox(-4.0F, 0.5F, -depth / 2.0F, 8.0F, 9.0F, depth,
+					new CubeDeformation(grownX, Math.min(grownX, grownZ), grownZ)),
+				PartPose.ZERO);
+		}
 	}
 
-	/** @return the region whose UVs were laid out for the torso nearest this depth. */
-	private static VestRegion nearestRegion(float torsoDepth) {
-		VestRegion nearest = VEST_REGIONS[0];
-		for (VestRegion region : VEST_REGIONS)
-			if (Math.abs(region.depth() - torsoDepth) < Math.abs(nearest.depth() - torsoDepth))
-				nearest = region;
+	/**
+	 * @return which of a crew's two boxes was laid out for the torso nearest this depth. The choice is
+	 *		   the same for every crew, the three rows being copies of one another.
+	 */
+	private static int nearestRegion(float torsoDepth) {
+		int nearest = 0;
+		for (int i = 0; i < VEST_REGIONS[0].length; i++)
+			if (Math.abs(VEST_REGIONS[0][i].depth() - torsoDepth)
+				< Math.abs(VEST_REGIONS[0][nearest].depth() - torsoDepth))
+				nearest = i;
 		return nearest;
 	}
 
