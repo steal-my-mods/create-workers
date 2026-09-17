@@ -1073,6 +1073,83 @@ public class WorkerGameTests {
 	}
 
 	/**
+	 * A point the client cannot read must be readable enough to keep.
+	 *
+	 * <p>The client rebuilds its working selection out of the hat every time the held stack changes,
+	 * and {@code ArmInteractionPoint.deserialize} answers null both for a block that has been broken
+	 * and for one in a chunk this side has not loaded. Treating the second as the first is a silent
+	 * deletion: walk away from half a hat's beat, click one block, and the points you were standing
+	 * away from are gone with no message and nothing to undo. The server cannot catch it, because a
+	 * shorter programme is a legal programme — it is how a target is removed at all.
+	 *
+	 * <p>So the two are told apart by reading the position straight out of the tag and asking whether
+	 * that chunk is loaded. <b>The part worth pinning is that the position read without a level is the
+	 * same one {@code deserialize} would have used</b>: get the key or the anchor wrong and
+	 * {@code peekPos} hands back somewhere else, whose chunk is loaded, and every unreadable point is
+	 * dropped again with the bug looking exactly like the fix. {@code HatSelectionHandler} itself is a
+	 * client class and cannot run here; these are the two common pieces it is built out of.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void aPointTheClientCannotReadStaysOnTheHat(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		ServerLevel level = helper.getLevel();
+
+		WorkerTarget here = target(helper, SOURCE);
+		// Put on TAKE before anything is serialized, and that is not fussiness. DEPOSIT is the first
+		// constant of Create's Mode, so a tag with no Mode in it reads back as DEPOSIT — which is also
+		// what a fresh point is. A point left on DEPOSIT therefore cannot tell a mode that was carried
+		// through from one that was lost and defaulted back, and the last assertion below passed with
+		// the mode stripped out of the kept tag until this line was here.
+		here.cycleMode();
+		helper.assertTrue(here.getMode() == Mode.TAKE,
+			"the test needs a point on the mode that is not the fallback, and cycling left it on "
+				+ here.getMode());
+
+		helper.assertTrue(helper.absolutePos(SOURCE)
+			.equals(WorkerTarget.peekPos(here.serialize())),
+			"a position read without a level should be the one the point was made at, and was "
+				+ WorkerTarget.peekPos(here.serialize()));
+
+		// The same point, filed a long way out -- which is what a target in a chunk the client has not
+		// loaded looks like from here.
+		CompoundTag away = here.serialize();
+		BlockPos far = helper.absolutePos(SOURCE)
+			.offset(6000, 0, 6000);
+		away.put("Pos", NbtUtils.writeBlockPos(far));
+
+		helper.assertTrue(!level.isLoaded(far), "the test needs somewhere that is not loaded to aim at");
+		helper.assertTrue(WorkerTarget.deserialize(away, level) == null,
+			"precondition: a point in an unloaded chunk does not resolve");
+		helper.assertTrue(far.equals(WorkerTarget.peekPos(away)),
+			"and its position must still be readable, or there is no way to tell it from a broken block");
+
+		// Rebuilt the way the client rebuilds it: the target it could resolve, plus the tag it could
+		// not. Both have to come out the other side.
+		WorkerProgram pushed = WorkerProgram.of(List.of(here), List.of(away));
+		helper.assertTrue(pushed.size() == 2,
+			"a programme rebuilt around an unreadable point should still have it, and has " + pushed.size()
+				+ " point(s)");
+		helper.assertTrue(pushed.positions()
+			.contains(far), "and it should be the same point, at the same place");
+
+		// Held is only half of it: a point out of view has to be able to come *back*, or it is a
+		// target nothing can outline, nothing can find and nothing can remove -- and a click on its
+		// block reads as a new selection while the old tag is still waiting to be pushed, which puts
+		// the same inventory on the hat twice. So a kept tag must still deserialize into the point it
+		// came from, mode and all, once its chunk is readable again.
+		CompoundTag kept = (CompoundTag) pushed.points()
+			.get(1);
+		kept.put("Pos", NbtUtils.writeBlockPos(helper.absolutePos(SOURCE)));
+		WorkerTarget back = WorkerTarget.deserialize(kept, level);
+		helper.assertTrue(back != null, "a point held while it was out of view should resolve once it is back");
+		helper.assertTrue(helper.absolutePos(SOURCE)
+			.equals(back.getPos()), "and it should be the same block");
+		helper.assertTrue(back.getMode() == here.getMode(),
+			"and keep its mode -- a held point that came back as an input would quietly reverse the job");
+		helper.succeed();
+	}
+
+	/**
 	 * A target that would not resolve is tried again — and only that one.
 	 *
 	 * <p>Resolution runs once per load, so without a retry a target whose chunk was unloaded at the

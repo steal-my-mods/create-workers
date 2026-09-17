@@ -75,6 +75,12 @@ public class WorkerJobGoal extends Goal {
 	private final Progress homeward = new Progress();
 	/** The commute to bed. */
 	private final Progress commute = new Progress();
+	/**
+	 * The walk to the post before the shift. Its own clock rather than the leash's: the leash only
+	 * ever runs for a worker that has strayed off its patch, while muster walks one that may be
+	 * standing squarely on it and simply needs to be at the work rather than at the bed.
+	 */
+	private final Progress mustering = new Progress();
 	/** Where the worker is sleeping tonight; null whenever it is on the clock. */
 	@Nullable
 	private BlockPos bed;
@@ -94,6 +100,8 @@ public class WorkerJobGoal extends Goal {
 	private int idleTicks;
 	/** Ticks left before the leash tries again, after it could not get the worker home. */
 	private int leashRest;
+	/** Ticks left standing still during muster, having arrived at the post or given up on reaching it. */
+	private int musterRest;
 	/** Ticks until a lost worker next says so. */
 	private int lostSignal;
 
@@ -287,9 +295,36 @@ public class WorkerJobGoal extends Goal {
 		bed = null;
 		commute.reset();
 		forgetRounds();
+
 		// Walked to the job site rather than held where it woke: the point is to be standing at the
 		// work when the shift starts, and the bed is not the work.
-		locomotion.returnTo(mob, data.getJobSite());
+		//
+		// **On a clock, like every other walk here.** Pinning WALK_TARGET without one is the most
+		// expensive thing this mod can do: MoveToTargetSink asks for a fresh path whenever it is not
+		// already following one, and a destination that is pinned and never arrived at is an A* over a
+		// 48-block region every few ticks, for the length of a muster window, every in-game day, out
+		// of one villager that looks like it is standing still. A bedroom walled off from the factory
+		// overnight is enough to cause it.
+		//
+		// The clock does not distinguish arriving from being walled off, and does not need to: it
+		// measures a run of ticks getting no nearer, which a worker standing at its post also
+		// produces, and holding the ground it is on is the right answer to both. What it must not do
+		// is call either one lost -- a worker that has arrived is not stuck, so this keeps its own
+		// rest rather than borrowing the leash's failure count and its distress signal.
+		BlockPos post = data.getJobSite();
+		if (musterRest > 0) {
+			musterRest--;
+			holdStation();
+			return;
+		}
+		if (mustering.stalled(mob, post, CWConfig.PATH_TIMEOUT.get())) {
+			mustering.reset();
+			musterRest = LEASH_REST_TICKS;
+			holdStation();
+			return;
+		}
+		forgetIdling();
+		locomotion.returnTo(mob, post);
 	}
 
 	/**
@@ -338,8 +373,10 @@ public class WorkerJobGoal extends Goal {
 			mob.stopSleeping();
 		bed = null;
 		commute.reset();
+		mustering.reset();
 		bedWait = 0;
 		knockOffTicks = 0;
+		musterRest = 0;
 	}
 
 	/**

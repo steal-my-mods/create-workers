@@ -514,6 +514,54 @@ public class WorkerStationGameTests {
 			.thenSucceed();
 	}
 
+	/**
+	 * A job it cannot staff is <b>skipped</b>, not a full stop.
+	 *
+	 * <p>The rack is a priority order, so the first thing a Station looks at is the job at the top —
+	 * and the first version of both rules simply returned there. A blank hat or work out of range in
+	 * slot 0 therefore stopped hiring for the whole rack, permanently and silently, which from the
+	 * outside is a block that has stopped working rather than a row that needs attention. Both are
+	 * ordinary things to do in passing: racking a hat before programming it, or moving a job's blocks
+	 * somewhere else afterwards.
+	 *
+	 * <p>Two jobs, the unreachable one above the good one, and the good one still gets its villager.
+	 */
+	@GameTest(template = "work_site", batch = "station_range", timeoutTicks = 400)
+	public static void aJobItCannotStaffIsPassedOverRatherThanStoppingTheRack(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+
+		// Slot 0: one target off in a corner, so the job's centre is measurably away from the block and
+		// the shrunken range refuses it. Slot 1: the ordinary programme, whose two depots sit
+		// symmetrically about the station, so its centre lands on the block and no range excludes it.
+		ItemStack stranded = new ItemStack(CWItems.HARD_HAT.get());
+		HardHatItem.setProgram(stranded, WorkerProgram.of(List.of(target(helper, SOURCE))));
+		station(helper).putHat(0, stranded);
+
+		ItemStack good = new ItemStack(CWItems.HARD_HAT.get());
+		HardHatItem.setProgram(good, programme(helper));
+		station(helper).putHat(1, good);
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+
+		helper.startSequence()
+			.thenExecute(() -> {
+				helper.assertTrue(!station(helper).workIsInRange(0),
+					"precondition: the job at the top of the rack should read as out of range");
+				helper.assertTrue(station(helper).workIsInRange(1),
+					"precondition: and the one below it should not");
+			})
+			.thenWaitUntil(() -> helper.assertTrue(villager.getUUID()
+				.equals(station(helper).jobAt(1)
+					.worker(Shift.DAY)),
+				"the job below an unstaffable one should still be hired for"))
+			// Named, not merely counted: the villager must be on the job that can be done, and the
+			// stranded one must still be empty rather than having been filled and abandoned.
+			.thenExecute(() -> helper.assertTrue(station(helper).jobAt(0)
+				.worker(Shift.DAY) == null, "and nobody should have been put on the job that is too far"))
+			.thenSucceed();
+	}
+
 	// --- helpers ---
 
 	/**
@@ -808,6 +856,21 @@ public class WorkerStationGameTests {
 		// A window taller than this does not fit a 1080p screen at the GUI scale most players use.
 		helper.assertTrue(WorkerStationMenu.PANEL_HEIGHT <= 256,
 			"the panel should fit a screen, and it is " + WorkerStationMenu.PANEL_HEIGHT + " tall");
+
+		// The two lines under the rack are the only things on this panel that are neither a slot nor a
+		// well, so they are the only things a slot-by-slot check cannot see -- and the warning line
+		// shipped four pixels inside the top row of the player's inventory. Both must clear it.
+		helper.assertTrue(WorkerStationMenu.READOUT_Y
+			+ WorkerStationMenu.LINE_HEIGHT <= WorkerStationMenu.WARNING_Y,
+			"the staffing readout and the warning under it should not be on the same line");
+		helper.assertTrue(WorkerStationMenu.WARNING_Y
+			+ WorkerStationMenu.LINE_HEIGHT <= WorkerStationMenu.INVENTORY_Y,
+			"the warning line runs into the player's inventory: it ends at "
+				+ (WorkerStationMenu.WARNING_Y + WorkerStationMenu.LINE_HEIGHT) + " and the inventory starts at "
+				+ WorkerStationMenu.INVENTORY_Y);
+		// And the rack itself has to clear them both, or a readout is drawn over the bottom row of jobs.
+		helper.assertTrue(WorkerStationMenu.rowY(WorkerStationMenu.ROWS_PER_COLUMN - 1)
+			+ 18 <= WorkerStationMenu.READOUT_Y, "the last row of jobs runs into the staffing readout");
 
 		Set<Long> taken = new java.util.HashSet<>();
 		for (Slot slot : menu.slots) {

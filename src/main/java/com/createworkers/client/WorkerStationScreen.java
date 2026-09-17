@@ -184,8 +184,6 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 		if (station == null)
 			return;
 
-		int readoutY = y + WorkerStationMenu.FIRST_ROW_Y
-			+ WorkerStationMenu.ROWS_PER_COLUMN * WorkerStationMenu.ROW_HEIGHT + 4;
 		StringBuilder line = new StringBuilder();
 		for (Shift shift : Shift.VALUES) {
 			if (line.length() > 0)
@@ -197,15 +195,18 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 				.append('/')
 				.append(station.positions(shift));
 		}
-		graphics.drawString(font, line.toString(), x + WorkerStationMenu.FIRST_COLUMN_X, readoutY, LABEL, false);
+		graphics.drawString(font, line.toString(), x + WorkerStationMenu.FIRST_COLUMN_X,
+			y + WorkerStationMenu.READOUT_Y, LABEL, false);
 
 		int stranded = 0;
 		for (int i = 0; i < WorkerStationBlockEntity.MAX_SLOTS; i++)
 			if (station.jobAt(i) != null && !station.workIsInRange(i))
 				stranded++;
 		if (stranded > 0)
-			graphics.drawString(font, Component.translatable("createworkers.station.out_of_range", stranded),
-				x + WorkerStationMenu.FIRST_COLUMN_X, readoutY + 10, UNREACHABLE, false);
+			graphics.drawString(font,
+				Component.translatable(stranded == 1 ? "createworkers.station.out_of_range.one"
+					: "createworkers.station.out_of_range", stranded),
+				x + WorkerStationMenu.FIRST_COLUMN_X, y + WorkerStationMenu.WARNING_Y, UNREACHABLE, false);
 	}
 
 	private void renderInventoryWells(GuiGraphics graphics, int x, int y) {
@@ -264,14 +265,29 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 		setFocused(nameBox);
 	}
 
+	/**
+	 * Puts the name box away, and hands the screen's own focus back with it.
+	 *
+	 * <p>The last line is the one that matters and the one that was missing. Create's
+	 * {@code AbstractSimiContainerScreen.keyPressed} sends any key but escape to {@code getFocused()}
+	 * when that is an {@code EditBox}, and returns without falling through — so a screen still
+	 * pointing at a hidden name box swallows every keystroke it is given. After one rename the
+	 * inventory key stopped closing the window and the hotbar numbers stopped working, with nothing
+	 * on screen to say what was eating them.
+	 */
+	private void stopTyping() {
+		nameBox.visible = false;
+		nameBox.setFocused(false);
+		setFocused(null);
+	}
+
 	private void commitName() {
 		if (editing < 0)
 			return;
 
 		int index = editing;
 		editing = -1;
-		nameBox.visible = false;
-		nameBox.setFocused(false);
+		stopTyping();
 
 		WorkerStationBlockEntity.Slot job = jobAt(index);
 		String typed = nameBox.getValue()
@@ -295,8 +311,7 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 				// Abandoned rather than committed, and the screen stays open -- which is what escape
 				// means while something is being typed into it.
 				editing = -1;
-				nameBox.visible = false;
-				nameBox.setFocused(false);
+				stopTyping();
 				return true;
 			}
 			if (nameBox.keyPressed(key, scan, modifiers))

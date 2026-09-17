@@ -247,7 +247,12 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		this.station = null;
 		this.shift = Shift.DAY;
 		this.noticeUntil = 0L;
-		invalidatePoints();
+		// Released, not merely invalidated. A worker is employed more than once -- a station promotes
+		// an empty-handed one straight into the next job up -- and the points being dropped here own a
+		// BlockCapabilityCache apiece, watching the level through the detached arm that is their
+		// liveness token. Clearing the lists without retiring that arm leaves every one of them
+		// registered with nothing that will ever read it, up to maxTargets per promotion.
+		releasePoints();
 	}
 
 	/**

@@ -63,6 +63,14 @@ public class HatSelectionHandler {
 	private static final int BED_COLOR = 0xC77BE0;
 
 	private static final List<WorkerTarget> selection = new ArrayList<>();
+	/**
+	 * Points on the hat this side could not read, kept as stored so they survive being edited around.
+	 *
+	 * <p>Everything else here is a resolved target, because everything else here needs a block. These
+	 * have none — their chunk is not loaded — and the whole of what is done with them is handing them
+	 * back unchanged on the next push. See {@link #loadFrom}.
+	 */
+	private static final List<CompoundTag> unreadable = new ArrayList<>();
 	/** The bed the worker is to sleep in, or null to leave it to find its own. */
 	@Nullable
 	private static BlockPos selectedBed;
@@ -123,6 +131,8 @@ public class HatSelectionHandler {
 		if (player == null || player.isSpectator())
 			return;
 
+		catchUpOnUnreadable(level);
+
 		BlockPos pos = event.getPos();
 		BlockState state = level.getBlockState(pos);
 
@@ -142,8 +152,11 @@ public class HatSelectionHandler {
 			// one worker can serve -- a beat it can walk, and a list it can rescan without costing
 			// the server a fortune. Refused here rather than dropped later, so nothing is ever
 			// quietly missing from a hat.
+			// Counted with the points out of view, because they are still on the hat and the server
+			// counts them. Left out, a player away from half a beat could click past maxTargets and
+			// have the whole push refused.
 			int maxTargets = CWConfig.MAX_TARGETS.get();
-			if (selection.size() >= maxTargets) {
+			if (selection.size() + unreadable.size() >= maxTargets) {
 				player.displayClientMessage(Component.translatable("createworkers.message.too_many_targets",
 					maxTargets)
 					.withStyle(ChatFormatting.RED), true);
@@ -185,6 +198,8 @@ public class HatSelectionHandler {
 			.isClientSide())
 			return;
 
+		catchUpOnUnreadable(event.getLevel());
+
 		WorkerTarget point = find(event.getPos());
 		if (point == null)
 			return;
@@ -213,6 +228,7 @@ public class HatSelectionHandler {
 			loadFrom(held, player.level());
 		}
 
+		catchUpOnUnreadable(player.level());
 		drawOutlines();
 	}
 
@@ -220,29 +236,52 @@ public class HatSelectionHandler {
 		if (currentItem.isEmpty())
 			return;
 		selection.clear();
+		unreadable.clear();
 		selectedBed = null;
 		currentItem = ItemStack.EMPTY;
 	}
 
-	/** Rebuilds the working selection from whatever is already stored on the hat. */
+	/**
+	 * Rebuilds the working selection from whatever is already stored on the hat.
+	 *
+	 * <p><b>A point this side cannot read is held, never dropped.</b> {@code deserialize} answers null
+	 * both for a block that has been broken and for one in a chunk the client has not loaded, and
+	 * treating the second as the first is a silent deletion: walk away from half a hat's beat, have
+	 * anything at all rebuild the held stack, click one block, and the points you were standing away
+	 * from are gone off the hat with no message and nothing to undo. The server cannot catch it
+	 * either — a shorter programme is a legal programme, and refusing one would break the only way a
+	 * target is ever removed.
+	 *
+	 * <p>So the ones that did not resolve are kept as the raw tags they arrived as and pushed back out
+	 * untouched. {@code drawOutlines} has always made the same distinction for the same reason; this
+	 * is the half that was missing.
+	 */
 	private static void loadFrom(ItemStack stack, Level level) {
 		selection.clear();
+		unreadable.clear();
 		WorkerProgram program = HardHatItem.getProgram(stack);
 		selectedBed = program.bed();
 		int maxTargets = CWConfig.MAX_TARGETS.get();
 		for (Tag entry : program.points()) {
 			if (!(entry instanceof CompoundTag compound))
 				continue;
-			if (selection.size() >= maxTargets)
+			if (selection.size() + unreadable.size() >= maxTargets)
 				break; // a hat from a command, or from a config that used to allow more
 			WorkerTarget target = WorkerTarget.deserialize(compound, level);
-			if (target != null)
+			if (target != null) {
 				selection.add(target);
+				continue;
+			}
+			// Out of view rather than gone: kept exactly as stored. A point whose block really has
+			// been broken is dropped here as it always was, which is what makes a mined target leave
+			// the hat by itself.
+			if (!level.isLoaded(WorkerTarget.peekPos(compound)))
+				unreadable.add(compound.copy());
 		}
 	}
 
 	private static void pushToServer() {
-		PacketDistributor.sendToServer(new ConfigureHatPacket(WorkerProgram.of(selection)
+		PacketDistributor.sendToServer(new ConfigureHatPacket(WorkerProgram.of(selection, unreadable)
 			.withBed(selectedBed)));
 
 		Player player = Minecraft.getInstance().player;
@@ -361,9 +400,15 @@ public class HatSelectionHandler {
 	}
 
 	private static List<BlockPos> selectedPositions() {
-		List<BlockPos> positions = new ArrayList<>(selection.size());
+		List<BlockPos> positions = new ArrayList<>(selection.size() + unreadable.size());
 		for (WorkerTarget point : selection)
 			positions.add(point.getPos());
+		// The points out of view are still points the spread has to hold over -- the server measures
+		// the programme it is sent, not the part of it the player can see. Their positions are
+		// readable straight from the tag even where their blocks are not, which is the whole reason
+		// peekPos exists.
+		for (CompoundTag entry : unreadable)
+			positions.add(WorkerTarget.peekPos(entry));
 		return positions;
 	}
 
@@ -373,5 +418,37 @@ public class HatSelectionHandler {
 				.equals(pos))
 				return point;
 		return null;
+	}
+
+	/**
+	 * Takes points back out of {@link #unreadable} once their chunks are in view again.
+	 *
+	 * <p>Holding them is only half the job. A point kept as a raw tag is invisible to everything that
+	 * works in targets — it is not outlined, {@link #find} cannot see it, and a click on its block
+	 * therefore reads as a <em>new</em> selection while the old tag is still waiting to be pushed back
+	 * out, which puts the same block on the hat twice. Left-clicking it to remove it does nothing for
+	 * the same reason. So being out of view has to be a state a point leaves, not one it is stuck in
+	 * until something happens to rebuild the held stack.
+	 *
+	 * <p>A point whose chunk is back and whose block has gone is dropped, which is the same judgement
+	 * {@code drawOutlines} makes about a selection that has stopped being an inventory — and the only
+	 * place it can be made, since a block that cannot be read cannot be said to be missing.
+	 *
+	 * <p>Called from the tick and again from either click, because a click is an event and nothing
+	 * orders it against the tick handler. It costs nothing in the ordinary case: there is usually
+	 * nothing in the list at all.
+	 */
+	private static void catchUpOnUnreadable(Level level) {
+		if (unreadable.isEmpty())
+			return;
+		for (Iterator<CompoundTag> iterator = unreadable.iterator(); iterator.hasNext();) {
+			CompoundTag entry = iterator.next();
+			if (!level.isLoaded(WorkerTarget.peekPos(entry)))
+				continue;
+			iterator.remove();
+			WorkerTarget target = WorkerTarget.deserialize(entry, level);
+			if (target != null)
+				selection.add(target);
+		}
 	}
 }

@@ -427,7 +427,13 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * thing than the one it prevents.
 	 */
 	public boolean moveSlot(int from, int to) {
-		if (from < 0 || from >= MAX_SLOTS || to < 0 || to >= MAX_SLOTS || from == to)
+		// Bounded by the configured capacity, not by MAX_SLOTS. Every other way a hat gets into the
+		// rack -- putHat, addHat, isItemValid -- stops at capacity(), so bounding the arrows at the
+		// hard maximum let a player walk a job down past it into a place nothing could have put it,
+		// freeing the slot above for another hat. Repeat and stationSlots means nothing, since
+		// positions, staffed and nextVacancy all count the whole rack.
+		int limit = capacity();
+		if (from < 0 || from >= limit || to < 0 || to >= limit || from == to)
 			return false;
 		if (slots[from] == null)
 			return false;
@@ -642,21 +648,10 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	}
 
 	private void recruit(ServerLevel server) {
+		// Blank hats and work out of range are both passed over by nextVacancy rather than stopping it
+		// -- see staffable, which is the one place either rule is stated.
 		Position vacancy = nextVacancy();
 		if (vacancy == null)
-			return;
-		// Before anybody is made a Worker, not after. A villager given the profession and then turned
-		// away for an unprogrammed hat would be shielded from ResetProfession with no job to show for
-		// it, which is a villager stuck as a Worker for the rest of the world's life.
-		if (!HardHatItem.getProgram(slots[vacancy.slot()].hat)
-			.hasTargets())
-			return;
-		// And not for work that is too far from this block to walk to. Nothing bounded the two before,
-		// so a hat programmed a thousand blocks away turned a station into a villager grinder: it hires
-		// whoever is standing next to it, employs them to a job site they will never reach, the leash
-		// walks them at it until the stall clocks give up, the absentee timeout strikes them off -- and
-		// then it hires the next one and does it again, converting every villager in range in turn.
-		if (!workIsInRange(vacancy.slot()))
 			return;
 
 		AABB nearby = new AABB(worldPosition).inflate(RECRUIT_RANGE);
@@ -729,9 +724,37 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	private Position nextVacancy() {
 		for (Shift shift : Shift.VALUES)
 			for (int i = 0; i < MAX_SLOTS; i++)
-				if (slots[i] != null && slots[i].runs(shift) && slots[i].workers[shift.ordinal()] == null)
+				if (staffable(i) && slots[i].runs(shift) && slots[i].workers[shift.ordinal()] == null)
 					return new Position(i, shift);
 		return null;
+	}
+
+	/**
+	 * Whether a place on the rack is one this Station could actually put somebody into.
+	 *
+	 * <p>A blank hat has no work in it and a hat programmed past {@code stationRange} has work nobody
+	 * here could walk to, and **neither is a reason to stop hiring for the rest of the rack.** They
+	 * are both things a player does in passing — racking a hat before programming it, or moving a
+	 * job's blocks somewhere else — and the whole list going quiet because of the row at the top is
+	 * the kind of failure that looks like the block is broken. Skipped, so the jobs below it are
+	 * staffed exactly as if it were an empty place; the screen already marks the row so the one that
+	 * is being passed over is the one that says so.
+	 *
+	 * <p>Asked here rather than at the call sites because it has to hold for <em>promotion</em> as
+	 * well as for hiring, and those are the two doors into a job. Checking only at the one the
+	 * villagers come through left the other open: rack unreachable work above a staffed job and the
+	 * worker below was moved up into it, walked at a job site it could never reach until the stall
+	 * clocks gave up, struck off by the absentee timeout — and the next one promoted into the hole
+	 * behind it. The range rule exists because a Station that hires into work nobody can reach is a
+	 * villager grinder; it has to cover every way in.
+	 *
+	 * <p>It is also checked before anybody is made a Worker rather than after. A villager given the
+	 * profession and then turned away is shielded from {@code ResetProfession} with no job to show
+	 * for it, which is a villager stuck as a Worker for the rest of the world's life.
+	 */
+	private boolean staffable(int index) {
+		return slots[index] != null && HardHatItem.getProgram(slots[index].hat)
+			.hasTargets() && workIsInRange(index);
 	}
 
 	/** The last place on the roster that has somebody in it, reading the fill order backwards. */
@@ -806,10 +829,10 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		if (!(server.getEntity(id) instanceof Villager worker))
 			return false;
 
+		// Programmed and within range, both vouched for by nextVacancy -- see staffable, which covers
+		// this door into a job as well as the one recruit comes through.
 		Slot to = slots[vacancy.slot()];
 		WorkerProgram programme = HardHatItem.getProgram(to.hat);
-		if (!programme.hasTargets())
-			return false;
 
 		// A promotion is a different job, so whatever is in this worker's hands was picked up for
 		// somewhere the new job may not deliver to -- and handing it on regardless would put items

@@ -68,9 +68,24 @@ public record WorkerProgram(CompoundTag tag) {
 	public static final BlockPos ANCHOR = BlockPos.ZERO;
 
 	public static WorkerProgram of(Collection<? extends WorkerTarget> targets) {
+		return of(targets, List.of());
+	}
+
+	/**
+	 * The same, carrying through points that were never resolved into targets.
+	 *
+	 * <p>For the client, which builds a programme out of what it can see and must not lose what it
+	 * cannot. A point in a chunk that has not loaded resolves to nothing, so a hat rebuilt from only
+	 * the targets that came back is a <em>shorter</em> hat — and pushing that is a silent deletion of
+	 * the blocks the player happened to be standing away from. The tags go back out exactly as they
+	 * came in, so a point nothing could read is a point nothing has changed.
+	 */
+	public static WorkerProgram of(Collection<? extends WorkerTarget> targets, Collection<CompoundTag> kept) {
 		ListTag list = new ListTag();
 		for (WorkerTarget target : targets)
 			list.add(target.serialize());
+		for (CompoundTag entry : kept)
+			list.add(entry.copy());
 		CompoundTag tag = new CompoundTag();
 		tag.put(POINTS_KEY, list);
 		return new WorkerProgram(tag);

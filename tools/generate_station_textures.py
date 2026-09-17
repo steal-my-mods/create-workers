@@ -494,6 +494,21 @@ def check_against_model():
     assert LAMP_COLUMNS * LAMP_ROWS == slots, \
         'the board has %d lamps for %d slots in the rack' % (LAMP_COLUMNS * LAMP_ROWS, slots)
 
+    # The sign, read out of the expression rather than off the constants beside it. The defect this
+    # whole check was written for was never a constant: a standoff *subtracted* where it should have
+    # been added puts every sprite a fiftieth of a block inside an opaque cube, which is not drawn
+    # badly -- it is not drawn at all, and a full station looks exactly like an empty one with the
+    # renderer registered and running and nothing anywhere to say so. A check over the declared
+    # fields passes that happily, which is what the first draft of this did.
+    with open(RENDERER) as handle:
+        source = handle.read()
+    assert renderer['STANDOFF'] > 0, 'STANDOFF is the gap in front of the face, so it is positive'
+    stood = re.search(r'poseStack\.translate\([^;]*?0\.5F\s*([-+])\s*STANDOFF\s*\)', source)
+    assert stood, 'the lamp quad is no longer pushed out to the front face by 0.5F +/- STANDOFF'
+    assert stood.group(1) == '+', \
+        'the standoff is subtracted from the half-block face offset, which draws every lamp inside ' \
+        'the block -- the exact bug this check exists for'
+
     spots = lamp_spots()
     xs = sorted({round(x, 6) for x, _ in spots})
     ys = sorted({round(y, 6) for _, y in spots})

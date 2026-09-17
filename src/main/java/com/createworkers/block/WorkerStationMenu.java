@@ -41,10 +41,27 @@ public class WorkerStationMenu extends MenuBase<WorkerStationBlockEntity> {
 	public static final int FIRST_ROW_Y = 22;
 	public static final int ROW_HEIGHT = 20;
 
+	/**
+	 * The two lines under the rack: what every shift is carrying, and — only when there is one — a
+	 * warning about jobs this Station cannot staff.
+	 *
+	 * <p><b>They are declared here, with the slots, because a line of text that lands on top of the
+	 * player's inventory is a layout bug and layout bugs are only catchable in the menu.</b> Nothing
+	 * on a dedicated server can render a screen, so the one thing a test can read is arithmetic in a
+	 * common class — and the warning line shipped four pixels into the top row of the inventory,
+	 * because it was worked out in the screen where nothing could see it. The second line is reserved
+	 * whether or not it is drawn: it appears and disappears with the state of the rack, and a panel
+	 * that changed height would mean rebuilding the menu, since a {@code Slot}'s position is final.
+	 */
+	public static final int LINE_HEIGHT = 10;
+	public static final int READOUT_Y = FIRST_ROW_Y + ROWS_PER_COLUMN * ROW_HEIGHT + 4;
+	public static final int WARNING_Y = READOUT_Y + LINE_HEIGHT;
+
 	public static final int INVENTORY_X = 92;
-	public static final int INVENTORY_Y = 162;
+	public static final int INVENTORY_Y = WARNING_Y + LINE_HEIGHT + 2;
 	public static final int PANEL_WIDTH = SECOND_COLUMN_X + COLUMN_WIDTH + FIRST_COLUMN_X;
-	public static final int PANEL_HEIGHT = 244;
+	/** The inventory, its three rows, the gap vanilla leaves before the hotbar, and a margin. */
+	public static final int PANEL_HEIGHT = INVENTORY_Y + 58 + 18 + 6;
 
 	/** The left edge of the job at {@code index}, its well included. */
 	public static int columnX(int index) {

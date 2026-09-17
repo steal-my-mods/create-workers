@@ -217,8 +217,24 @@ public class WorkerShiftGameTests {
 	 * every batch scheduled after this one running at midnight, and the whole suite would fail behind
 	 * the one test that actually broke.
 	 */
+	/**
+	 * The hours this batch reasons about, pinned rather than inherited.
+	 *
+	 * <p>It asserts that NIGHT_TIME is the day crew's night and WORKING_HOURS_TIME is its shift, which
+	 * is true of the shipped defaults and of nothing else in particular. Left reading whatever the
+	 * running server happens to hold, it passed against a stale local {@code run-gametest/} config
+	 * carrying a {@code clockOff} from before that default was corrected while CI generated a fresh
+	 * one and ran the shipped value — the same two configurations, neither ever red, that the night
+	 * batches were pinned to end.
+	 */
+	@BeforeBatch(batch = "dawn")
+	public static void dawnHours(ServerLevel level) {
+		steadyHours(level);
+	}
+
 	@AfterBatch(batch = "dawn")
 	public static void dawnBreaksWhateverHappened(ServerLevel level) {
+		hoursBack(level);
 		level.setDayTime(WORKING_HOURS_TIME);
 	}
 

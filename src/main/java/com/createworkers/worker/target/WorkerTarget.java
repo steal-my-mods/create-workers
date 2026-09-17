@@ -7,6 +7,7 @@ import com.simibubi.create.content.kinetics.mechanicalArm.ArmBlockEntity;
 import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint;
 import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint.Mode;
 
+import net.createmod.catnip.nbt.NBTHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
@@ -60,6 +61,21 @@ public final class WorkerTarget {
 	public static Mode peekMode(CompoundTag tag) {
 		return Mode.DEPOSIT.name()
 			.equals(tag.getString("Mode")) ? Mode.DEPOSIT : Mode.TAKE;
+	}
+
+	/**
+	 * Reads the position straight out of stored NBT, the same way {@link #deserialize} does before it
+	 * touches the world.
+	 *
+	 * <p>The point of asking without a level is to tell the two reasons {@code deserialize} returns
+	 * null apart. It answers null for a block that has been broken <em>and</em> for one in a chunk
+	 * this side has not loaded, and those want opposite handling: the first is genuinely off the
+	 * programme, the second is a programme the client simply cannot see all of yet. Nothing else can
+	 * separate them, because the position is inside the very tag that would not resolve.
+	 */
+	public static BlockPos peekPos(CompoundTag tag) {
+		return NBTHelper.readBlockPos(tag, "Pos")
+			.offset(WorkerProgram.ANCHOR);
 	}
 
 	public CompoundTag serialize() {

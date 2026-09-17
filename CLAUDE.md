@@ -237,6 +237,44 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   range, not distant work** — a target has to be a real block, and the test world is shared — and note
   that the work site puts its two depots symmetrically about the station, so their centre lands exactly
   on the block and no range however small is ever exceeded by the ordinary programme.
+- **A job a Station cannot staff is skipped, never a full stop.** The rack is a priority order, so the
+  first thing the block looks at is the job at the top — and both rules that can refuse a job (a blank
+  hat, and work outside `stationRange`) originally just `return`ed there. One bad hat in slot 0
+  therefore stopped hiring for the *whole rack*, permanently and silently, and `promoteOne` had the
+  same shape, which halts `rebalance` for every position below it. Both are things a player does in
+  passing — racking a hat before programming it, moving a job's blocks somewhere else afterwards — and
+  the block going quiet because of the row at the top reads as broken rather than as needing
+  attention. `staffable(index)` is the single statement of both rules and `nextVacancy` skips past it,
+  so an unstaffable job behaves exactly like an empty place; the screen already marks the row.
+  (`aJobItCannotStaffIsPassedOverRatherThanStoppingTheRack`, mutation-checked by relaxing `staffable`,
+  which also fails `aStationWillNotStaffWorkItCannotReach`.)
+- **The client must never push a programme shorter than the one it read.** `HatSelectionHandler`
+  rebuilds its selection off the held hat every time the stack instance changes, and
+  `ArmInteractionPoint.deserialize` returns null for a block that has been **broken** *and* for one in
+  a chunk this side has **not loaded**. Dropping both is a silent deletion: walk away from part of a
+  hat's beat, click one block, and the points you were standing away from are gone with no message and
+  nothing to undo. **Nothing downstream can catch it** — a shorter programme is a legal programme, and
+  it is how a target is removed at all. So `loadFrom` keeps the tags it could not resolve and
+  `WorkerProgram.of(targets, kept)` hands them straight back out; they also count toward `maxTargets`
+  and toward the spread anchors, because the server measures the programme it is *sent*, not the part
+  the player can see. The two cases are told apart by `WorkerTarget.peekPos`, which reads the position
+  out of the tag without a level — **and that agreeing with what `deserialize` would have used is the
+  load-bearing part**, since a wrong key hands back somewhere loaded and drops every unreadable point
+  again with the bug looking exactly like the fix. `drawOutlines` has always made the same
+  distinction; this was the half that was missing.
+  **Holding a point is only half of it: being out of view has to be a state a point leaves.** A point
+  kept as a raw tag is invisible to everything that works in targets — not outlined, not found by
+  `find`, not removable by a left-click — so a click on its block reads as a *new* selection while the
+  old tag is still queued to be pushed back, and the same inventory goes onto the hat **twice**. That
+  is a defect the holding itself introduces, so `catchUpOnUnreadable` resolves kept tags as their
+  chunks come back, dropping any whose block has genuinely gone. It runs from the tick *and* from
+  either click, because a click is an event and nothing orders it against the tick handler.
+  (`aPointTheClientCannotReadStaysOnTheHat` covers the common pieces — the handler is a client class
+  and cannot run on a dedicated server — mutation-checked by misreading the key, by dropping the kept
+  tags, and by stripping their mode. **The mode assertion was cover at first**: `DEPOSIT` is the first
+  constant of Create's `Mode`, so a tag with no mode reads back as `DEPOSIT`, which is also what a
+  fresh point is — the test has to put its point on `TAKE` before anything is serialized or it cannot
+  tell a mode that survived from one that was lost and defaulted back.)
 - **Range is a property of the programme, not of a position.** `maxTargetSpread` is a *diameter*:
   every pair of a hat's targets must be within it, checked in `HatSelectionHandler` as you click and
   re-checked server-side in `ConfigureHatPacket` (never trust the client). The **job site** is
@@ -690,18 +728,19 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   worker and to the copy it wears, and still refuses to write over a name a player gave the villager
   themselves (`renamingAJobRenamesWhoeverIsDoingIt`, mutation-checked).
 - **The Station's geometry is written down in three files, and the generator is what keeps them
-  honest.** `models/block/worker_station.json` has the elements; `WorkerStationBlock` restates their
-  heights as collision; `WorkerStationRenderer` restates the board's face, height and clear span so it
-  can hang the real hats on it; and `generate_station_textures.py` restates which *rows* of a 16×16
-  sheet each element's faces sample, because a face's UVs are derived from the box that owns it and
-  nothing else decides them. Nothing in the build tied those together, and the first version of the
-  renderer shipped with the standoff subtracted where it should have been added — which hung every hat
-  a fiftieth of a block **inside** an opaque board. Not drawn badly: not drawn. A fully staffed station
-  looked exactly like an empty one, the renderer was registered and running, and there was nothing
-  anywhere to say so. `check_against_model()` in the generator now walks the chain on every build
-  (both workflows run it), and it reads the **expressions out of `hang()`**, not the constants — the
-  sign that was wrong is not a constant, so a check on the fields alone passes the bug, which is what
-  the first draft of the check did. Mutation-checked seven ways, the shipped bug among them.
+  honest.** `models/block/worker_station.json` has the element; `WorkerStationBlockEntity` has
+  `MAX_SLOTS`; `WorkerStationRenderer` restates the lamp grid — how many, how far apart, how big, and
+  how far out in front of the face they are drawn; and `generate_station_textures.py` restates all of
+  it again, because where a lamp lands on the block and where its sprite sits on the sheet are the
+  same measurement made twice. Nothing in the build tied those together, and the first version of the
+  renderer shipped with the standoff subtracted where it should have been added — which hung every
+  sprite a fiftieth of a block **inside** an opaque cube. Not drawn badly: not drawn. A fully staffed
+  station looked exactly like an empty one, the renderer was registered and running, and there was
+  nothing anywhere to say so. `check_against_model()` in the generator walks the chain on every build
+  (both workflows run it), and it reads the **sign out of the `poseStack.translate` expression**, not
+  off the constants beside it — the thing that was wrong is not a constant, so a check on the declared
+  fields alone passes the bug, which is what the first draft of the check did and what a later rewrite
+  quietly went back to. Mutation-checked, the shipped bug among them.
 - **The light a block entity renderer is handed is the light *inside* the block.**
   `BlockEntityRenderDispatcher` samples `getLightColor` at the block's own position, which is the
   right answer for something drawn within the block and the wrong one for anything hung on its
@@ -954,6 +993,14 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   fit a screen. Mutation-checked by putting the rack back in one column, which it catches as a slot
   hanging out of the bottom. Write geometry into the *menu*, never into the screen, so it stays
   reachable.
+  **That rule covers text, not only slots, and the exception is what shipped.** The staffing readout
+  and the out-of-range warning under it were worked out inside `renderBg`, where nothing could see
+  them — and the warning landed four pixels inside the top row of the player's inventory. `READOUT_Y`,
+  `WARNING_Y` and `LINE_HEIGHT` live in `WorkerStationMenu` now, `INVENTORY_Y` and `PANEL_HEIGHT` are
+  derived from them, and the layout test asserts the lines clear both the rack above and the inventory
+  below. The warning's line is reserved whether or not it is drawn: it comes and goes with the state
+  of the rack, and a panel that changed height would mean rebuilding the menu, a `Slot`'s position
+  being final.
 - **The screen reads the block entity, not a copy threaded through the menu.** `WorkerStationBlockEntity`
   overrides `getUpdateTag`/`getUpdatePacket` and sends itself whole whenever its rack changes, so shift
   toggles, who is wearing what and the staffing readout are all live — a worker hired or lost while
