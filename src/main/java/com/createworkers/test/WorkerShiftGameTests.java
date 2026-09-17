@@ -92,7 +92,12 @@ public class WorkerShiftGameTests {
 
 	/** Midday, which is what the world is put back to for whatever runs next. */
 	private static final int WORKING_HOURS_TIME = 1000;
-	private static final int NIGHT_TIME = 13000;
+	/**
+	 * Deep enough into a day crew's night to be past its leisure as well as its shift. On the shipped
+	 * hours that is anything from {@code clockOff + leisureLength} (12390) to muster, so 16000 has
+	 * room either side — 13000, which this used to be, is leisure rather than sleep.
+	 */
+	private static final int NIGHT_TIME = 16000;
 
 	/** What the batch that turns working hours off found the setting at, to put it back. */
 	private static boolean workingHoursWere = true;
@@ -109,19 +114,81 @@ public class WorkerShiftGameTests {
 	/** Three failures at a growing rest, plus the attempts between them, with room to spare. */
 	private static final int LONG_ENOUGH_TO_GIVE_UP_THRICE = 3000;
 
-	/** A night shift: on at dusk, off at dawn-ish, so its off-hours are broad daylight. */
-	private static final int NIGHT_SHIFT_ON = 12000;
-	private static final int NIGHT_SHIFT_OFF = 6000;
+	/**
+	 * A night shift: on at dusk, off in the small hours, so its off-hours are broad daylight.
+	 *
+	 * <p>Eight thousand ticks, not the eighteen thousand this used to be. A shift that long is more
+	 * than twice {@link Shift#OFFSET} — three crews on it would overlap massively, which the mod's own
+	 * coverage rule forbids — and once a crew has leisure as well as a shift there is no room left in
+	 * the day for it to sleep at all, so the test was asserting rest in a configuration that has none.
+	 * It still wraps midnight, which is the thing these assertions are actually about.
+	 */
+	private static final int NIGHT_SHIFT_ON = 18000;
+	private static final int NIGHT_SHIFT_OFF = 2000;
+	/** Inside the night shift and on the far side of midnight from its start. */
+	private static final int SMALL_HOURS = 1000;
 	/** Mid-morning: the middle of a night-shift worker's rest, and nowhere near the village's. */
 	private static final int MID_MORNING = 9000;
 
+	/**
+	 * Night, on hours this batch states rather than inherits.
+	 *
+	 * <p>These tests reason about a specific time of day being a worker's <em>night</em>, which is a
+	 * claim about the hours as much as about the clock — and the hours are a config value, so reading
+	 * them from whatever the run directory happens to hold makes the assertions mean different things
+	 * in different places. They did: {@code run-gametest/} is gitignored, so a local suite kept a
+	 * {@code clockOff} from before the default was corrected while CI generated a fresh one from the
+	 * defaults, and the two ran different configurations for weeks without either going red. Pinning
+	 * them here costs a batch and makes the tests say what they are actually testing.
+	 */
+	/**
+	 * Both of these move the clock, and tests inside one batch run side by side -- so they get one
+	 * batch each rather than sharing. Sharing is how the muster test first failed: the leisure test
+	 * beside it set the day time to just after clockOff, and the worker the muster test was waiting
+	 * to see fall asleep was abruptly off the clock instead.
+	 */
+	@BeforeBatch(batch = "leisure")
+	public static void steadyHoursForLeisure(ServerLevel level) {
+		steadyHours(level);
+	}
+
+	@AfterBatch(batch = "leisure")
+	public static void hoursBackAfterLeisure(ServerLevel level) {
+		hoursBack(level);
+	}
+
+	@BeforeBatch(batch = "muster")
+	public static void steadyHours(ServerLevel level) {
+		clockOnWas = CWConfig.CLOCK_ON.get();
+		clockOffWas = CWConfig.CLOCK_OFF.get();
+		CWConfig.CLOCK_ON.set(CWConfig.CLOCK_ON.getDefault());
+		CWConfig.CLOCK_OFF.set(CWConfig.CLOCK_OFF.getDefault());
+		// Starting in the crew's night, so a test that wants to watch it get out of bed has one to
+		// get out of. Inheriting whatever the last batch left is how this first failed: the clock
+		// stood at 1000, which is the middle of the day shift, and the worker never slept at all.
+		level.setDayTime(NIGHT_TIME);
+	}
+
+	@AfterBatch(batch = "muster")
+	public static void hoursBack(ServerLevel level) {
+		CWConfig.CLOCK_ON.set(clockOnWas);
+		CWConfig.CLOCK_OFF.set(clockOffWas);
+		level.setDayTime(WORKING_HOURS_TIME);
+	}
+
 	@BeforeBatch(batch = "night")
 	public static void nightFalls(ServerLevel level) {
+		clockOnWas = CWConfig.CLOCK_ON.get();
+		clockOffWas = CWConfig.CLOCK_OFF.get();
+		CWConfig.CLOCK_ON.set(CWConfig.CLOCK_ON.getDefault());
+		CWConfig.CLOCK_OFF.set(CWConfig.CLOCK_OFF.getDefault());
 		level.setDayTime(NIGHT_TIME);
 	}
 
 	@AfterBatch(batch = "night")
 	public static void morningComes(ServerLevel level) {
+		CWConfig.CLOCK_ON.set(clockOnWas);
+		CWConfig.CLOCK_OFF.set(clockOffWas);
 		level.setDayTime(WORKING_HOURS_TIME);
 	}
 
@@ -238,7 +305,11 @@ public class WorkerShiftGameTests {
 		Schedule dayShift = WorkerShift.workerSchedule(0, 12000);
 		helper.assertTrue(dayShift != null, "a day shift should have a schedule");
 		helper.assertTrue(dayShift.getActivityAt(6000) == Activity.IDLE, "noon is working time on a day shift");
+		// Midnight is asleep, but the boundary is no longer clockOff: leisure sits between the two, so
+		// a day crew on these hours is awake and idle until 12000 + leisureLength.
 		helper.assertTrue(dayShift.getActivityAt(18000) == Activity.REST, "midnight is not");
+		helper.assertTrue(dayShift.getActivityAt(12000 + CWConfig.LEISURE_LENGTH.get() / 2) == Activity.IDLE,
+			"and the hour after a shift is the crew's own, not the night's");
 
 		// The interesting one: on at dusk, off at dawn, so its rest is in broad daylight.
 		Schedule nightShift = WorkerShift.workerSchedule(NIGHT_SHIFT_ON, NIGHT_SHIFT_OFF);
@@ -247,8 +318,9 @@ public class WorkerShiftGameTests {
 		helper.assertTrue(nightShift.getActivityAt(MID_MORNING) == Activity.REST,
 			"a night-shift worker should be resting mid-morning, which is the whole point");
 		// Before the first keyframe the timeline wraps to the last, which is how a shift crosses
-		// midnight at all: 3000 is inside a window that opened at 12000 the previous day.
-		helper.assertTrue(nightShift.getActivityAt(3000) == Activity.IDLE, "the small hours are still the shift");
+		// midnight at all: SMALL_HOURS is inside a window that opened the previous evening.
+		helper.assertTrue(nightShift.getActivityAt(SMALL_HOURS) == Activity.IDLE,
+			"the small hours are still the shift");
 
 		helper.assertTrue(Schedule.VILLAGER_DEFAULT.getActivityAt(MID_MORNING) != Activity.REST,
 			"precondition: the village is awake mid-morning, so the two schedules really do differ");
@@ -649,6 +721,7 @@ public class WorkerShiftGameTests {
 	// --- the night itself --------------------------------------------------------------------
 
 	/** The headline: at the end of the day a worker walks to the bed on its hat and gets into it. */
+
 	@GameTest(template = "work_site", timeoutTicks = 500, batch = "night")
 	public static void workersSleepInTheBedOnTheirHat(GameTestHelper helper) {
 		prepareWorkSite(helper);
@@ -946,6 +1019,153 @@ public class WorkerShiftGameTests {
 			helper.assertTrue(!villager.isSleeping(), "nobody clocks off in a world with no working hours");
 			helper.assertTrue(hasDelivered(helper), "a worker off the clock entirely should haul at midnight");
 		});
+	}
+
+
+	/**
+	 * The day has four parts, and they add up to a day.
+	 *
+	 * <p>Pure arithmetic, so it can say what the shape is without a world to run it in. The bound that
+	 * matters is the last one: leisure and muster are configured independently of the shift, so an
+	 * operator can ask for more than the day holds, and what has to give is stated rather than
+	 * discovered — muster first, because a crew still walking when its shift starts is the stall it
+	 * exists to remove.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void theDayHasFourPartsAndTheyFillIt(GameTestHelper helper) {
+		int on = 0;
+		int off = 8000;
+		int leisure = 4390;
+		int muster = 590;
+
+		int working = 0;
+		int idling = 0;
+		int resting = 0;
+		int mustering = 0;
+		for (int t = 0; t < WorkerShift.DAY_LENGTH; t++)
+			switch (WorkerShift.stintAt(t, on, off, leisure, muster)) {
+				case WORKING -> working++;
+				case LEISURE -> idling++;
+				case RESTING -> resting++;
+				case MUSTER -> mustering++;
+			}
+
+		helper.assertTrue(working == 8000, "the shift should be 8000 ticks, was " + working);
+		helper.assertTrue(idling == leisure, "leisure should be " + leisure + ", was " + idling);
+		helper.assertTrue(mustering == muster, "muster should be " + muster + ", was " + mustering);
+		helper.assertTrue(working + idling + resting + mustering == WorkerShift.DAY_LENGTH,
+			"the four parts should fill the day exactly");
+
+		// Muster runs up to the shift and leisure runs from it, which is the whole ordering.
+		helper.assertTrue(WorkerShift.stintAt(off - 1, on, off, leisure, muster) == WorkerShift.Stint.WORKING,
+			"the last tick before clockOff is still work");
+		helper.assertTrue(WorkerShift.stintAt(off, on, off, leisure, muster) == WorkerShift.Stint.LEISURE,
+			"and the first one after it is the crew's own");
+		helper.assertTrue(
+			WorkerShift.stintAt(WorkerShift.DAY_LENGTH - 1, on, off, leisure, muster) == WorkerShift.Stint.MUSTER,
+			"the tick before the shift starts is muster");
+
+		// A shift long enough to leave no room keeps muster and loses leisure, in that order.
+		helper.assertTrue(WorkerShift.stintAt(23999, 0, 23800, leisure, muster) == WorkerShift.Stint.MUSTER,
+			"muster survives a day with almost nothing spare");
+		helper.succeed();
+	}
+
+	/**
+	 * A crew is at its post when its shift starts, rather than setting off then.
+	 *
+	 * <p>This is the whole of muster. Three crews covering the day exactly still leave a gap at every
+	 * changeover, because the crew coming on is asleep in a bed when the crew going off stops — so the
+	 * factory stalls for the length of a walk, three times a day, and nothing in the world says why.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 1200, batch = "muster")
+	public static void aCrewIsAtItsPostWhenItsShiftStarts(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		placeBed(helper, BED_FOOT, BED_HEAD);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		hire(helper, villager, helper.absolutePos(BED_HEAD));
+
+		// The job site is the middle of the hat's targets, which on this plate is the spawn; the bed
+		// is four blocks off it. Four blocks is not much, but it is the whole question: at the first
+		// tick of the shift, is the worker at the work or still at the bed?
+		BlockPos work = helper.absolutePos(SPAWN);
+		BlockPos bed = helper.absolutePos(BED_HEAD);
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(villager.isSleeping(), "the worker should be asleep first"))
+			.thenExecute(() -> helper.getLevel()
+				.setDayTime(WorkerShift.DAY_LENGTH - CWConfig.MUSTER_LENGTH.get() + 20))
+			.thenWaitUntil(() -> helper.assertTrue(WorkerShift.stintAt(helper.getLevel()
+				.getDayTime(), Shift.DAY) == WorkerShift.Stint.WORKING, "waiting for the shift to start"))
+			.thenExecute(() -> {
+				double toWork = villager.position()
+					.distanceTo(work.getCenter());
+				double toBed = villager.position()
+					.distanceTo(bed.getCenter());
+				helper.assertTrue(!villager.isSleeping(), "it should be up by the time its shift starts");
+				// Asserted as a comparison rather than a radius. An absolute distance is no test at all
+				// here: this plate is eleven blocks across and wanderRadius is twelve, so "near the
+				// work" is true of every square in it -- which is how the first version of this passed
+				// with muster deleted.
+				helper.assertTrue(toWork < toBed,
+					"a mustered crew should be at its work when the shift starts, not still at its bed"
+						+ " (work " + toWork + ", bed " + toBed + ")");
+			})
+			.thenSucceed();
+	}
+
+	/**
+	 * Off the clock and awake, a worker is vanilla's again.
+	 *
+	 * <p>Leisure is the goal standing back: the idle package has been loaded and running through every
+	 * shift, and its behaviours simply never had any effect because they write {@code WALK_TARGET} and
+	 * the goal overwrote it before {@code MoveToTargetSink} could act. What this asserts is the
+	 * standing back — that the worker is neither pinned to its post nor asleep — because everything
+	 * vanilla then does with it is vanilla's to test.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 900, batch = "leisure")
+	public static void aWorkerOffTheClockIsLeftToItself(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		// **No bed on purpose.** With one, the difference between leisure and the night is where the
+		// worker walks, and both end with it standing somewhere plausible -- there is no assertion
+		// that tells them apart. Without one, the old behaviour is exact: goToBed finds nothing, gives
+		// up on its clock, and holdStation pins the worker to the spot it finished on. So "did it
+		// move" is the whole question, and it has a definite answer either way.
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		hire(helper, villager, null);
+
+		double[] parked = new double[4];
+		helper.startSequence()
+			.thenExecute(() -> helper.getLevel()
+				.setDayTime(CWConfig.CLOCK_OFF.get() + 50))
+			.thenExecuteAfter(40, () -> {
+				helper.assertTrue(WorkerShift.stintAt(helper.getLevel()
+					.getDayTime(), Shift.DAY) == WorkerShift.Stint.LEISURE,
+					"precondition: the day crew should be at leisure just after its shift");
+				helper.assertTrue(!villager.isSleeping(), "leisure is awake");
+				parked[0] = villager.getX();
+				parked[1] = villager.getY();
+				parked[2] = villager.getZ();
+			})
+			// **The furthest it gets, not where it ends up.** A stroll picks a destination, walks to
+			// it and may well wander back, so sampling only the endpoint made this fail about one run
+			// in five at 2.07 blocks against a 2.5 bound -- a flaky test being worse than none. Pinned,
+			// the figure is exactly 0.0, because holdAt arrives and stops; so the bound can sit far
+			// below anything a stroll produces and still tell the two apart completely.
+			.thenExecuteFor(600, () -> {
+				double from = Math.sqrt(Math.pow(villager.getX() - parked[0], 2)
+					+ Math.pow(villager.getZ() - parked[2], 2));
+				if (from > parked[3])
+					parked[3] = from;
+			})
+			.thenExecute(() -> {
+				helper.assertTrue(parked[3] > 1.0,
+					"a worker at leisure should be vanilla's to move, and this one got " + parked[3]
+						+ " blocks from where it clocked off -- which is what being held looks like");
+				helper.assertTrue(!villager.isSleeping(),
+					"and it should still be awake: leisure comes before the night, not instead of it");
+			})
+			.thenSucceed();
 	}
 
 	// --- helpers ---

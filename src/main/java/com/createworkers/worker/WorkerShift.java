@@ -77,6 +77,8 @@ public final class WorkerShift {
 	 */
 	private static final Schedule[] cachedSchedules = new Schedule[Shift.VALUES.length];
 	private static int cachedClockOn = -1;
+	private static int cachedLeisure = -1;
+	private static int cachedMuster = -1;
 	private static int cachedClockOff = -1;
 
 	private WorkerShift() {
@@ -127,10 +129,17 @@ public final class WorkerShift {
 	public static Schedule scheduleFor(Shift shift) {
 		int clockOn = CWConfig.CLOCK_ON.get();
 		int clockOff = CWConfig.CLOCK_OFF.get();
-		if (cachedClockOn != clockOn || cachedClockOff != clockOff) {
+		int leisure = CWConfig.LEISURE_LENGTH.get();
+		int muster = CWConfig.MUSTER_LENGTH.get();
+		// Every setting the schedule is derived from, or a schedule outlives the change that should
+		// have thrown it away -- and the two new ones move REST just as surely as the hours do.
+		if (cachedClockOn != clockOn || cachedClockOff != clockOff || cachedLeisure != leisure
+			|| cachedMuster != muster) {
 			java.util.Arrays.fill(cachedSchedules, null);
 			cachedClockOn = clockOn;
 			cachedClockOff = clockOff;
+			cachedLeisure = leisure;
+			cachedMuster = muster;
 		}
 		if (cachedSchedules[shift.ordinal()] == null)
 			cachedSchedules[shift.ordinal()] = workerSchedule(shift.clockOn(), shift.clockOff());
@@ -151,12 +160,94 @@ public final class WorkerShift {
 	 */
 	@Nullable
 	public static Schedule workerSchedule(int clockOn, int clockOff) {
-		if (Math.floorMod(clockOff - clockOn, DAY_LENGTH) == 0)
+		return workerSchedule(clockOn, clockOff, CWConfig.LEISURE_LENGTH.get(), CWConfig.MUSTER_LENGTH.get());
+	}
+
+	/**
+	 * The same, with the day's four parts named rather than read from the config.
+	 *
+	 * <p>Still two keyframes, because only two of the four boundaries are changes of <em>activity</em>:
+	 * muster, work and leisure are all {@code IDLE} and are told apart by {@link #stintAt}, which is
+	 * the job goal's business rather than the brain's. What the brain needs to know is when the worker
+	 * may lie down, and that is the pair below.
+	 *
+	 * <p>{@code REST} therefore starts at the end of <em>leisure</em> and not at {@code clockOff}, and
+	 * the waking keyframe sits a muster before {@code clockOn} rather than on it.
+	 */
+	@Nullable
+	public static Schedule workerSchedule(int clockOn, int clockOff, int leisure, int muster) {
+		int span = Math.floorMod(clockOff - clockOn, DAY_LENGTH);
+		if (span == 0)
 			return null;
 
-		return new ScheduleBuilder(new Schedule()).changeActivityAt(clockOn, Activity.IDLE)
-			.changeActivityAt(clockOff, Activity.REST)
+		int[] parts = parts(span, leisure, muster);
+		int restAt = Math.floorMod(clockOn + span + parts[0], DAY_LENGTH);
+		int wakeAt = Math.floorMod(clockOn - parts[1], DAY_LENGTH);
+		if (restAt == wakeAt)
+			return null; // no night at all: a day that never ends, read the same way as a zero span
+
+		return new ScheduleBuilder(new Schedule()).changeActivityAt(wakeAt, Activity.IDLE)
+			.changeActivityAt(restAt, Activity.REST)
 			.build();
+	}
+
+	/**
+	 * Leisure and muster, cut down to fit whatever the shift leaves.
+	 *
+	 * <p>A shift can be configured long enough that there is no room for both — the settings are
+	 * independent, and nothing stops an operator asking for an eighteen-hour day. Muster is protected
+	 * first because without it a crew is still walking when its shift starts, which is the stall it
+	 * exists to remove; leisure gives way, and if there is nothing left to give then the crew works,
+	 * musters and sleeps with no time to itself. Which is a miserable roster and an honest reading of
+	 * what was asked for.
+	 */
+	private static int[] parts(int span, int leisure, int muster) {
+		int spare = DAY_LENGTH - span;
+		int keptMuster = Math.max(0, Math.min(muster, spare));
+		int keptLeisure = Math.max(0, Math.min(leisure, spare - keptMuster));
+		return new int[] { keptLeisure, keptMuster };
+	}
+
+	/** Which part of its own day a crew is in. */
+	public enum Stint {
+		/** On the clock: the job goal hauls. */
+		WORKING,
+		/** Off the clock and awake: the goal lets go, and vanilla's idle package has the worker. */
+		LEISURE,
+		/** Asleep, or walking to a bed. */
+		RESTING,
+		/** Awake before the shift, being walked to its post. The goal holds it, but does not haul. */
+		MUSTER
+	}
+
+	/** Which stint a crew is in at a given time, on the configured hours. */
+	public static Stint stintAt(long dayTime, Shift shift) {
+		return stintAt(dayTime, shift.clockOn(), shift.clockOff(), CWConfig.LEISURE_LENGTH.get(),
+			CWConfig.MUSTER_LENGTH.get());
+	}
+
+	/**
+	 * The clock on its own, so the day's shape can be reasoned about — and tested — without a world.
+	 *
+	 * <p>Measured from {@code clockOn} like everything else here, which is what lets a shift wrap
+	 * midnight without a special case. A span of zero is a day that never ends, so it is all
+	 * {@code WORKING}: the same reading {@link #isOffShift} gives it, and the one in which a
+	 * misconfigured clock still moves items.
+	 */
+	public static Stint stintAt(long dayTime, int clockOn, int clockOff, int leisure, int muster) {
+		int span = Math.floorMod(clockOff - clockOn, DAY_LENGTH);
+		if (span == 0)
+			return Stint.WORKING;
+
+		int[] kept = parts(span, leisure, muster);
+		long since = Math.floorMod(dayTime - clockOn, (long) DAY_LENGTH);
+		if (since < span)
+			return Stint.WORKING;
+		if (since < span + kept[0])
+			return Stint.LEISURE;
+		if (since < DAY_LENGTH - kept[1])
+			return Stint.RESTING;
+		return Stint.MUSTER;
 	}
 
 	/**

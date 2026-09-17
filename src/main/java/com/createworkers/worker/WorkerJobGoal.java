@@ -143,20 +143,34 @@ public class WorkerJobGoal extends Goal {
 			.getGameTime();
 		locomotion.tickEmployed(mob);
 
-		if (isOffShift()) {
-			// **Off shift is not absence, and the clock has to be told so.** The station sacks a worker
-			// whose lastAtWork is older than absenteeTimeout, and the only thing that ever refreshes it
-			// is keepNearPost -- which the return below skips for the whole of the night. With the
-			// shipped defaults a crew is off shift for 16000 ticks against a 6000-tick timeout, so
-			// every loaded worker was struck off its own roster partway through every night, woken,
-			// stripped of its name and replaced by a fresh hire at dawn. Stamping here freezes the
-			// clock across the night exactly as loading freezes it across an unloaded chunk: a worker
-			// asleep in its bed at two in the morning is doing precisely what it is supposed to.
+		WorkerShift.Stint stint = stint();
+		if (stint != WorkerShift.Stint.WORKING) {
+			// **Off the clock is not absence, and the clock has to be told so.** The station sacks a
+			// worker whose lastAtWork is older than absenteeTimeout, and the only thing that ever
+			// refreshes it is keepNearPost -- which the returns below skip for the whole of the night.
+			// With the shipped defaults a crew is off shift for 16000 ticks against a 6000-tick
+			// timeout, so every loaded worker was struck off its own roster partway through every
+			// night, woken, stripped of its name and replaced by a fresh hire at dawn. Stamping here
+			// freezes the clock across the night exactly as loading freezes it across an unloaded
+			// chunk: a worker asleep in its bed at two in the morning is doing what it is supposed to.
 			//
-			// Marking it *before* clockOff, because clockOff returns true in the ordinary case.
+			// Marked *before* the branches, because each of them returns in the ordinary case.
 			data.markAtWork(now);
-			if (clockOff(data))
-				return;
+
+			switch (stint) {
+				case LEISURE -> {
+					if (leisure(data))
+						return;
+				}
+				case MUSTER -> {
+					muster(data);
+					return;
+				}
+				default -> {
+					if (clockOff(data))
+						return;
+				}
+			}
 		} else {
 			clockOn();
 		}
@@ -196,9 +210,86 @@ public class WorkerJobGoal extends Goal {
 		}
 	}
 
-	private boolean isOffShift() {
-		return CWConfig.WORKING_HOURS.get() && locomotion.keepsWorkingHours()
-			&& WorkerShift.isOffShift(mob.level(), data().getShift());
+	/**
+	 * Which part of its own day this worker is in.
+	 *
+	 * <p>Anything that does not keep hours is always {@code WORKING}: an enderman has no brain
+	 * schedule to read, and a server with {@code workingHours} off has asked for workers that never
+	 * clock off. A dimension with a fixed sky is the same answer for the reason
+	 * {@link WorkerShift#isOffShift(net.minecraft.world.level.Level, Shift)} gives — the Nether has a
+	 * day time it borrows from the overworld, and a line that stopped at a midnight nobody can see
+	 * would be the exact invisible failure this mod is built against.
+	 */
+	private WorkerShift.Stint stint() {
+		if (!CWConfig.WORKING_HOURS.get() || !locomotion.keepsWorkingHours())
+			return WorkerShift.Stint.WORKING;
+		if (mob.level()
+			.dimensionType()
+			.hasFixedTime())
+			return WorkerShift.Stint.WORKING;
+		return WorkerShift.stintAt(mob.level()
+			.getDayTime(), data().getShift());
+	}
+
+	/**
+	 * The worker's own time: the goal lets go, and vanilla has it.
+	 *
+	 * <p>This is the whole of leisure. The idle package's behaviours — strolling, socialising, handing
+	 * food about, breeding, showing trades — are all already loaded and have been running through
+	 * every shift; they simply never had any effect, because they write {@code WALK_TARGET} and the
+	 * goal overwrote it every tick before {@code MoveToTargetSink} could act on it. Standing back is
+	 * all that is needed.
+	 *
+	 * <p>The leash stays on, and is the only thing that does. It is the same backstop
+	 * {@code IdleBehaviour.WANDER} already relies on during a cooldown, and the reason leisure is not
+	 * the reckless thing it sounds: a worker that strolls off a catwalk is walked home.
+	 *
+	 * <p>A worker still holding a delivery finishes it first. Knocking off with a stack is already
+	 * bounded by {@link #KNOCK_OFF_GRACE_TICKS}, and the same bound serves here — leisure that began
+	 * with items in hand would otherwise scatter a delivery across a field for the evening.
+	 *
+	 * @return whether leisure has taken charge of this tick.
+	 */
+	private boolean leisure(WorkerData data) {
+		if (!data.getHeld()
+			.isEmpty() && knockOffTicks++ < KNOCK_OFF_GRACE_TICKS)
+			return false;
+
+		if (data.getTargetPoint() != null) {
+			data.abandonTarget();
+			locomotion.stop(mob);
+			travel.reset();
+		}
+		forgetRounds();
+		// Not forgetLeash: the leash is what makes letting go affordable, and it is the difference
+		// between leisure and a worker wandering off for good.
+		keepNearPost(data, mob.level()
+			.getGameTime(), CWConfig.IdleBehaviour.WANDER);
+		return true;
+	}
+
+	/**
+	 * Before the shift: awake, and walking to work.
+	 *
+	 * <p>Three crews covering the day exactly still leave a gap at every changeover, because the crew
+	 * coming on is in bed when the crew going off stops. Muster moves that walk off the clock — they
+	 * arrive while the last crew is still working and start hauling the moment it stops — without ever
+	 * putting two crews on the clock at once, which is the invariant
+	 * {@code theShippedCrewsDoNotOverlap} holds.
+	 *
+	 * <p>Getting out of bed is this side's job rather than vanilla's, for the same reason
+	 * {@link #clockOn} does it: {@code WakeUp} only fires once the brain leaves {@code REST}, and the
+	 * schedule's waking keyframe is where muster begins.
+	 */
+	private void muster(WorkerData data) {
+		if (mob.isSleeping())
+			mob.stopSleeping();
+		bed = null;
+		commute.reset();
+		forgetRounds();
+		// Walked to the job site rather than held where it woke: the point is to be standing at the
+		// work when the shift starts, and the bed is not the work.
+		locomotion.returnTo(mob, data.getJobSite());
 	}
 
 	/**
@@ -343,6 +434,21 @@ public class WorkerJobGoal extends Goal {
 	 * nothing in the job goal occupies them during a cooldown.
 	 */
 	private void keepNearPost(WorkerData data, long gameTime) {
+		keepNearPost(data, gameTime, CWConfig.IDLE_BEHAVIOUR.get());
+	}
+
+	/**
+	 * The same, with the idling named rather than read from the config.
+	 *
+	 * <p>Leisure always passes {@code WANDER}, whatever {@code idleBehaviour} says, because the two
+	 * settings answer different questions. {@code idleBehaviour} is "there is nothing to haul at this
+	 * moment" — a gap *inside* a shift, where patrolling the run or standing at the post are both
+	 * reasonable answers and the operator may have a preference. Leisure is "this worker is not
+	 * working", and the answer to that is vanilla's, or it is not leisure at all. Reading the config
+	 * here had a worker on PATROL, the default, walking its rounds all evening: pinned, on the clock
+	 * in every way that matters, and asserted at 0.0 blocks moved.
+	 */
+	private void keepNearPost(WorkerData data, long gameTime, CWConfig.IdleBehaviour idling) {
 		// Where the worker is, asked first and regardless of what it thinks it is doing. This is the
 		// signal a station's absentee rule reads, and it has to be proximity rather than activity: a
 		// worker cycling through targets it can never reach has one selected every tick, so anything
@@ -370,7 +476,7 @@ public class WorkerJobGoal extends Goal {
 		}
 		forgetLeash(data);
 
-		switch (CWConfig.IDLE_BEHAVIOUR.get()) {
+		switch (idling) {
 			case WANDER -> forgetIdling(); // vanilla's problem now; the leash above is the backstop
 			case HOLD_STATION -> holdStation();
 			case PATROL -> {

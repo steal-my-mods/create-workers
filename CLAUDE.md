@@ -710,6 +710,33 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   intermittent — the reading changes whenever anything else nudges the light engine — which makes it
   easy to write off as a glitch rather than as the wrong sample. Take the light from
   `pos.relative(facing)`, the way a wall torch or a sign is lit.
+- **A worker's day has four parts, and only two of them are schedule keyframes.** Muster, work and
+  leisure are all `Activity.IDLE`; `WorkerShift.stintAt` tells them apart by the clock and the job goal
+  acts on that, while the brain only needs to know when the worker may lie down. So the schedule still
+  has two transitions — `REST` at the end of *leisure* rather than at `clockOff`, and the waking one a
+  muster before `clockOn`. **Leisure is the goal standing back**: vanilla's idle package has been
+  loaded and running through every shift all along, and its behaviours simply never landed because
+  they write `WALK_TARGET` and the goal overwrote it before `MoveToTargetSink` could act.
+  **Leisure must pass `WANDER` explicitly and never read `idleBehaviour`.** The two answer different
+  questions: `idleBehaviour` is "there is nothing to haul *right now*", a gap inside a shift where
+  patrolling or standing still are reasonable and the operator may have a preference; leisure is "this
+  worker is not working", whose answer is vanilla's or it is not leisure. Reading the config there put
+  a worker on the default `PATROL` walking its rounds all evening — pinned, on the clock in every way
+  that matters, and measured at 0.0 blocks moved.
+  **Muster exists because coverage was already a fiction.** Three crews of exactly `Shift.OFFSET` look
+  seamless and are not: the crew coming on is asleep in a bed when the crew going off stops, so the
+  factory stalled for the length of a walk at every changeover. Muster wakes them early and walks them
+  to the post, so they arrive while the last crew is still working — without ever putting two crews on
+  the clock at once, which `theShippedCrewsDoNotOverlap` still pins.
+- **A test about the time of day must set the hours as well as the clock.** `run-gametest/` is
+  gitignored, so a local suite kept a `clockOff` from before the default was corrected while CI
+  generated a fresh one from the defaults — and the two ran *different configurations* for weeks with
+  neither going red. `theShippedCrewsDoNotOverlap` could not catch it because it deliberately asserts
+  against `getDefault()` rather than the loaded value. The night batches now pin the hours they are
+  reasoning about. Related: **a plate smaller than `wanderRadius` makes "near its post" vacuous** —
+  the work site is eleven blocks across against a radius of twelve, so the first version of
+  `aCrewIsAtItsPostWhenItsShiftStarts` passed with muster deleted. Assert which of two places the
+  worker is *nearer*, not that it is within some distance of one.
 - **Sleeping and waking must agree with vanilla's `WakeUp`, and a worker's own `Schedule` is how.**
   `WakeUp` (villager CORE, priority 0) stands up any sleeping villager whose brain is not in
   `Activity.REST`, on every tick — so a worker whose hours are not the village's could never sleep.
