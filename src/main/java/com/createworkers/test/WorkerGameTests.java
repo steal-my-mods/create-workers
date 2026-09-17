@@ -1211,41 +1211,44 @@ public class WorkerGameTests {
 	}
 
 	/**
-	 * Machines can fill a Canteen and can never empty one.
+	 * To a machine, a Canteen is an ordinary inventory — fillable <em>and</em> drainable.
 	 *
-	 * <p>A funnel on the side of a canteen was pulling the bread straight back out. That is correct
-	 * behaviour for a chest and for the Item Vault this block otherwise copies — storage is for taking
-	 * things out of — and it is wrong here, because **the only thing that should ever empty a Canteen
-	 * is a villager eating**, which is not an item transfer. A belt that keeps a trough empty is a
-	 * trough that never feeds anybody, and from the outside the machinery looks like it is working.
+	 * <p>This is a decision that has now been made twice, in opposite directions, which is why it is
+	 * pinned. The capability was briefly insert-only, on the reasoning that the only thing which should
+	 * ever empty a canteen is a villager eating, and that a belt keeping a trough empty is a trough
+	 * that never feeds anybody.
 	 *
-	 * <p>Asked through the capability, because that is what a funnel, a chute, a belt and a hopper all
-	 * actually hold — the block's own handler still extracts, since this mod's own code has to be able
-	 * to take food out when a worker eats it.
+	 * <p>It went back because <b>no Create block behaves that way</b>. Its deposit-only idea exists
+	 * only for arm interaction points, and only on blocks that <em>consume</em> what they are given —
+	 * a Blaze Burner exposes no item handler at all, while Basins, Depots and Vaults all hand out
+	 * ordinary extractable ones. And a player who filled a canteen with the wrong food would have had
+	 * no way to change it but breaking the block. A funnel draining a trough is a build the player
+	 * made, visible on the comparator and through the goggles, and no different from a funnel draining
+	 * a chest they wanted full; protecting them from it is the same instinct that briefly made this
+	 * block an arm interaction point.
+	 *
+	 * <p>What stays is the filter: an ordinary inventory, not an ordinary inventory that holds
+	 * anything.
 	 */
 	@GameTest(template = "work_site", timeoutTicks = 100)
-	public static void machinesFillACanteenAndNeverEmptyIt(GameTestHelper helper) {
+	public static void aCanteenIsAnOrdinaryInventoryToMachines(GameTestHelper helper) {
 		layFloor(helper);
 		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
-		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
-			throw new GameTestAssertException("the canteen should have a block entity");
 
 		IItemHandler machines = handlerAt(helper, SOURCE);
 		helper.assertTrue(machines != null, "a canteen should expose an item handler, or nothing can fill it");
 		helper.assertTrue(ItemHandlerHelper.insertItem(machines, new ItemStack(Items.BREAD, 6), false)
 			.isEmpty(), "a machine should be able to fill a canteen");
 
-		for (int slot = 0; slot < machines.getSlots(); slot++)
-			helper.assertTrue(machines.extractItem(slot, 64, false)
-				.isEmpty(), "a machine should never be able to take food out of a canteen");
-		helper.assertTrue(canteen.contents()
-			.size() == 1, "and the bread should still be in there");
+		ItemStack back = ItemStack.EMPTY;
+		for (int slot = 0; slot < machines.getSlots() && back.isEmpty(); slot++)
+			back = machines.extractItem(slot, 64, false);
+		helper.assertTrue(back.is(Items.BREAD) && back.getCount() == 6,
+			"a machine should be able to empty a canteen too -- swapping one food for another must not "
+				+ "mean breaking the block. Got " + back);
 
-		// The block's own handler is not the one machines hold, and it must still work: eating is
-		// taking food out, and it is this mod's code that will do it.
-		helper.assertTrue(!canteen.stock()
-			.extractItem(0, 1, false)
-			.isEmpty(), "the canteen's own handler must still extract, or nothing can ever eat from it");
+		helper.assertTrue(!ItemHandlerHelper.insertItem(machines, new ItemStack(Items.COBBLESTONE, 4), false)
+			.isEmpty(), "and it should still be a canteen: food in, anything else refused");
 		helper.succeed();
 	}
 

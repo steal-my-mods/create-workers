@@ -17,10 +17,13 @@ What the build changed, so far:
   A shortcut here was that block reimplemented on one block. So the shape is an Item Vault's — funnel,
   chute, belt, hopper or hatch in; comparator for how full; breaking it for the food back — with a
   goggle overlay saying *what* is in it, which a comparator cannot.
-- **Machines can fill a canteen and cannot empty one**, which is where the Vault analogy stops. A
-  funnel on the side of one pulled the bread straight back out — right for storage, wrong for a
-  trough, because the only thing that should ever empty a canteen is a villager eating. Found by
-  playing, not by reasoning, which is the argument for getting a block into a world early.
+- **Machines can fill a canteen and empty one**, exactly as for any other inventory. A funnel on the
+  side draining it was reported as a bug and briefly "fixed" by making the capability insert-only;
+  that lasted one commit. No Create block behaves that way — its deposit-only idea is about arm
+  interaction points on blocks that *consume* what they are given — and it left a player who filled a
+  canteen with the wrong food no way out but breaking it. The reasoning that a belt keeping a trough
+  empty is a trough that never feeds anybody is still true, and is still the player's build to get
+  right, which the comparator and the goggles are there to show.
 - **Its point of interest carries no tickets**, which the design did not anticipate needing to say. A
   ticket is a claim and eating is not a claim; see the block's own notes.
 - **It is not a worker target at all**, which reverses what this document said. The design had it as

@@ -21,10 +21,11 @@ public class CWCapabilities {
 		// The Canteen, on every side. Filling a trough of food by funnel, chute, belt or arm is what
 		// turns feeding a crew into an ordinary automation problem, which is the entire reason the
 		// block is an inventory rather than a counter. Its own handler refuses anything that is not
-		// food, and it hands out an insert-only view -- a funnel on the side of a canteen was pulling
-		// the bread straight back out, which is right for a chest and wrong for a trough whose whole
-		// purpose is to be eaten from. See CanteenBlockEntity.intake.
+		// food, so there is nothing to gate here on top of that. **Extractable**, like every other
+		// inventory: it was briefly insert-only, on the reasoning that a belt draining a trough is a
+		// trough that never feeds anybody -- but Create has no block that behaves that way, and it
+		// left a player who filled one with the wrong food no way out but breaking it.
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CWBlockEntities.CANTEEN.get(),
-			(canteen, side) -> canteen.intake());
+			(canteen, side) -> canteen.stock());
 	}
 }

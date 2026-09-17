@@ -743,15 +743,20 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   a canteen under a belt several times a second, and the whole inventory to every tracking client per
   item is a packet storm for a readout nobody can perceive at that rate. A dirty flag plus a
   ten-tick floor. (`aCanteenSendsItsStockToTheClient`, mutation-checked by emptying the update tag.)
-- **The Canteen's capability is insert-only, which is where the Item Vault analogy stops.** A funnel
-  on the side of one was pulling the bread straight back out — right for a chest, right for a Vault,
-  and wrong here, because **the only thing that should ever empty a Canteen is a villager eating**,
-  which is not an item transfer. A belt that keeps a trough empty is a trough that never feeds
-  anybody, and from the outside the machinery looks like it is working. `intake()` is what the
-  capability hands out; `stock()` is the real handler and stays extractable, because eating *is*
-  taking food out and this mod's own code has to do it. The rule is about who is asking, not about
-  what is being moved. (`machinesFillACanteenAndNeverEmptyIt`, mutation-checked by letting the view
-  extract.)
+- **The Canteen is an ordinary inventory to machines, and "insert only" was the wrong answer twice
+  over.** A funnel on the side of one drains it, which was reported as a bug and made insert-only for
+  one commit, on the reasoning that the only thing which should ever empty a trough is a villager
+  eating. Two things put it back. **No Create block behaves that way** — the deposit-only idea exists
+  only for *arm interaction points*, and only on blocks that consume what they are given: a Blaze
+  Burner exposes no item handler at all, while Basins, Depots and Vaults all hand out ordinary
+  extractable ones. And it left a player who filled a canteen with the wrong food no way to change it
+  but breaking the block. A funnel draining a trough is a build the player made, visible on the
+  comparator and through the goggles, and no different from a funnel draining a chest they wanted
+  full. **It is the same instinct that briefly made this block an arm interaction point** — protecting
+  one block from a mistake every other inventory lets you make — and it is worth recognising the shape
+  early, because it has now arrived twice wearing different clothes.
+  (`aCanteenIsAnOrdinaryInventoryToMachines` pins both halves, since the decision has been made in
+  both directions.)
 - **A goggle overlay is the readout for a block with no screen, and `forGoggles` cannot run on a
   server.** `IHaveGoggleInformation` is a plain `instanceof` check in Create's overlay renderer, so
   any `BlockEntity` can implement it — Create's own Item Vault does not, but a Canteen holds only food

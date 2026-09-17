@@ -25,7 +25,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.IItemHandlerModifiable;
 import net.neoforged.neoforge.items.ItemStackHandler;
 
@@ -78,46 +77,6 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		}
 	};
 
-	/**
-	 * The same stock with its extraction taken away, which is what every machine sees.
-	 *
-	 * <p>Wrapped at the capability rather than filtered inside the handler because this mod's own code
-	 * still has to be able to take food out — that is what eating will be — and the rule being applied
-	 * is about who is asking, not about what is being moved.
-	 */
-	private final IItemHandler intake = new IItemHandler() {
-
-		@Override
-		public int getSlots() {
-			return stock.getSlots();
-		}
-
-		@Override
-		public ItemStack getStackInSlot(int slot) {
-			return stock.getStackInSlot(slot);
-		}
-
-		@Override
-		public ItemStack insertItem(int slot, ItemStack toInsert, boolean simulate) {
-			return stock.insertItem(slot, toInsert, simulate);
-		}
-
-		@Override
-		public ItemStack extractItem(int slot, int amount, boolean simulate) {
-			return ItemStack.EMPTY;
-		}
-
-		@Override
-		public int getSlotLimit(int slot) {
-			return stock.getSlotLimit(slot);
-		}
-
-		@Override
-		public boolean isItemValid(int slot, ItemStack stack) {
-			return stock.isItemValid(slot, stack);
-		}
-	};
-
 	/** Set when the stock moves, cleared by the one sync that follows. */
 	private boolean stockChanged;
 	/** Ticks before the next sync is allowed, so a belt filling a canteen cannot send a packet an item. */
@@ -132,27 +91,9 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		return !stack.isEmpty() && stack.has(DataComponents.FOOD);
 	}
 
-	/** @return the stock itself. This mod's own code only; everything outside gets {@link #intake}. */
+	/** @return the stock as an inventory: what a funnel, a chute, a belt or a hopper holds. */
 	public IItemHandlerModifiable stock() {
 		return stock;
-	}
-
-	/**
-	 * What machines get: the stock, with no way to take anything out of it.
-	 *
-	 * <p>A funnel on the side of a Canteen was pulling the bread straight back out, which is correct
-	 * behaviour for a chest and wrong for this block. **The thing that is supposed to empty a canteen
-	 * is a villager eating**, and that is not an item transfer — so anything that *is* one is
-	 * competing with the only reason the block exists. A belt that keeps a trough empty is a trough
-	 * that never feeds anybody, and the failure would look like the machinery working.
-	 *
-	 * <p>It is the one place this block departs from the Item Vault it otherwise copies, and the
-	 * departure is about purpose rather than shape: a Vault is storage, and taking things out of
-	 * storage is what storage is for. A player who fills a Canteen with the wrong thing gets it back
-	 * by breaking the block, which drops the lot.
-	 */
-	public IItemHandler intake() {
-		return intake;
 	}
 
 	/**

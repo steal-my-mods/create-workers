@@ -45,14 +45,15 @@ import net.minecraft.world.level.block.state.BlockState;
  * block reimplemented on one block, worse and in the wrong place, and it would be the second time
  * this block got a shortcut nobody asked for; the first was being an arm interaction point.
  *
- * <p>So the ways in are a funnel, a chute, a belt, a hopper or an Item Hatch, exactly as for a Vault,
- * and the ways to read it are a comparator and a pair of Engineer's Goggles.
+ * <p>So the ways in and out are a funnel, a chute, a belt, a hopper or an Item Hatch, exactly as for a
+ * Vault, and the ways to read it are a comparator and a pair of Engineer's Goggles.
  *
- * <p><b>There is no way out except breaking it</b>, which is where the Vault analogy stops. A funnel
- * on the side of a Vault pulls items back out, which is what storage is for; doing that to a trough
- * empties the thing the crew eats from, and the only thing that should ever empty a Canteen is a
- * villager eating. Breaking the block drops the lot, so a canteen filled with the wrong food is a
- * mistake a player can undo.
+ * <p><b>Machines can empty it as well as fill it, and that was argued both ways.</b> A funnel pulling
+ * food back out of the crew's trough looks wrong, and for one commit it was forbidden — until two
+ * things settled it: no Create block hands out an inventory that can be filled and not drained, and a
+ * player who filled a canteen with the wrong food would have had no way to change it short of
+ * breaking the block. A belt that keeps a trough empty is a build the player made, and it is visible
+ * on the comparator and through the goggles.
  */
 public class CanteenBlock extends BaseEntityBlock {
 
