@@ -1,5 +1,6 @@
 package com.createworkers.test;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -1207,6 +1208,71 @@ public class WorkerGameTests {
 		helper.assertTrue(ItemHandlerHelper.insertItem(stock, new ItemStack(Items.MUSHROOM_STEW), false)
 			.isEmpty(), "a canteen should take any food, not a list of the ones we thought of");
 		helper.succeed();
+	}
+
+	/**
+	 * A Canteen says what is in it to a pair of Engineer's Goggles.
+	 *
+	 * <p>Nothing goes in or out of one by hand, so a player's only other way to know is a comparator —
+	 * which answers "how full" and never "full of what". A trough a misaimed funnel filled with cake
+	 * instead of bread reads as a working one, and the whole point of the block is whether the crew
+	 * can eat.
+	 *
+	 * <p>Nothing else covers this. The overlay itself is drawn by a client class that cannot load on a
+	 * dedicated server, but {@code addToGoggleTooltip} is ordinary common code and the lines it builds
+	 * are ordinary {@code Component}s — so what a server can check is that there are any, that they say
+	 * different things full and empty, and that the keys behind them are in the lang file rather than
+	 * rendering to a player as raw key text. That last one is the failure this shape of feature
+	 * actually has: Ponder has burnt this repo for it once already.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aCanteenTellsGogglesWhatIsInIt(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
+		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
+			throw new GameTestAssertException("the canteen should have a block entity");
+
+		// goggleSummary rather than addToGoggleTooltip: the latter lays each line out through
+		// LangBuilder.forGoggles, which reaches into Minecraft and is refused outright on a dedicated
+		// server. Every decision worth checking is on this side of that split, which is why there is
+		// one.
+		List<Component> empty = canteen.goggleSummary();
+		helper.assertTrue(empty.size() > 1,
+			"an empty canteen should still have something to say -- 'empty' is the answer a player needs");
+
+		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.BREAD, 7), false);
+		List<Component> stocked = canteen.goggleSummary();
+
+		String said = stocked.stream()
+			.map(Component::getString)
+			.collect(java.util.stream.Collectors.joining(" "));
+		helper.assertTrue(said.contains("7"),
+			"the goggles should say how much food there is, and said \"" + said + "\"");
+		helper.assertTrue(!said.equals(empty.stream()
+			.map(Component::getString)
+			.collect(java.util.stream.Collectors.joining(" "))),
+			"a stocked canteen should not read the same as an empty one");
+
+		// Every key it builds has to be in the lang file. A missing one renders as the raw key in
+		// front of a player, silently, because nothing on this side ever renders the overlay.
+		for (String key : new String[] { "createworkers.goggles.canteen", "createworkers.goggles.canteen.empty" })
+			helper.assertTrue(hasLangKey(helper, key), "no lang entry for " + key);
+		helper.succeed();
+	}
+
+	/** Reads the shipped lang file out of the jar, the way the model checks read blockstates. */
+	private static boolean hasLangKey(GameTestHelper helper, String key) {
+		try (InputStream source = WorkerGameTests.class
+			.getResourceAsStream("/assets/createworkers/lang/en_us.json")) {
+			if (source == null)
+				throw new GameTestAssertException("en_us.json is not in the jar");
+			return com.google.gson.JsonParser
+				.parseReader(new java.io.InputStreamReader(source, java.nio.charset.StandardCharsets.UTF_8))
+				.getAsJsonObject()
+				.has(key);
+		} catch (java.io.IOException failure) {
+			throw new GameTestAssertException("could not read en_us.json: " + failure.getMessage());
+		}
 	}
 
 	/**

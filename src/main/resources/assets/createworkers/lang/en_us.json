@@ -4,6 +4,8 @@
   "block.createworkers.canteen": "Canteen",
   "block.createworkers.worker_station": "Worker Station",
   "entity.minecraft.villager.createworkers.worker": "Worker",
+  "createworkers.goggles.canteen": "Canteen",
+  "createworkers.goggles.canteen.empty": "Empty",
   "createworkers.hard_hat.unprogrammed": "No inventories assigned",
   "createworkers.hard_hat.hint": "Right-click belts, depots, funnels and other Arm-compatible blocks to assign them",
   "createworkers.hard_hat.summary": "%1$s input(s), %2$s output(s)",

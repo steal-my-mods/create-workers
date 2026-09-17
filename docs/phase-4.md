@@ -11,9 +11,12 @@ What the build changed, so far:
   vanilla's idle package was already loaded and running. What it did cost was one rule that is not
   obvious from here: leisure must pass `WANDER` explicitly and never read `idleBehaviour`, or a worker
   on the default `PATROL` walks its rounds all evening, pinned in every way that matters.
-- **The canteen has no screen.** The design did not say either way. A trough has nothing to arrange,
-  so Right-Click puts food in, Right-Click empty-handed takes the last stack back, and a comparator
-  reads how full it is — the interface a composter offers, for the same reason.
+- **The canteen has no screen and no hand interaction at all.** The design did not say either way. It
+  briefly had Right-Click-to-insert, which was wrong for a reason worth keeping: Create already ships
+  the **Item Hatch**, whose whole job is depositing your held item into the container it is placed on.
+  A shortcut here was that block reimplemented on one block. So the shape is an Item Vault's — funnel,
+  chute, belt, hopper or hatch in; comparator for how full; breaking it for the food back — with a
+  goggle overlay saying *what* is in it, which a comparator cannot.
 - **Its point of interest carries no tickets**, which the design did not anticipate needing to say. A
   ticket is a claim and eating is not a claim; see the block's own notes.
 - **It is not a worker target at all**, which reverses what this document said. The design had it as

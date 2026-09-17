@@ -138,7 +138,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/ponder/WorkingHoursScene` | Third: crews, the last delivery of the day, walk to bed, sleep, the enderman night shift, morning |
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
 | `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own. Its job-site predicates match the worker station **and nothing else** |
-| `block/CanteenBlock` | A trough of food, and the only way a night crew is ever fed — vanilla has no container a villager will take food out of. No screen: Right-Click to put food in or take the last stack back, and a comparator for how full it is |
+| `block/CanteenBlock` | A trough of food, and the only way a night crew is ever fed — vanilla has no container a villager will take food out of. Vault-shaped: nothing goes in or out by hand, a comparator says how full it is and goggles say what of |
 | `block/CanteenBlockEntity` | Its stock. Nine slots that accept food and nothing else, filtered at the `IItemHandler` because that is the way in nothing supervises |
 | `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over; `FACING` turns the board at whoever placed it |
 | `block/WorkerStationBlockEntity` | A line's roster: an ordered rack of hats, the shifts each runs on, who is wearing them, and the point-of-interest tickets it holds back |
@@ -720,12 +720,31 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   is a landmark, not a workstation. It is outside `minecraft:acquirable_job_site` for the reason the
   Station learned the hard way. (`aCanteenIsNeverTakenAsAJobSite`, mutation-checked by giving it one
   ticket.)
-- **The Canteen's food filter lives on the `IItemHandler`, not on the block.** A player's hand is the
-  one way in that something supervises; a funnel, a chute, a belt and a worker all go straight through
-  the capability, so a filter written into `useItemOn` would be a filter with four holes in it. What
-  counts as food is the item's own `FOOD` component rather than a list kept here — a list is wrong the
-  day any mod adds a bread, and the component is the same question `FOOD_POINTS` will be asking.
-  (`aCanteenTakesFoodAndNothingElse`.)
+- **Nothing goes into or out of the Canteen by hand, and Create already ships the block that does
+  that.** It had a Right-Click-to-insert and an empty-hand take-back; both are gone. Create's answer
+  to "put my held item into a container" is the **Item Hatch**, which deposits into whatever it is
+  placed on — so a hand interaction here was that block reimplemented on one block, worse and in the
+  wrong place. An Item Vault is the shape this block copies: a funnel, a chute, a belt, a hopper or a
+  hatch fills it, a comparator says how full, and breaking it gives the food back. **When a Create
+  block already solves an interaction, use it rather than growing an affordance** — this is the second
+  shortcut this one block grew, after the arm interaction point.
+- **The Canteen's food filter lives on the `IItemHandler`, and now that is the only place it could.**
+  Every way in arrives at the capability, so the rule is asked once and has nowhere else to be
+  forgotten. What counts as food is the item's own `FOOD` component rather than a list kept here — a
+  list is wrong the day any mod adds a bread, and the component is the same question `FOOD_POINTS`
+  will be asking. (`aCanteenTakesFoodAndNothingElse`.)
+- **A goggle overlay is the readout for a block with no screen, and `forGoggles` cannot run on a
+  server.** `IHaveGoggleInformation` is a plain `instanceof` check in Create's overlay renderer, so
+  any `BlockEntity` can implement it — Create's own Item Vault does not, but a Canteen holds only food
+  and its whole purpose is whether there is any left, which is a question with a short answer.
+  The trap is that `LangBuilder.forGoggles` reaches into `Minecraft` to lay a line out, and a
+  dedicated server refuses that class outright ("Attempted to load class net/minecraft/client/Minecraft
+  for invalid dist DEDICATED_SERVER"). Harmless in the game, where only the renderer calls it — and
+  fatal to a test, because **every decision worth checking is on the other side of it**. So
+  `goggleSummary()` builds the components and `addToGoggleTooltip` only formats them. Same trap as
+  `MenuBase.createOnClient`, reached from the other direction.
+  (`aCanteenTellsGogglesWhatIsInIt`, which also checks the keys are in the lang file — a missing one
+  renders as raw key text in front of a player, and nothing on the server side ever draws the overlay.)
 - **Nothing this mod adds is an arm interaction point, and the Canteen is the one that had to be
   argued.** It was registered as one for exactly one commit, which made it a legal destination on a
   hat. **The tell that it was wrong was having to invent a rule no other target here has** — deposit

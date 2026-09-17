@@ -1,14 +1,22 @@
 package com.createworkers.block;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+import com.createworkers.CreateWorkers;
 import com.createworkers.registry.CWBlockEntities;
+import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
+import com.simibubi.create.foundation.utility.CreateLang;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -20,14 +28,16 @@ import net.neoforged.neoforge.items.ItemStackHandler;
  *
  * <p>The filter is the block. A canteen that took any item would be a chest with a worse interface,
  * and the one thing it has to guarantee is that a hungry villager sent here finds something it can
- * eat — so "is this food" is asked once, in {@link #isFood}, and every way in goes through it: a
- * player's hand, a funnel, a chute, an arm, and a worker whose hat names this block.
+ * eat — so "is this food" is asked once, in {@link #isFood}, and it is asked on the
+ * {@code IItemHandler}, which is where every way in arrives: a funnel, a chute, a belt, a hopper, an
+ * Item Hatch, and a worker delivering into any of them. Nothing goes in by hand, so there is no
+ * second place for the rule to live and no second place for it to be forgotten.
  *
  * <p>Food is decided by the item's own {@code FOOD} component rather than by a list kept here. A list
  * would be wrong the day any mod adds a bread, and the component is exactly the question being
  * asked — the same one {@code Villager.wantsMoreFood} and {@code FOOD_POINTS} are built on.
  */
-public class CanteenBlockEntity extends BlockEntity {
+public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInformation {
 
 	/**
 	 * Nine, which is a chest's row and not an accident.
@@ -72,31 +82,78 @@ public class CanteenBlockEntity extends BlockEntity {
 	}
 
 	/**
-	 * Puts as much of {@code offered} in as will fit.
+	 * What a pair of Engineer's Goggles says about this block.
 	 *
-	 * @return what is left over, which is the whole stack if the canteen is full.
+	 * <p>Nothing goes in or out of a Canteen by hand, so without this the only way to know what is in
+	 * one is a comparator — which answers "how full" and never "full of what", and a trough that a
+	 * misaimed funnel filled with cake instead of bread looks exactly like a working one. Goggles are
+	 * Create's own answer to "look at a block and see its state", they need no screen, and they are an
+	 * early item rather than a late one.
+	 *
+	 * <p>Create's own Item Vault does <em>not</em> implement this, and that is not an argument against
+	 * it: a Vault holds anything, so "what is in it" is a question with no short answer, while a
+	 * Canteen holds only food and its whole purpose is whether there is any left.
+	 *
+	 * @return whether anything was added, which is what tells Create to draw the overlay at all.
 	 */
-	public ItemStack stock(ItemStack offered) {
-		ItemStack left = offered.copy();
-		for (int slot = 0; slot < SLOTS && !left.isEmpty(); slot++)
-			left = stock.insertItem(slot, left, false);
-		return left;
+	@Override
+	public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
+		List<Component> lines = goggleSummary();
+		// The first line is the heading and the rest are its detail, which is the shape every Create
+		// overlay has. forGoggles is the only part of this that is client-side -- see goggleSummary.
+		CreateLang.builder(CreateWorkers.ID)
+			.add(lines.get(0)
+				.copy())
+			.forGoggles(tooltip);
+		for (Component line : lines.subList(1, lines.size()))
+			CreateLang.builder(CreateWorkers.ID)
+				.add(line.copy())
+				.forGoggles(tooltip, 1);
+		return true;
 	}
 
 	/**
-	 * Takes the last stack back out, which is the only way anything leaves by hand.
+	 * What the goggles will say, as plain components and nothing else.
 	 *
-	 * <p>From the back rather than the front so that emptying a canteen undoes the order it was filled
-	 * in — a player who has just put the wrong thing in gets that thing back, rather than the bread
-	 * underneath it.
+	 * <p>Split from {@link #addToGoggleTooltip} because {@code LangBuilder.forGoggles} reaches into
+	 * {@code Minecraft} to lay the line out, and a dedicated server refuses to load that class
+	 * outright — "Attempted to load class net/minecraft/client/Minecraft for invalid dist
+	 * DEDICATED_SERVER". That is fine in the game, where only the overlay renderer ever calls it, and
+	 * fatal for a test: <b>the decisions worth checking are all on this side of the split</b>, and
+	 * none of them can be reached with the formatting attached. The same trap as
+	 * {@code MenuBase.createOnClient}, arrived at from the other direction.
+	 *
+	 * <p>Totalled by item rather than listed by slot. A slot listing is a fact about the inventory; a
+	 * player wants a fact about the food, and four part-stacks of bread in four slots is one answer,
+	 * not four.
 	 */
-	public ItemStack takeBack() {
-		for (int slot = SLOTS - 1; slot >= 0; slot--) {
-			ItemStack held = stock.getStackInSlot(slot);
-			if (!held.isEmpty())
-				return stock.extractItem(slot, held.getCount(), false);
+	public List<Component> goggleSummary() {
+		List<Component> lines = new ArrayList<>();
+		lines.add(CreateLang.builder(CreateWorkers.ID)
+			.translate("goggles.canteen")
+			.component());
+
+		List<ItemStack> inside = contents();
+		if (inside.isEmpty()) {
+			lines.add(CreateLang.builder(CreateWorkers.ID)
+				.translate("goggles.canteen.empty")
+				.style(ChatFormatting.RED)
+				.component());
+			return lines;
 		}
-		return ItemStack.EMPTY;
+
+		Map<Item, Integer> totals = new LinkedHashMap<>();
+		for (ItemStack held : inside)
+			totals.merge(held.getItem(), held.getCount(), Integer::sum);
+
+		for (Map.Entry<Item, Integer> entry : totals.entrySet())
+			lines.add(CreateLang.builder(CreateWorkers.ID)
+				.text(entry.getValue() + " ")
+				.add(Component.translatable(entry.getKey()
+					.getDescriptionId()))
+				.style(ChatFormatting.GRAY)
+				.component());
+		return lines;
 	}
 
 	/** Everything in it, for the block to drop when it is broken. */

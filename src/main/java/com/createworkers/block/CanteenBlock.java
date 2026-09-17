@@ -4,20 +4,13 @@ package com.createworkers.block;
 import com.mojang.serialization.MapCodec;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Containers;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.ItemInteractionResult;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
 
 /**
  * A trough of food, which is the one thing vanilla gives no way to build.
@@ -41,11 +34,16 @@ import net.minecraft.world.phys.BlockHitResult;
  * chest either. So a line that feeds the workers who run the line is still something a player builds
  * out of parts they already have, and the parts are the ordinary ones.
  *
- * <p><b>No screen, on purpose.</b> The Worker Station has one because its rack is an ordered list of
- * jobs with toggles on each; there is nothing to arrange in a trough. Right-Clicking with food puts
- * the stack in, Right-Clicking with an empty hand takes the top one back out, and a comparator reads
- * how full it is — which is the whole interface, and it is the same one a composter or a jukebox
- * offers for the same reason.
+ * <p><b>Nothing goes in or out by hand, and that is the whole interface.</b> No screen, and no
+ * Right-Click either: an Item Vault is the block this is modelled on, and Create already ships the
+ * answer to "I want to put something in a container by hand" — it is the <i>Item Hatch</i>, which
+ * deposits your held item into whatever it is placed on. A Right-Click-to-insert here would be that
+ * block reimplemented on one block, worse and in the wrong place, and it would be the second time
+ * this block got a shortcut nobody asked for; the first was being an arm interaction point.
+ *
+ * <p>So the ways in are a funnel, a chute, a belt, a hopper or an Item Hatch, exactly as for a Vault,
+ * and the ways to read it are a comparator and a pair of Engineer's Goggles. Breaking it drops what
+ * is inside, which is the only way anything comes back out short of a machine taking it.
  */
 public class CanteenBlock extends BaseEntityBlock {
 
@@ -68,51 +66,6 @@ public class CanteenBlock extends BaseEntityBlock {
 	@Override
 	public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
 		return new CanteenBlockEntity(pos, state);
-	}
-
-	/**
-	 * Food in hand goes in.
-	 *
-	 * <p>Anything else is refused rather than swallowed, and refusing it is a {@code PASS} rather than
-	 * a failure so the item's own use still happens — a player holding a bucket at a canteen is
-	 * trying to use the bucket.
-	 */
-	@Override
-	protected ItemInteractionResult useItemOn(ItemStack held, BlockState state, Level level, BlockPos pos,
-		Player player, InteractionHand hand, BlockHitResult hit) {
-		if (!(level.getBlockEntity(pos) instanceof CanteenBlockEntity canteen))
-			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-		if (!CanteenBlockEntity.isFood(held))
-			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-		if (level.isClientSide())
-			return ItemInteractionResult.SUCCESS;
-
-		ItemStack left = canteen.stock(held);
-		if (left.getCount() == held.getCount())
-			return ItemInteractionResult.CONSUME; // full, and saying so by doing nothing
-		if (!player.isCreative())
-			player.setItemInHand(hand, left);
-		level.playSound(null, pos, SoundEvents.ITEM_FRAME_ADD_ITEM, SoundSource.BLOCKS, 0.7F, 1.2F);
-		return ItemInteractionResult.CONSUME;
-	}
-
-	/** An empty hand takes the last stack back, so a canteen filled by mistake is not a loss. */
-	@Override
-	protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
-		BlockHitResult hit) {
-		if (!(level.getBlockEntity(pos) instanceof CanteenBlockEntity canteen))
-			return InteractionResult.PASS;
-		if (level.isClientSide())
-			return InteractionResult.SUCCESS;
-
-		ItemStack taken = canteen.takeBack();
-		if (taken.isEmpty())
-			return InteractionResult.CONSUME;
-
-		player.getInventory()
-			.placeItemBackInInventory(taken);
-		level.playSound(null, pos, SoundEvents.ITEM_FRAME_REMOVE_ITEM, SoundSource.BLOCKS, 0.7F, 1.2F);
-		return InteractionResult.CONSUME;
 	}
 
 	/**
