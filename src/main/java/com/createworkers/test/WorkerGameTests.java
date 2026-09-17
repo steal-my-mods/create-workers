@@ -58,6 +58,7 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.monster.ZombieVillager;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.item.Items;
@@ -1202,11 +1203,16 @@ public class WorkerGameTests {
 			"a canteen should refuse everything that is not food, and it kept "
 				+ (rubble.getCount() - refused.getCount()) + " cobblestone");
 
-		// Stew is food with no nutrition worth arguing about and a stack size of one -- worth one
-		// assertion because "food" here is the item's own component and not a list kept by this mod,
-		// which is the only version of the rule that is still right the day a mod adds a bread.
-		helper.assertTrue(ItemHandlerHelper.insertItem(stock, new ItemStack(Items.MUSHROOM_STEW), false)
-			.isEmpty(), "a canteen should take any food, not a list of the ones we thought of");
+		// Cooked beef is food to a *player* and not to a villager, and this is the assertion that
+		// matters: a villager eats bread, potatoes, carrots and beetroot, and nothing else. The filter
+		// asked for a FOOD component at first -- the obvious reading -- and a canteen of cooked beef
+		// then read as stocked on the comparator and through the goggles while feeding nobody. The one
+		// promise this block makes is that a hungry villager sent to it finds something it can eat.
+		helper.assertTrue(!ItemHandlerHelper.insertItem(stock, new ItemStack(Items.COOKED_BEEF, 8), false)
+			.isEmpty(), "a canteen should refuse food a villager will not eat");
+		for (Item edible : Villager.FOOD_POINTS.keySet())
+			helper.assertTrue(CanteenBlockEntity.isFood(new ItemStack(edible)),
+				"a canteen should take everything a villager eats, and refused " + edible);
 		helper.succeed();
 	}
 

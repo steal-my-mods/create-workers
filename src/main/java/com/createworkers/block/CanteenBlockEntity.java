@@ -15,7 +15,7 @@ import com.simibubi.create.foundation.utility.CreateLang;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.network.chat.Component;
@@ -38,9 +38,8 @@ import net.neoforged.neoforge.items.ItemStackHandler;
  * Item Hatch, and a worker delivering into any of them. Nothing goes in by hand, so there is no
  * second place for the rule to live and no second place for it to be forgotten.
  *
- * <p>Food is decided by the item's own {@code FOOD} component rather than by a list kept here. A list
- * would be wrong the day any mod adds a bread, and the component is exactly the question being
- * asked — the same one {@code Villager.wantsMoreFood} and {@code FOOD_POINTS} are built on.
+ * <p>Food is <b>vanilla's four</b> — {@code Villager.FOOD_POINTS}, which is public — and not everything
+ * carrying a {@code FOOD} component. See {@link #isFood} for why the obvious reading is the wrong one.
  */
 public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInformation {
 
@@ -86,9 +85,28 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		super(CWBlockEntities.CANTEEN.get(), pos, state);
 	}
 
-	/** @return whether this is something a villager would eat, which is the whole of what a canteen takes. */
+	/**
+	 * @return whether this is something a <em>villager</em> will eat, which is the whole of what a
+	 *         canteen takes.
+	 *
+	 * <p><b>Vanilla's four, not everything edible.</b> This asked for a {@code FOOD} component at
+	 * first, which is the obvious reading of "food" and the wrong one here: a villager eats bread,
+	 * potatoes, carrots and beetroot and nothing else — {@code Villager.FOOD_POINTS} is the whole
+	 * list, and it is public, so there is no guessing involved. A canteen full of cooked chicken
+	 * satisfied the component test, read as stocked on the comparator and through the goggles, and
+	 * would have fed nobody. The one promise this block makes is that a hungry villager sent to it
+	 * finds something it can eat, and the broad filter made that promise false.
+	 *
+	 * <p>Refusing at the door rather than accepting and ignoring is the same choice the hard hat makes
+	 * about a chest: a block that takes what it cannot use is a block whose readouts lie.
+	 */
 	public static boolean isFood(ItemStack stack) {
-		return !stack.isEmpty() && stack.has(DataComponents.FOOD);
+		return !stack.isEmpty() && Villager.FOOD_POINTS.containsKey(stack.getItem());
+	}
+
+	/** @return what {@code stack}'s item is worth to a villager, or zero if it is not food. */
+	public static int foodPoints(ItemStack stack) {
+		return stack.isEmpty() ? 0 : Villager.FOOD_POINTS.getOrDefault(stack.getItem(), 0);
 	}
 
 	/** @return the stock as an inventory: what a funnel, a chute, a belt or a hopper holds. */
