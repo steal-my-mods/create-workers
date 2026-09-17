@@ -21,6 +21,7 @@ public class CWConfig {
 	public static final ModConfigSpec.IntValue MAX_TARGET_SPREAD;
 	/** How many inventories one hat may be programmed with. */
 	public static final ModConfigSpec.IntValue MAX_TARGETS;
+	public static final ModConfigSpec.IntValue STATION_RANGE;
 	/** Ticks a worker waits after completing a transfer before looking for more work. */
 	public static final ModConfigSpec.IntValue TRANSFER_COOLDOWN;
 	/** Movement speed modifier applied to walking workers. */
@@ -64,6 +65,16 @@ public class CWConfig {
 				"a single worker's beat, checked as you assign them. The job site is the centre of the",
 				"box the targets span; hiring measures this full distance from it.")
 			.defineInRange("maxTargetSpread", 48, 8, 256);
+
+		STATION_RANGE = builder
+			.comment("How far a Worker Station's work may be from the Station itself, measured to the",
+				"middle of the hat's targets. This is a radius from the block, and a different thing",
+				"from maxTargetSpread, which is how wide one hat's own beat may be.",
+				"A Station hires Villagers standing next to it and sends them to the work, so the gap",
+				"between the two is a walk somebody has to make: keep it inside a Villager's pathing",
+				"range or they arrive slowly, or not at all. A job programmed further off than this is",
+				"held in the rack and marked out of range rather than staffed.")
+			.defineInRange("stationRange", 32, 8, 256);
 
 		MAX_TARGETS = builder
 			.comment("How many inventories one hard hat may be programmed with.",

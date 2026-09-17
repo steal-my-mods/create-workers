@@ -45,6 +45,8 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 	/** A shift this job wants somebody on, and one somebody is actually on. */
 	private static final int WANTED = 0xFF_B6A44A;
 	private static final int COVERED = 0xFF_6A9E43;
+	/** A job that cannot be staffed at all, which is a different thing from one that is short. */
+	private static final int UNREACHABLE = 0xFF_A8503C;
 
 	private static final int NAME_X = 22;
 	private static final int NAME_WIDTH = 62;
@@ -131,9 +133,14 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 			return;
 		}
 
+		// A job whose work is too far from this block is never staffed, and the reason is not
+		// something a player can see from the rack or from the block. Saying so in the row is the
+		// difference between a station that is short and a station that is broken.
+		boolean reachable = menu.contentHolder == null || menu.contentHolder.workIsInRange(index);
+
 		graphics.drawString(font, font.plainSubstrByWidth(job.hat()
 			.getHoverName()
-			.getString(), NAME_WIDTH), jx + NAME_X, jy + 5, LABEL, false);
+			.getString(), NAME_WIDTH), jx + NAME_X, jy + 5, reachable ? LABEL : UNREACHABLE, false);
 
 		for (Shift shift : Shift.VALUES) {
 			int tx = jx + FIRST_TOGGLE_X + shift.ordinal() * TOGGLE_WIDTH;
@@ -141,9 +148,10 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 			boolean covered = job.worker(shift) != null;
 			// A shift the job does not run reads as an empty seat, one it runs reads as a raised button,
 			// and one somebody is on is the only bright thing in the row -- which makes "who is short"
-			// the question a glance answers.
-			bevel(graphics, tx, jy + 2, TOGGLE_WIDTH - 2, TOGGLE_HEIGHT, !runs ? WELL : covered ? COVERED : WANTED,
-				runs);
+			// the question a glance answers. Out of range overrides the lot: those seats will never be
+			// filled, so showing them as merely wanting somebody would be a lie.
+			int colour = !runs ? WELL : !reachable ? UNREACHABLE : covered ? COVERED : WANTED;
+			bevel(graphics, tx, jy + 2, TOGGLE_WIDTH - 2, TOGGLE_HEIGHT, colour, runs);
 		}
 
 		// Up and down run through the whole rack rather than stopping at the foot of a column, because
@@ -190,6 +198,14 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 				.append(station.positions(shift));
 		}
 		graphics.drawString(font, line.toString(), x + WorkerStationMenu.FIRST_COLUMN_X, readoutY, LABEL, false);
+
+		int stranded = 0;
+		for (int i = 0; i < WorkerStationBlockEntity.MAX_SLOTS; i++)
+			if (station.jobAt(i) != null && !station.workIsInRange(i))
+				stranded++;
+		if (stranded > 0)
+			graphics.drawString(font, Component.translatable("createworkers.station.out_of_range", stranded),
+				x + WorkerStationMenu.FIRST_COLUMN_X, readoutY + 10, UNREACHABLE, false);
 	}
 
 	private void renderInventoryWells(GuiGraphics graphics, int x, int y) {

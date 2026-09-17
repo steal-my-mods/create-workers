@@ -99,6 +99,7 @@ public class WorkerStationGameTests {
 
 	private static int absenteeWas = 6000;
 	private static int wanderRadiusWas = 12;
+	private static int stationRangeWas = 32;
 
 	private static final int STOCK = 16;
 	/** Long enough for the brain to acquire a point of interest and the station to notice. */
@@ -142,6 +143,21 @@ public class WorkerStationGameTests {
 		CWConfig.ABSENTEE_TIMEOUT.set(absenteeWas);
 		CWConfig.WANDER_RADIUS.set(wanderRadiusWas);
 		level.setDayTime(WORKING_HOURS);
+	}
+
+	/**
+	 * A range so tight that the ordinary test site's own work is outside it, which is how "too far to
+	 * staff" is tested without building targets in a world the other tests share.
+	 */
+	@BeforeBatch(batch = "station_range")
+	public static void shrinkTheRange(ServerLevel level) {
+		stationRangeWas = CWConfig.STATION_RANGE.get();
+		CWConfig.STATION_RANGE.set(1);
+	}
+
+	@AfterBatch(batch = "station_range")
+	public static void restoreTheRange(ServerLevel level) {
+		CWConfig.STATION_RANGE.set(stationRangeWas);
 	}
 
 	/**
@@ -448,6 +464,53 @@ public class WorkerStationGameTests {
 			.thenExecute(() -> station(helper).renameJob(0, "   "))
 			.thenExecute(() -> helper.assertTrue(!villager.hasCustomName(),
 				"clearing a job's name should clear its worker's"))
+			.thenSucceed();
+	}
+
+
+	/**
+	 * A station will not hire for work it cannot send anybody to.
+	 *
+	 * <p>Nothing bounded the two before. A hat programmed a thousand blocks away turned a station into
+	 * a villager grinder: it hires whoever is standing next to it, employs them to a job site they will
+	 * never reach, the leash walks them at it until the stall clocks give up and the absentee timeout
+	 * strikes them off — and then it hires the next one and does the same, converting every villager in
+	 * range in turn.
+	 *
+	 * <p>Tested by shrinking the range rather than by putting the work far away: a target has to be a
+	 * real block, and a test that scattered depots a thousand blocks out would be building them in a
+	 * world the other tests are running in.
+	 *
+	 * <p>The hat is still accepted into the rack. One already in a rack can be taken out and
+	 * reprogrammed somewhere else, so a rule that only ran at the door would miss the case that matters.
+	 */
+	@GameTest(template = "work_site", batch = "station_range", timeoutTicks = 400)
+	public static void aStationWillNotStaffWorkItCannotReach(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+
+		// Not the usual programme: the test site puts its two depots symmetrically about the station,
+		// so their centre lands exactly on the block and no range however small would be exceeded.
+		// One target, off to a corner, gives the job a centre the station is measurably away from.
+		ItemStack hat = new ItemStack(CWItems.HARD_HAT.get());
+		HardHatItem.setProgram(hat, WorkerProgram.of(List.of(target(helper, SOURCE))));
+		station(helper).putHat(0, hat);
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+
+		helper.startSequence()
+			.thenExecute(() -> helper.assertTrue(!station(helper).workIsInRange(0),
+				"precondition: with the range shrunk, the job should read as out of range"))
+			.thenExecute(() -> helper.assertTrue(station(helper).jobAt(0) != null,
+				"and the hat should still be in the rack -- it is held, not refused"))
+			// Long enough that a station which was going to hire would have done so several times over.
+			.thenExecuteAfter(HIRING_TICKS * 2, () -> {
+				helper.assertTrue(!Workers.isEmployed(villager),
+					"a station should not hire for work nobody could walk to");
+				helper.assertTrue(villager.getVillagerData()
+					.getProfession() != CWProfessions.WORKER.get(),
+					"and it should not have been made a Worker and then abandoned");
+			})
 			.thenSucceed();
 	}
 

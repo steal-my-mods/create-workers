@@ -29,7 +29,6 @@
   "createworkers.ponder.hard_hat.text_3": "The first Right-Click marks a block as an Input, a second turns it into an Output",
   "createworkers.ponder.hard_hat.text_4": "One worker walks between all of them, so every assigned block has to stay within reach of every other",
   "createworkers.ponder.hard_hat.text_5": "A programmed Hat is a job. The next page hands one to somebody",
-
   "createworkers.ponder.worker_station.header": "Putting Workers to Work",
   "createworkers.ponder.worker_station.text_1": "A Worker Station is where a factory's jobs live, and where Villagers are taken on",
   "createworkers.ponder.worker_station.text_2": "Right-Click it to open the rack, and put a programmed Hard Hat into a slot",
@@ -40,7 +39,6 @@
   "createworkers.ponder.worker_station.text_7": "A rack holds up to twelve jobs, and each one can run on any of the three shifts",
   "createworkers.ponder.worker_station.text_8": "Its face is the roster: one lamp per job, lit when the job has all its Workers and dim when it is short",
   "createworkers.ponder.worker_station.text_9": "Take a Hat back out to end its job and let its Workers go",
-
   "createworkers.ponder.working_hours.header": "Shifts and Sleep",
   "createworkers.ponder.working_hours.text_1": "At the end of its crew's day a Worker downs tools, walks to a bed and sleeps until morning",
   "createworkers.ponder.working_hours.text_2": "A job can run up to three crews — day, evening and night — so one Hat can be covered around the clock",
@@ -48,5 +46,6 @@
   "createworkers.ponder.working_hours.text_4": "Sneak and Right-Click a Bed while holding the Hat to say where that Worker sleeps",
   "createworkers.ponder.working_hours.text_5": "Given no Bed, they find an unclaimed one near their work — but only one they can walk to",
   "createworkers.ponder.working_hours.text_6": "Right-Click an Enderman with a Hat to put it to work. They keep no hours, so a line staffed with them runs through the night",
-  "createworkers.ponder.working_hours.text_7": "At first light they are up and back at work"
+  "createworkers.ponder.working_hours.text_7": "At first light they are up and back at work",
+  "createworkers.station.out_of_range": "%s job(s) too far from this Station to staff"
 }

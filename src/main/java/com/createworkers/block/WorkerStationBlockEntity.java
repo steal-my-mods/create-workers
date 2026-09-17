@@ -616,6 +616,31 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * vanilla's part is everything that still works: the profession, the job-site memory that keeps
 	 * {@code ResetProfession} off a worker's back, and the tickets that say who is still alive.
 	 */
+	/**
+	 * Whether a job's work is close enough to this block to be worth hiring for.
+	 *
+	 * <p>Measured to {@link WorkerProgram#centre()}, the middle of the hat's targets, because that is
+	 * what a worker is given as its job site and what its leash is anchored to. It is a <b>radius from
+	 * the block</b> and deliberately not {@code maxTargetSpread}, which is a diameter across one hat's
+	 * own targets: a job may be wide and near, or narrow and far, and only the second is a problem.
+	 *
+	 * <p>Out of range is held rather than refused. A hat is accepted into the rack either way, because
+	 * a hat already in one can be taken out and reprogrammed somewhere else, and a rule that only ran
+	 * at the door would miss exactly that — this way the same check covers both, and the screen can say
+	 * which job is the problem instead of a slot silently declining to accept anything.
+	 */
+	public boolean workIsInRange(int index) {
+		Slot slot = jobAt(index);
+		if (slot == null)
+			return false;
+		WorkerProgram programme = HardHatItem.getProgram(slot.hat);
+		if (!programme.hasTargets())
+			return false;
+		int range = CWConfig.STATION_RANGE.get();
+		return programme.centre()
+			.distSqr(worldPosition) <= (double) range * range;
+	}
+
 	private void recruit(ServerLevel server) {
 		Position vacancy = nextVacancy();
 		if (vacancy == null)
@@ -625,6 +650,13 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		// it, which is a villager stuck as a Worker for the rest of the world's life.
 		if (!HardHatItem.getProgram(slots[vacancy.slot()].hat)
 			.hasTargets())
+			return;
+		// And not for work that is too far from this block to walk to. Nothing bounded the two before,
+		// so a hat programmed a thousand blocks away turned a station into a villager grinder: it hires
+		// whoever is standing next to it, employs them to a job site they will never reach, the leash
+		// walks them at it until the stall clocks give up, the absentee timeout strikes them off -- and
+		// then it hires the next one and does it again, converting every villager in range in turn.
+		if (!workIsInRange(vacancy.slot()))
 			return;
 
 		AABB nearby = new AABB(worldPosition).inflate(RECRUIT_RANGE);

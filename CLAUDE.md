@@ -219,6 +219,24 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   matters: the spread test is pairwise, so the length has to be vouched for before it runs, or a
   programme that fits inside the codec's own limit is hundreds of millions of comparisons on the
   server thread.
+- **A station has to bound how far its work is, and nothing did.** `maxTargetSpread` bounds one hat's
+  targets *against each other* — a diameter — and says nothing about where that hat is put. So a hat
+  programmed a thousand blocks from the Station it goes into was accepted, and turned the block into a
+  **villager grinder**: it hires whoever is standing next to it (`RECRUIT_RANGE`, 16 blocks from the
+  *block*), employs them to a job site at `WorkerProgram.centre()` which is a thousand blocks away, the
+  leash reads them as off-station and walks them at it, the stall clocks give up, the absentee timeout
+  strikes them off — and it hires the next villager and does it again, converting every villager in
+  range in turn. `stationRange` is a **radius from the block to the programme's centre** and
+  deliberately a different setting: a job may be wide and near, or narrow and far, and only the second
+  is a problem. Default 32, which keeps the commute inside a villager's 48-block follow range so it is
+  one path rather than a leapfrog.
+  **Out of range is held, not refused.** A hat already in a rack can be taken out and reprogrammed
+  somewhere else, so a rule that only ran at the door would miss the case that matters; the same check
+  covers both, `recruit` declines to staff it, and the screen marks the row so the stall has a visible
+  cause. (`aStationWillNotStaffWorkItCannotReach`, mutation-checked.) **Testing it wants a shrunken
+  range, not distant work** — a target has to be a real block, and the test world is shared — and note
+  that the work site puts its two depots symmetrically about the station, so their centre lands exactly
+  on the block and no range however small is ever exceeded by the ordinary programme.
 - **Range is a property of the programme, not of a position.** `maxTargetSpread` is a *diameter*:
   every pair of a hat's targets must be within it, checked in `HatSelectionHandler` as you click and
   re-checked server-side in `ConfigureHatPacket` (never trust the client). The **job site** is
