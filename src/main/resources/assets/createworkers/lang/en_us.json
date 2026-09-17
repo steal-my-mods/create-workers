@@ -33,15 +33,14 @@
   "createworkers.ponder.hard_hat.text_5": "A programmed Hat is a job. The next page hands one to somebody",
 
   "createworkers.ponder.worker_station.header": "Putting Workers to Work",
-  "createworkers.ponder.worker_station.text_1": "A Worker Station is where jobs live. Villagers are hired by one, and no other way",
-  "createworkers.ponder.worker_station.text_2": "Put a programmed Hard Hat into it to open a job",
-  "createworkers.ponder.worker_station.text_3": "The Station takes on an unemployed Villager nearby — one it can walk to",
-  "createworkers.ponder.worker_station.text_4": "It wears a copy of the Hat. The Hat itself stays in the Station",
+  "createworkers.ponder.worker_station.text_1": "A Worker Station is where a factory's jobs live, and where Villagers are taken on",
+  "createworkers.ponder.worker_station.text_2": "Right-Click it to open the rack, and put a programmed Hard Hat into a slot",
+  "createworkers.ponder.worker_station.text_3": "A Villager nearby that it can walk to is taken on for the job",
+  "createworkers.ponder.worker_station.text_4": "It wears a copy of the Hat. The Hat itself stays in the rack",
   "createworkers.ponder.worker_station.text_5": "Then it works the Hat's beat, carrying items from the Inputs to the Outputs",
-  "createworkers.ponder.worker_station.text_6": "Because the job never left the block, a Worker that dies leaves it behind — and the next Villager along takes it up",
-  "createworkers.ponder.worker_station.text_7": "Right-Click the Station to open its rack: up to twelve jobs, each with its own shifts",
-  "createworkers.ponder.worker_station.text_8": "Taking a Hat back out ends that job and lets its Workers go",
-  "createworkers.ponder.worker_station.text_9": "Endermen cannot use a Station. They are still hired by hand, Right-Clicked with the Hat",
+  "createworkers.ponder.worker_station.text_6": "Because the job never leaves the block, a Worker that is lost leaves it behind — and the next Villager along takes it up",
+  "createworkers.ponder.worker_station.text_7": "A rack holds up to twelve jobs, and each one can run on any of the three shifts",
+  "createworkers.ponder.worker_station.text_8": "Take a Hat back out to end its job and let its Workers go",
 
   "createworkers.ponder.working_hours.header": "Shifts and Sleep",
   "createworkers.ponder.working_hours.text_1": "At the end of its crew's day a Worker downs tools, walks to a bed and sleeps until morning",
@@ -49,6 +48,6 @@
   "createworkers.ponder.working_hours.text_3": "Whatever is already in their hands is delivered first — nobody clocks off holding a stack",
   "createworkers.ponder.working_hours.text_4": "Sneak and Right-Click a Bed while holding the Hat to say where that Worker sleeps",
   "createworkers.ponder.working_hours.text_5": "Given no Bed, they find an unclaimed one near their work — but only one they can walk to",
-  "createworkers.ponder.working_hours.text_6": "Endermen keep no hours — a line staffed with them runs through the night",
+  "createworkers.ponder.working_hours.text_6": "Right-Click an Enderman with a Hat to put it to work. They keep no hours, so a line staffed with them runs through the night",
   "createworkers.ponder.working_hours.text_7": "At first light they are up and back at work"
 }

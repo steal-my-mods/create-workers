@@ -95,7 +95,7 @@ public class WorkerStationScene {
 
 		scene.overlay()
 			.showText(80)
-			.text("A Worker Station is where jobs live. Villagers are hired by one, and no other way")
+			.text("A Worker Station is where a factory's jobs live, and where Villagers are taken on")
 			.attachKeyFrame()
 			.pointAt(stationTop)
 			.placeNearTarget();
@@ -105,7 +105,6 @@ public class WorkerStationScene {
 
 		scene.overlay()
 			.showControls(stationTop, Pointing.DOWN, 30)
-			.withItem(hat)
 			.rightClick();
 		scene.idle(7);
 		// The plate ships the Station empty, which is not decoration: an empty one is not a job site
@@ -116,7 +115,7 @@ public class WorkerStationScene {
 			.indicateSuccess(STATION);
 		scene.overlay()
 			.showText(70)
-			.text("Put a programmed Hard Hat into it to open a job")
+			.text("Right-Click it to open the rack, and put a programmed Hard Hat into a slot")
 			.attachKeyFrame()
 			.colored(PonderPalette.GREEN)
 			.pointAt(stationTop)
@@ -134,12 +133,12 @@ public class WorkerStationScene {
 		scene.idle(15);
 
 		scene.overlay()
-			.showText(70)
-			.text("The Station takes on an unemployed Villager nearby — one it can walk to")
+			.showText(60)
+			.text("A Villager nearby that it can walk to is taken on for the job")
 			.attachKeyFrame()
 			.pointAt(UNEMPLOYED.add(EYE))
 			.placeNearTarget();
-		scene.idle(20);
+		scene.idle(25);
 
 		scene.addInstruction(new WalkInstruction(worker, UNEMPLOYED, BESIDE_STATION, WALK_TO_STATION));
 		scene.idle(WALK_TO_STATION + 5);
@@ -150,7 +149,7 @@ public class WorkerStationScene {
 
 		scene.overlay()
 			.showText(70)
-			.text("It wears a copy of the Hat. The Hat itself stays in the Station")
+			.text("It wears a copy of the Hat. The Hat itself stays in the rack")
 			.attachKeyFrame()
 			.pointAt(stationTop)
 			.placeNearTarget();
@@ -192,7 +191,7 @@ public class WorkerStationScene {
 			.showOutline(PonderPalette.GREEN, STATION, station, 80);
 		scene.overlay()
 			.showText(80)
-			.text("Because the job never left the block, a Worker that dies leaves it behind — and the next Villager along takes it up")
+			.text("Because the job never leaves the block, a Worker that is lost leaves it behind — and the next Villager along takes it up")
 			.attachKeyFrame()
 			.colored(PonderPalette.GREEN)
 			.pointAt(stationTop)
@@ -205,7 +204,7 @@ public class WorkerStationScene {
 		scene.idle(7);
 		scene.overlay()
 			.showText(80)
-			.text("Right-Click the Station to open its rack: up to twelve jobs, each with its own shifts")
+			.text("A rack holds up to twelve jobs, and each one can run on any of the three shifts")
 			.attachKeyFrame()
 			.pointAt(stationTop)
 			.placeNearTarget();
@@ -213,17 +212,9 @@ public class WorkerStationScene {
 
 		scene.overlay()
 			.showText(80)
-			.text("Taking a Hat back out ends that job and lets its Workers go")
+			.text("Take a Hat back out to end its job and let its Workers go")
 			.attachKeyFrame()
 			.pointAt(stationTop)
-			.placeNearTarget();
-		scene.idle(90);
-
-		scene.overlay()
-			.showText(80)
-			.text("Endermen cannot use a Station. They are still hired by hand, Right-Clicked with the Hat")
-			.attachKeyFrame()
-			.pointAt(middle)
 			.placeNearTarget();
 		scene.idle(90);
 

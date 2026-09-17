@@ -2,18 +2,14 @@ package com.createworkers.block;
 
 import org.jetbrains.annotations.Nullable;
 
-import com.createworkers.item.HardHatItem;
 import com.createworkers.registry.CWBlockEntities;
 import com.mojang.serialization.MapCodec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.Containers;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
@@ -78,30 +74,13 @@ public class WorkerStationBlock extends BaseEntityBlock {
 		return createTickerHelper(type, CWBlockEntities.WORKER_STATION.get(), WorkerStationBlockEntity::serverTick);
 	}
 
-	/** A hat in hand goes in; anything else is not a station's business. */
-	@Override
-	protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
-		Player player, InteractionHand hand, BlockHitResult hit) {
-		if (!(stack.getItem() instanceof HardHatItem))
-			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-		if (!(level.getBlockEntity(pos) instanceof WorkerStationBlockEntity station))
-			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-
-		if (level.isClientSide())
-			return ItemInteractionResult.sidedSuccess(true);
-		if (!station.addHat(stack))
-			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-		if (!player.getAbilities().instabuild)
-			stack.shrink(1);
-		return ItemInteractionResult.SUCCESS;
-	}
-
 	/**
-	 * An empty hand opens the rack.
+	 * Right-Clicking opens the rack, whatever is in the player's hand.
 	 *
-	 * <p>Which is also how a job is ended, there being no other way to fire a villager: take its hat
-	 * out of the rack. A hat in hand still goes straight in without opening anything, the way a
-	 * lectern takes a book — a one-job station should not need a screen to set up.
+	 * <p>A hat in hand used to go straight into the first free place without opening anything, on the
+	 * reasoning that a one-job station should not need a screen. In practice it surprises: the rack is
+	 * where a player expects to put a hat once they know the screen exists, and a click that silently
+	 * files one somewhere reads as the block taking it. One gesture, one result.
 	 */
 	@Override
 	protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
@@ -110,6 +89,7 @@ public class WorkerStationBlock extends BaseEntityBlock {
 			return InteractionResult.PASS;
 		if (level.isClientSide())
 			return InteractionResult.SUCCESS;
+
 
 		player.openMenu(new SimpleMenuProvider((id, inventory, opener) ->
 			WorkerStationMenu.create(id, inventory, station), state.getBlock()

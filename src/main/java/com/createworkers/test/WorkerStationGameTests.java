@@ -1126,10 +1126,16 @@ public class WorkerStationGameTests {
 	 */
 	private static Villager claimant(GameTestHelper helper) {
 		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
-		// Held where it stands. An unemployed villager strolls, and one that strolls out of a station's
-		// recruiting range between two of its twenty-tick looks is a test that fails on the villager's
-		// legs rather than on the rack's bookkeeping. Nothing else is needed: the station finds it,
-		// path-checks it and hires it, which is the whole of hiring now.
+		// Held where it stands, so a test about a rack's bookkeeping does not turn on a villager's
+		// legs. Nothing else is needed to get it hired: the station finds it, path-checks it and takes
+		// it on, which is the whole of hiring.
+		villager.setNoAi(true);
+		// And standing on the floor, which has to be said out loud. A villager with no AI never runs
+		// travel(), so nothing applies gravity and nothing ever sets onGround -- and
+		// PathNavigation.createPath refuses outright for a mob it believes is in mid-air, so the
+		// station's path check fails and it is never hired at all. Nothing recomputes the flag for a
+		// mob that does not move, which is what makes setting it here enough.
+		villager.setOnGround(true);
 		return villager;
 	}
 

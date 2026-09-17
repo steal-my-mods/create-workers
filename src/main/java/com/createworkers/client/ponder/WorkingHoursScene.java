@@ -204,7 +204,7 @@ public class WorkingHoursScene {
 
 		scene.overlay()
 			.showText(110)
-			.text("Endermen keep no hours — a line staffed with them runs through the night")
+			.text("Right-Click an Enderman with a Hat to put it to work. They keep no hours, so a line staffed with them runs through the night")
 			.attachKeyFrame()
 			.pointAt(BESIDE_INPUT.add(TALL_EYE))
 			.placeNearTarget();

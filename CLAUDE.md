@@ -278,6 +278,19 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   `tools/generate_ponder_lang.py` reads the storyboards and rewrites only the
   `createworkers.ponder.*` block, and both workflows re-run it and fail on a diff. Run it after
   touching a scene; do not renumber by hand.
+- **Nothing a player reads should mention how the mod used to work.** Scene text, chat messages, item
+  tooltips and config comments describe what the mod does, full stop — a player has no use for the
+  history and no way to tell a description from a correction. ("Endermen are *still* hired by hand"
+  was the one that got noticed.) The exception is `docs/`, whose entire purpose is the reasoning
+  including what was tried and dropped, and code comments, which are for whoever changes the thing
+  next. Grep the lang file and `CWConfig`'s comments for *still, no longer, used to, any more,
+  instead of, as before* when touching either.
+- **Ponder text windows overlap if the clock is not counted, and only `idle` advances it.** A
+  `showText(d)` at clock T is on screen until T + d; `showControls`, `addInstruction` and a
+  non-blocking `TickingInstruction` all return immediately and move nothing. So the next `showText`
+  has to be at least `d` further along in `idle` calls, and getting it wrong puts two windows on
+  screen at once — which nothing catches, because Ponder does not load on a dedicated server. Walk
+  the calls in order and add up the `idle`s.
 - **A Ponder scene is the mod's most easily-forgotten documentation, and the only one shipped inside
   the jar.** The hiring scene went on teaching "right-click a villager with a hat" for several
   versions after stations took that away — which is the worst kind of wrong, because nothing in the
@@ -854,6 +867,12 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   cleared on the tick of the death: assert that a worker never comes *back* after being struck off
   (`thenExecuteFor` over the animation), never that it is absent, or the assertion fires on the stale
   entry rather than on the bug.
+- **A villager with `setNoAi` never lands, and an airborne mob cannot be path-checked.** Holding a
+  test villager still is the right instinct — an unemployed one strolls, and a test about a rack's
+  bookkeeping should not turn on its legs — but nothing applies gravity to a mob whose
+  `isEffectiveAi` is false, so `onGround` stays false forever and `PathNavigation.createPath` refuses
+  outright. A station path-checks everybody it recruits, so such a villager is simply never hired.
+  Set `setOnGround(true)` alongside it; nothing recomputes the flag for a mob that does not move.
 - **Never build a game test on two villagers finding the same station by themselves.** `AcquirePoi`
   scans 48 blocks, which on the test grid reaches several other tests' stations, and a claim it loses
   puts that position on a backoff that grows to 400 ticks — so whether the second villager is hired

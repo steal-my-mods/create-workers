@@ -44,8 +44,9 @@ hundred from the far end of the run is refused, because one worker would have to
 Both limits tell you as you click, rather than letting you discover later that a target quietly went
 missing.
 
-**3. Let them hire themselves.** Put the programmed hat into a **Worker Station** and an unemployed
-villager nearby will be taken on for it, the way an unclaimed lectern finds itself a librarian.
+**3. Let them hire themselves.** Right-click a **Worker Station** to open its rack, drop the
+programmed hat into a slot, and an unemployed villager nearby will be taken on for it — the way an
+unclaimed lectern finds itself a librarian.
 
 ```
 P H P      P = any planks
@@ -65,7 +66,7 @@ fallen somewhere it cannot climb out of — the station gives the job away after
 hires a replacement, so a line never quietly runs short over one lost villager. A factory built on
 stations repairs its own workforce.
 
-Right-click the station empty-handed to open the rack. Each job shows its hat, three shift toggles —
+Right-click the station to open the rack. Each job shows its hat, three shift toggles —
 sunken for off, yellow for wanted, green for covered — and arrows to move it up or down the order.
 Underneath is the count for each crew. **Click a job's name to rename it**, no anvil and no experience:
 a hat called "Smelting feed" is a job you can find again when something goes wrong with it. Taking a hat out ends that job and puts its workers out of work,

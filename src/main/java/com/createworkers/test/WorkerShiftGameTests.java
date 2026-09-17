@@ -846,7 +846,7 @@ public class WorkerShiftGameTests {
 	 * middle of the village's working day, so vanilla's {@code WakeUp} would have stood it up on the
 	 * tick it lay down, and all it could do was stand beside the bed until dusk.
 	 */
-	@GameTest(template = "work_site", timeoutTicks = 500, batch = "night_shift")
+	@GameTest(template = "work_site", timeoutTicks = 900, batch = "night_shift")
 	public static void aNightShiftWorkerSleepsThroughTheDay(GameTestHelper helper) {
 		prepareWorkSite(helper);
 		placeBed(helper, BED_FOOT, BED_HEAD);

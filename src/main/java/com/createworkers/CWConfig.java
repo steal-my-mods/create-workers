@@ -123,7 +123,7 @@ public class CWConfig {
 		WORKING_HOURS = builder
 			.comment("Whether workers keep hours: down tools at the end of the day, walk to a bed and",
 				"sleep until morning. A sleeping worker moves nothing, so a line fed only by workers",
-				"stops overnight -- turn this off and they work around the clock as they always did.",
+				"stops overnight -- turn this off and they work around the clock.",
 				"Endermen are exempt whatever this says. They have no beds and no schedule.")
 			.define("workingHours", true);
 
