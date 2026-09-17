@@ -1101,6 +1101,12 @@ if the thinking changes — the point is that the analysis is not redone from sc
   refills itself. **Built, except the screen.** Holds the argument that a part-staffed shift produces
   nothing rather than less, why single-slot stations were rejected, and how a block advertises fewer
   openings than its point-of-interest type allows
+- `docs/phase-4.md` — leisure, food and trades **as agreed before building**: the work/leisure/sleep
+  schedule and why coverage fixes the working window at 8000, the canteen, and the trade list. Holds
+  three findings that moved the design — `Villager.foodLevel` is private so food has to be *items*,
+  the shift window is already `Activity.IDLE` so leisure is only "stop pinning", and `IDLE` carries
+  breeding and sharing while `MEET` would drag workers toward a village bell. Corrects
+  `shift-rotation.md` where the two disagree
 - `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,
   and the things a shared server still wants that this mod deliberately does not do
 
