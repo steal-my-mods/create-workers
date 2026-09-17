@@ -137,7 +137,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/ponder/WorkingHoursScene` | Third: crews, the last delivery of the day, walk to bed, sleep, the enderman night shift, morning |
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
 | `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own. Its job-site predicates match the worker station **and nothing else** |
-| `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over |
+| `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over; `FACING` turns the board at whoever placed it |
 | `block/WorkerStationBlockEntity` | A line's roster: an ordered rack of hats, the shifts each runs on, who is wearing them, and the point-of-interest tickets it holds back |
 | `block/WorkerStationMenu` | The rack as real slots, over Create's `MenuBase`. Its geometry constants are shared with the screen, because slots are placed before any screen exists |
 | `client/WorkerStationScreen` | The rack arranged: shift toggles, order arrows, staffing readout. Reads the block entity, never its own copy |
@@ -540,6 +540,23 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   because what it is really asserting is that nothing in the brain gets a veto over a second hire.
   **`PoiCompetitorScan` (CORE 2) is the same shape of hazard** and is avoided for the same reason:
   nothing gives a worker a `POTENTIAL_JOB_SITE` any more.
+- **A block is read by its silhouette before anything else, and the Station was a cube.** Every Create
+  block worth the name is recognisable as a shape with no texture at all — an Arm, a Funnel, a Depot —
+  and a full cube with a stripe painted on it reads as scenery. The Station is a plinth, two posts and
+  a posted board, which is a shape that says what it is, and `HAS_JOB` swaps the *board* rather than
+  the top face so it can be told at a glance from the side, which is how a block on a factory floor is
+  mostly seen. The board's face carries **no explicit UVs**, so Minecraft derives them from the
+  element's coordinates and the drawn pegs stay square and on the block grid; that is what ties the
+  art's window (x 2..14, y 1..11 of the sheet) to the box's position, and moving one means moving the
+  other.
+- **A blockstate file has to grow when a property does, and nothing but a test will say so.** Adding
+  `FACING` took the Station from two states to eight, and a state with no variant renders as the
+  black-and-magenta cube — silently, because resources are the client's business and the tests run on
+  a server. What a server can do is read its own jar:
+  `everyStationStateHasAModelAndEveryModelItsTextures` walks every possible `BlockState`, builds the
+  variant key the same way a resource pack does, and follows each model to its parent checking that
+  every texture it names is really there. Mutation-checked both ways — a dropped variant and a
+  misspelt texture.
 - **An empty station must not be a job site, and `HAS_JOB` is how.** The POI is registered only over
   the states with a hat in them. Register it over all of them and a villager crosses a village, is
   turned into a Worker on arrival, finds nothing to do — and can then never take another job, because

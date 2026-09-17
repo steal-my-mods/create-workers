@@ -56,7 +56,9 @@ BED_HEAD_STATE = ('minecraft:red_bed', {'facing': 'north', 'part': 'head', 'occu
 # what the scene is about -- has_job is the property the point of interest is
 # registered over, and the scene flips it when the hat goes in.
 STATION = (1, 1, 5)
-STATION_STATE = ('createworkers:worker_station', {'has_job': 'false'})
+# Facing south, which is the side a ponder camera looks in from -- a board turned
+# away from the viewer is a scene about the back of a block.
+STATION_STATE = ('createworkers:worker_station', {'has_job': 'false', 'facing': 'south'})
 
 
 # --- the smallest NBT writer that will do -------------------------------------

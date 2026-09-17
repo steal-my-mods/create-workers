@@ -8,10 +8,15 @@ import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.block.WorkerStationBlock;
@@ -50,6 +55,8 @@ import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -956,6 +963,96 @@ public class WorkerStationGameTests {
 					.getString()), "and survive being let go, rather than being cleared with the job's");
 			})
 			.thenSucceed();
+	}
+
+
+	/**
+	 * Every state the Worker Station can be in has a model, and every model has its textures.
+	 *
+	 * <p>Nothing else checks this. A blockstate file missing a variant renders as the black-and-magenta
+	 * cube, and a model naming a texture that is not there renders as the same thing — and both are
+	 * silent, because a resource pack is loaded by the client and the tests run on a server. What a
+	 * server <em>can</em> do is read its own jar and count.
+	 *
+	 * <p>The case that makes it worth having: adding a property to the block multiplies the number of
+	 * states, and it is the blockstate file rather than the code that has to grow to match. Adding
+	 * {@code facing} took the Station from two states to eight.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void everyStationStateHasAModelAndEveryModelItsTextures(GameTestHelper helper) {
+		JsonObject variants = readJson(helper, "/assets/createworkers/blockstates/worker_station.json")
+			.getAsJsonObject("variants");
+
+		for (BlockState state : CWBlocks.WORKER_STATION.get()
+			.getStateDefinition()
+			.getPossibleStates()) {
+			String key = variantKey(state);
+			helper.assertTrue(variants.has(key), "no blockstate variant for " + key);
+
+			JsonElement variant = variants.get(key);
+			String model = (variant.isJsonArray() ? variant.getAsJsonArray()
+				.get(0)
+				.getAsJsonObject() : variant.getAsJsonObject()).get("model")
+					.getAsString();
+			checkModel(helper, model);
+		}
+		helper.succeed();
+	}
+
+	/** The key a blockstate file uses: every property as name=value, sorted by name. */
+	private static String variantKey(BlockState state) {
+		return state.getProperties()
+			.stream()
+			.map(property -> property.getName() + "=" + nameOf(state, property))
+			.sorted()
+			.collect(java.util.stream.Collectors.joining(","));
+	}
+
+	private static <T extends Comparable<T>> String nameOf(BlockState state, Property<T> property) {
+		return property.getName(state.getValue(property));
+	}
+
+	/** Follows a model to its file, checks the textures it names exist, then follows its parent. */
+	private static void checkModel(GameTestHelper helper, String model) {
+		if (!model.startsWith(CreateWorkers.ID + ":"))
+			return; // vanilla's own, which ships with the game
+
+		String path = model.substring(model.indexOf(':') + 1);
+		JsonObject json = readJson(helper, "/assets/createworkers/models/" + path + ".json");
+
+		if (json.has("textures"))
+			for (java.util.Map.Entry<String, JsonElement> texture : json.getAsJsonObject("textures")
+				.entrySet()) {
+				String reference = texture.getValue()
+					.getAsString();
+				if (reference.startsWith("#") || !reference.startsWith(CreateWorkers.ID + ":"))
+					continue;
+				String file = "/assets/createworkers/textures/" + reference.substring(reference.indexOf(':') + 1)
+					+ ".png";
+				helper.assertTrue(exists(file), model + " names a texture that is not in the jar: " + file);
+			}
+
+		if (json.has("parent"))
+			checkModel(helper, json.get("parent")
+				.getAsString());
+	}
+
+	private static boolean exists(String resource) {
+		try (InputStream source = WorkerStationGameTests.class.getResourceAsStream(resource)) {
+			return source != null;
+		} catch (IOException failure) {
+			return false;
+		}
+	}
+
+	private static JsonObject readJson(GameTestHelper helper, String resource) {
+		try (InputStream source = WorkerStationGameTests.class.getResourceAsStream(resource)) {
+			helper.assertTrue(source != null, "missing from the jar: " + resource);
+			return JsonParser.parseReader(new InputStreamReader(source, StandardCharsets.UTF_8))
+				.getAsJsonObject();
+		} catch (IOException failure) {
+			throw new IllegalStateException("could not read " + resource, failure);
+		}
 	}
 
 	/**

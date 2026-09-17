@@ -1,8 +1,65 @@
 {
-  "parent": "minecraft:block/cube_bottom_top",
+  "_comment": "Authored facing north, so the board's front is the low-z face. blockstates/worker_station.json turns it. Written by hand rather than generated: it is four boxes, and a generator for four boxes is more to read than the boxes.",
+  "parent": "block/block",
   "textures": {
-    "top": "createworkers:block/worker_station_top",
-    "bottom": "minecraft:block/stripped_spruce_log_top",
-    "side": "createworkers:block/worker_station_side"
-  }
+    "particle": "createworkers:block/worker_station_base",
+    "base": "createworkers:block/worker_station_base",
+    "base_top": "createworkers:block/worker_station_base_top",
+    "post": "createworkers:block/worker_station_post",
+    "board": "createworkers:block/worker_station_board"
+  },
+  "elements": [
+    {
+      "__comment": "The plinth. Wide enough to read as furniture, low enough to see the board over.",
+      "from": [1, 0, 1],
+      "to": [15, 3, 15],
+      "faces": {
+        "down": {"texture": "#base_top", "cullface": "down"},
+        "up": {"texture": "#base_top"},
+        "north": {"texture": "#base"},
+        "south": {"texture": "#base"},
+        "west": {"texture": "#base"},
+        "east": {"texture": "#base"}
+      }
+    },
+    {
+      "__comment": "Left post, behind the board and holding it up.",
+      "from": [2, 3, 6],
+      "to": [4, 14, 9],
+      "faces": {
+        "down": {"texture": "#post"},
+        "up": {"texture": "#post"},
+        "north": {"texture": "#post"},
+        "south": {"texture": "#post"},
+        "west": {"texture": "#post"},
+        "east": {"texture": "#post"}
+      }
+    },
+    {
+      "__comment": "Right post.",
+      "from": [12, 3, 6],
+      "to": [14, 14, 9],
+      "faces": {
+        "down": {"texture": "#post"},
+        "up": {"texture": "#post"},
+        "north": {"texture": "#post"},
+        "south": {"texture": "#post"},
+        "west": {"texture": "#post"},
+        "east": {"texture": "#post"}
+      }
+    },
+    {
+      "__comment": "The board. Its UVs are the ones Minecraft derives from these coordinates, so the pegs drawn on the sheet land on the block grid instead of being stretched across it -- which is why the art sits in the window x 2..14, y 1..11. Move this box and move that window with it.",
+      "from": [2, 5, 4],
+      "to": [14, 15, 6],
+      "faces": {
+        "down": {"texture": "#board"},
+        "up": {"texture": "#board"},
+        "north": {"texture": "#board"},
+        "south": {"texture": "#board"},
+        "west": {"texture": "#board"},
+        "east": {"texture": "#board"}
+      }
+    }
+  ]
 }

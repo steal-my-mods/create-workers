@@ -407,6 +407,13 @@ villager standing in a hole. Harmless, and the factory carries on.
 Note the signal has to be *proximity to the work*, not *items moved*. A worker with nothing to haul
 is idle, not absent, and firing it for a quiet shift would be wrong.
 
+## What it looks like
+
+A plinth with two posts and a board pinned to it, facing whoever placed it. The shape is the point:
+Create's blocks are recognisable before their textures are, and the first version of this was a full
+cube with a hi-vis stripe, which reads as scenery. `HAS_JOB` changes the *board* rather than the top
+face, because a block on a factory floor is mostly seen from the side.
+
 ## Stress
 
 An earlier draft said the station's stress should **scale with the number of active workers**, on the
