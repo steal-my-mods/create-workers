@@ -28,6 +28,11 @@ reading the diff.
 
 ### Fixed
 
+- **Stations hire back villagers who have worked before, in preference to fresh ones.** Trading with a
+  Worker locks it to the job for good, the same way buying from a librarian does — so an out-of-work
+  Worker standing about is a villager that can never do anything else. A station now takes one of those
+  on ahead of an unemployed villager standing closer, which leaves your blank villagers free to become
+  farmers and librarians.
 - **A job's night shift no longer fights the day shift for one bed.** Every worker on a job wears a
   copy of the same hat, so they all shared the one bed you assigned it — and because a crew sleeps for
   longer than the gap between crews, two of them wanted it at once for better than a third of every

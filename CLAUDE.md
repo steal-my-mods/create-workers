@@ -762,6 +762,18 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   let go still wears it for the tick or two before `ResetProfession` clears it, so a station that
   hired anything wearing it re-hired the villager it had that moment released
   (`aWorkerWhoseShiftIsTurnedOffFinishesFirst` caught exactly that).
+  **And a former worker is hired ahead of a fresh villager, which distance-only sorting quietly
+  denied.** `recruit` ranked candidates purely by how close they stood, so the intent the whole
+  re-hiring route exists for -- a career labourer rather than a dead end -- was a coin toss, and worse
+  than one: only `RECRUIT_CANDIDATES` (3) are ever path-checked, so three blanks nearer the block shut
+  a former worker out *permanently*. The two are not worth the same to a player either: a career
+  worker is locked to the profession for good and can never take a village job or be repurposed, while
+  a villager on `NONE` is a farmer or a librarian nobody has assigned yet. `isCareerWorker` now sorts
+  first and distance breaks ties, which costs nothing because every candidate is already inside
+  `RECRUIT_RANGE`. (`aFormerWorkerIsHiredAheadOfAFreshVillager`, mutation-checked by restoring the
+  distance-only sort. It asserts once after a fixed wait rather than polling, because under the defect
+  the station hires the *other* villager and the vacancy is gone, so a poll just times out saying
+  nothing.)
   Also: **a worker can never restock by itself.** `WorkAtPoi` is what calls `shouldRestock`/`restock`
   and it requires a `JOB_SITE`, which a worker deliberately has none of — so trades are restocked at
   the start of a shift instead, guarded by vanilla's own public `shouldRestock()` so the twice-a-day

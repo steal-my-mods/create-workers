@@ -88,6 +88,8 @@ public class WorkerStationGameTests {
 	private static final BlockPos STATION = new BlockPos(5, 1, 5);
 	/** Right beside the station, so vanilla's two-block assignment range is never the variable. */
 	private static final BlockPos BESIDE_STATION = new BlockPos(5, 1, 6);
+	/** Further off than {@link #BESIDE_STATION}, but well inside recruiting range. */
+	private static final BlockPos BACK_OF_THE_QUEUE = new BlockPos(5, 1, 8);
 
 	/** A cell in the far corner, outside the tightened wander radius this batch runs with. */
 	private static final BlockPos CELL = new BlockPos(9, 1, 1);
@@ -213,6 +215,57 @@ public class WorkerStationGameTests {
 					+ villager.getVillagerData()
 						.getProfession());
 			helper.assertTrue(Workers.isEmployed(villager), "and the station should have handed it the hat");
+		});
+	}
+
+	/**
+	 * A villager who has done the job before is hired ahead of one who never has, even from further off.
+	 *
+	 * <p><b>The two candidates are not worth the same to a player, and hiring on distance alone threw
+	 * that away.</b> Vanilla will not reset a villager that has traded — {@code ResetProfession} wants
+	 * experience of zero and level one — so a Worker somebody has bought a stack of shafts from is
+	 * locked to the profession for good. It can never take a village job, never be repurposed, and left
+	 * un-hired it does nothing for the rest of the world's life. A villager on {@code NONE} is a farmer
+	 * or a librarian nobody has assigned yet, and hiring it spends that.
+	 *
+	 * <p>So "a career labourer rather than a dead end" — which is the whole reason {@code couldWork}
+	 * admits a former worker at all — was a coin toss on which of them happened to be standing closer.
+	 * Worse than a coin toss: only {@code RECRUIT_CANDIDATES} are ever path-checked, so three blanks
+	 * nearer the block shut a former worker out permanently rather than occasionally.
+	 *
+	 * <p>Asserted once after a fixed wait rather than polled, because under the defect the station
+	 * hires the <em>other</em> villager and the vacancy is gone — a poll would sit there until the
+	 * timeout and report nothing about why.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 300)
+	public static void aFormerWorkerIsHiredAheadOfAFreshVillager(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+
+		// Nearer the block, so distance alone would take this one.
+		Villager blank = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+		blank.setNoAi(true);
+		blank.setOnGround(true);
+
+		Villager career = helper.spawn(EntityType.VILLAGER, BACK_OF_THE_QUEUE);
+		career.setNoAi(true);
+		career.setOnGround(true);
+		career.setVillagerData(career.getVillagerData()
+			.setProfession(CWProfessions.WORKER.get()));
+		// What trading with it would have left behind, and the thing vanilla will not now undo.
+		career.setVillagerXp(20);
+
+		helper.assertTrue(Workers.isCareerWorker(career), "precondition: the far one has worked before");
+		helper.assertTrue(!Workers.isCareerWorker(blank), "precondition: the near one never has");
+
+		helper.runAfterDelay(100, () -> {
+			helper.assertTrue(Workers.isEmployed(career),
+				"the station should take on the villager that has done this before, even though the "
+					+ "other one was standing closer");
+			helper.assertTrue(!Workers.isEmployed(blank),
+				"and leave the blank villager free to become a farmer or a librarian instead");
+			helper.succeed();
 		});
 	}
 

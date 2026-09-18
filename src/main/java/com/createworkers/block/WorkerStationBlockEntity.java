@@ -656,8 +656,20 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 		AABB nearby = new AABB(worldPosition).inflate(RECRUIT_RANGE);
 		List<Villager> candidates = server.getEntitiesOfClass(Villager.class, nearby, this::couldWork);
-		candidates.sort(java.util.Comparator.comparingDouble(villager -> villager.distanceToSqr(
-			worldPosition.getX() + 0.5D, worldPosition.getY() + 0.5D, worldPosition.getZ() + 0.5D)));
+		// **A villager who has done this before goes to the front of the queue, and it is not a
+		// courtesy.** The two kinds of candidate are not worth the same to a player. A career worker is
+		// locked to the profession for good -- vanilla will not reset a villager that has traded -- so
+		// it can never take a village job, never be repurposed, and left un-hired it is a villager that
+		// does nothing for the rest of the world's life. A villager on NONE is a farmer or a librarian
+		// you have not assigned yet, and hiring it spends that.
+		// On distance alone the intent this whole route exists for -- a career labourer rather than a
+		// dead end -- was a coin toss, and worse than a coin toss: only RECRUIT_CANDIDATES are ever
+		// path-checked, so three blanks standing nearer shut a former worker out permanently.
+		// Distance still breaks ties, and costs little either way: every candidate is already inside
+		// RECRUIT_RANGE of the block.
+		candidates.sort(java.util.Comparator.comparing((Villager villager) -> !Workers.isCareerWorker(villager))
+			.thenComparingDouble(villager -> villager.distanceToSqr(
+				worldPosition.getX() + 0.5D, worldPosition.getY() + 0.5D, worldPosition.getZ() + 0.5D)));
 
 		int checked = 0;
 		for (Villager villager : candidates) {
