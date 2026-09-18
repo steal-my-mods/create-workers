@@ -63,7 +63,21 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 	private static final int CAVITY_CELLS = 3;
 	private static final int CAVITY_PITCH = 2;
 	private static final int CAVITY_PIECE = 4;
-	private static final int CAVITY_SPOTS = 3;
+	/**
+	 * How many places a slot puts food in, filled as its stack fills.
+	 *
+	 * <p><b>Two, and the number is a consequence of the trough's size rather than a taste.</b> A
+	 * piece covers about seven texels and the trough is a hundred, so three spots a slot puts four
+	 * slots at 84% coverage — a Canteen barely a third stocked looks brim full, and everything above
+	 * it looks the same as everything else. Two gives 56% at four slots, 112% at eight and 126% at
+	 * nine, which is the curve that was wanted: half looks half, eight looks nearly full, nine looks
+	 * full.
+	 *
+	 * <p>It was three while this was drawn against a twelve-texel cavity. The trough had to shrink to
+	 * the ten the shared panel allows — {@code check_trim} needs ring 2 to stay warm timber — and the
+	 * piece count did not follow it down, which is the whole of what went wrong.
+	 */
+	private static final int CAVITY_SPOTS = 2;
 	/**
 	 * The furthest a spot offset plus its nudge can push a piece off its own cell.
 	 *
@@ -91,10 +105,25 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 	};
 
 	/** Where a slot's three pieces sit within its cell, before the nudge. */
-	private static final int[][] SPOTS = { { 0, 0 }, { 1, 1 }, { 1, 0 } };
+	private static final int[][] SPOTS = { { 0, 0 }, { 1, 1 } };
 
 	/** Clear of the face, so a flat quad does not z-fight with the block it is drawn on. */
 	private static final float STANDOFF = 0.002F;
+
+	/**
+	 * How much higher each piece of the heap sits than the one before it.
+	 *
+	 * <p><b>Coplanar quads do not overlap, they fight.</b> Standing every piece off the face by the
+	 * same {@code STANDOFF} put twenty-seven of them at one depth, and the depth buffer then picked
+	 * between them per fragment and per camera angle — which does not look like a heap with pieces on
+	 * top of each other, it looks like the block is tearing itself apart. The Station never met this
+	 * because its lamps do not overlap.
+	 *
+	 * <p>Small enough that the stack of them is under half a texel, so the heap keeps its thickness
+	 * without any piece visibly floating; large enough to be worth more than the depth buffer's
+	 * precision at the range a block is looked at.
+	 */
+	private static final float LAYER = 0.001F;
 	private static final float PIXEL = 1.0F / 16.0F;
 
 	public CanteenRenderer(BlockEntityRendererProvider.Context context) {
@@ -131,6 +160,7 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 			return;
 
 		int light = LevelRenderer.getLightColor(level, above);
+		int layer = 0;
 		for (int slot = 0; slot < CELLS.length && slot < servings.size(); slot++) {
 			CanteenBlockEntity.Serving serving = servings.get(slot);
 			if (serving.isEmpty())
@@ -142,7 +172,7 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 				int x = CAVITY_X1 + CELLS[slot][0] * CAVITY_PITCH + SPOTS[piece][0] + (nudge & 1);
 				int y = CAVITY_X1 + CELLS[slot][1] * CAVITY_PITCH + SPOTS[piece][1] + ((nudge >> 1) & 1);
 				float u1 = serving.food() * CAVITY_PIECE / 16.0F;
-				flat(consumer, poseStack, x, y, CAVITY_PIECE,
+				flat(consumer, poseStack, x, y, CAVITY_PIECE, layer++,
 					u1, 0.0F, u1 + CAVITY_PIECE / 16.0F, CAVITY_PIECE / 16.0F, light, overlay);
 			}
 		}
@@ -191,10 +221,10 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 	 * points the quad at the floor and it is simply never drawn.
 	 */
 	private void flat(VertexConsumer consumer, PoseStack poseStack, int x, int y, int size,
-		float u1, float v1, float u2, float v2, int light, int overlay) {
+		int layer, float u1, float v1, float u2, float v2, int light, int overlay) {
 
 		poseStack.pushPose();
-		poseStack.translate(0.0F, 1.0F + STANDOFF, 0.0F);
+		poseStack.translate(0.0F, 1.0F + STANDOFF + layer * LAYER, 0.0F);
 		poseStack.mulPose(Axis.XP.rotationDegrees(90.0F));
 		poseStack.translate(x * PIXEL, y * PIXEL, 0.0F);
 

@@ -377,7 +377,7 @@ CANTEEN_SLOTS = 9
 CAVITY_CELLS = 3
 CAVITY_PITCH = 2
 CAVITY_PIECE = 4
-CAVITY_SPOTS = 3
+CAVITY_SPOTS = 2
 # The furthest a spot offset plus its nudge can push a piece off its cell, on either axis.
 CAVITY_REACH = 2
 

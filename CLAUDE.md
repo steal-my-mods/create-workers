@@ -959,6 +959,16 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   the same shape of problem and solves it the same way, with the readout on a sheet of its own.
   Its **dark backing is load-bearing**: a bread swatch is within a few shades of the boards behind it,
   and the first build had an invisible gauge on a Canteen full of bread.
+  **Overlapping quads at one depth are not layered, they are undefined.** The heap's pieces overlap
+  by design, and standing all twenty-seven off the face by the same `STANDOFF` put them at one depth,
+  where the depth buffer picks between them per fragment and per camera angle — which does not look
+  like a heap, it looks like the block tearing itself apart. Each piece gets its own `LAYER` step now.
+  The Station never met this because its lamps do not overlap.
+  **And density does not survive a change of cavity size.** The heap was drawn against a twelve-texel
+  trough and the trough had to shrink to the ten the shared panel allows; the piece count did not
+  follow it down, so four slots covered 84% and a barely-stocked Canteen looked brim full. A piece is
+  about seven texels against a hundred, which is what makes the arithmetic worth doing rather than
+  eyeballing: two spots a slot gives 56% at four, 112% at eight, 126% at nine.
   **A block entity renderer's quad transform is not reachable by any check that reads constants,
   and both halves of the Canteen's shipped wrong.** The grid was right, `check_canteen_grid` passed,
   and a preview replaying the same constants drew the heap correctly — because the mistakes were in
