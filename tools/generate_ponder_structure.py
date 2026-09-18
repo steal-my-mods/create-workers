@@ -171,6 +171,29 @@ SCENES = {
 }
 
 
+def check_station_facing():
+    """The scene has to point at the face the plate actually turns the Station towards.
+
+    The lamps are drawn by WorkerStationRenderer on FACING, so the beat about the roster is only
+    pointing at a roster if the two agree -- and they did not: this file turned the block south
+    while the scene aimed at Direction.NORTH, under a comment asserting that nothing here turned
+    it at all. Nothing could catch that. theHiringPlateHasAnEmptyStationInIt never looks at
+    FACING, and Ponder does not load on a dedicated server, so the only symptom was a pointer
+    indicating the blank back of a block in a page nobody had opened yet.
+    """
+    import re
+    scene = os.path.join('src', 'main', 'java', 'com', 'createworkers', 'client', 'ponder',
+                         'WorkerStationScene.java')
+    with open(scene) as handle:
+        source = handle.read()
+    aimed = re.search(r'blockSurface\(STATION, Direction\.([A-Z]+)\)', source)
+    assert aimed, 'WorkerStationScene should point at one of the Station\'s faces'
+    facing = dict(STATION_STATE[1])['facing'].upper()
+    assert aimed.group(1) == facing, (
+        'the plate turns the Station %s and the scene points at its %s face, which is not the one '
+        'the lamps are drawn on' % (facing, aimed.group(1)))
+
+
 def write(destination, palette, blocks):
     # mtime 0, so regenerating an unchanged scene does not produce a changed file.
     with open(destination, 'wb') as handle:
@@ -180,6 +203,7 @@ def write(destination, palette, blocks):
 
 
 def main():
+    check_station_facing()
     directory = sys.argv[1] if len(sys.argv) > 1 else OUTPUT_DIR
     os.makedirs(directory, exist_ok=True)
 

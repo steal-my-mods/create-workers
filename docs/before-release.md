@@ -38,9 +38,9 @@ explicitly accepted before a `v*` tag is pushed.
 
 - **The Ponder scenes are behind the mod — mostly settled.** `CanteenScene` now covers hunger, the
   Canteen and trades, and `WorkingHoursScene`'s bed line says a job's bed rather than a worker's. What
-  is left is a judgement nobody has made: the Station's own screen, the lamp readout and the shift
-  toggles have no scene, and it is not obvious whether they want one or whether a block with a GUI
-  documents itself. Original note follows.
+  is left is nothing: **the Station's screen and lamps get no scene**, decided rather than deferred.
+  Create does not generally Ponder a UI, and the lamp readout is useful decoration rather than
+  something a player has to understand to use the block. Original note follows.
 - **(Settled above.) The Ponder scenes are behind the mod, which is the failure this project has
   already had once.**
   They are the only documentation shipped inside the jar and nothing in the game contradicts them, so
@@ -62,12 +62,6 @@ explicitly accepted before a `v*` tag is pushed.
 Reported with a `PLAUSIBLE` verdict and left alone: each was read in the code but not run down, so
 the failure scenario is reasoning rather than observation.
 
-- **The Ponder plate's Station faces south and the scene points at its north face.**
-  `tools/generate_ponder_structure.py` writes `facing: south` and `WorkerStationScene` derives its
-  pointer from `Direction.NORTH`, with a comment claiming nothing in the generator turns the block.
-  `WorkerStationRenderer` draws the lamps on `FACING`, so the "one lamp per job" beat would indicate
-  the unlit back. Nothing can catch it: `theHiringPlateHasAnEmptyStationInIt` never asserts `FACING`,
-  and Ponder does not load on a dedicated server. Worth ten minutes with a client.
 - **Lowering `stationSlots` does not shrink an existing rack.** It is enforced only on insertion;
   `loadAdditional` accepts any index below `MAX_SLOTS` and every roster loop runs to `MAX_SLOTS`, so
   an admin cutting it from 12 to 4 to reduce per-tick cost gets no reduction on a rack already built.

@@ -79,10 +79,13 @@ public class WorkerStationScene {
 			.position(STATION);
 		Vec3 stationTop = util.vector()
 			.topOf(STATION);
-		// The board is the front face, and the plate leaves the Station on its default NORTH facing
-		// because nothing in generate_ponder_structure.py turns it.
+		// The lamps are drawn on FACING, and the plate turns the Station SOUTH -- which is also the
+		// way every worker on these plates faces, because south is the side the camera is on. The
+		// comment here used to say the generator left it on its default north facing, which was
+		// simply untrue, and the beat about the roster pointed at the blank back of the block.
+		// check_station_facing() in that generator holds the two together now.
 		Vec3 stationFace = util.vector()
-			.blockSurface(STATION, Direction.NORTH);
+			.blockSurface(STATION, Direction.SOUTH);
 		Vec3 middle = util.vector()
 			.centerOf(3, 1, 3);
 

@@ -369,6 +369,17 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   silently unmeasured beat makes the check blind; keep durations as numbers or arithmetic over the
   scene's constants. Mutation-checked by lengthening a window into the next beat and by naming a
   constant that does not exist.
+- **The plate's Station facing and the scene's pointer are one fact in two files.** The generator
+  turns the block and `WorkerStationScene` aims at a named face, and the lamps are drawn on `FACING` —
+  so the beat about the roster is only pointing at a roster while the two agree. They did not: the
+  plate turned it south, the scene pointed north, and the comment beside the pointer asserted that
+  nothing in the generator turned it at all. Nothing could catch it — the plate test never looks at
+  `FACING` and Ponder does not load on a dedicated server — so the only symptom was a pointer
+  indicating the blank back of a block, in a page nobody had opened. `check_station_facing()` reads
+  the direction out of the scene and compares it with the palette entry. Mutation-checked.
+  (**The Station's screen and lamps get no scene of their own**, deliberately: Create does not
+  generally Ponder a UI, and the lamps are useful decoration rather than something a player must
+  understand to use the block.)
 - **A Ponder scene is the mod's most easily-forgotten documentation, and the only one shipped inside
   the jar.** The hiring scene went on teaching "right-click a villager with a hat" for several
   versions after stations took that away — which is the worst kind of wrong, because nothing in the
