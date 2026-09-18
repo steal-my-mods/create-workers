@@ -48,17 +48,18 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 	/** A job that cannot be staffed at all, which is a different thing from one that is short. */
 	private static final int UNREACHABLE = 0xFF_A8503C;
 
-	private static final int NAME_X = 22;
-	private static final int NAME_WIDTH = 62;
-	private static final int FIRST_TOGGLE_X = 88;
-	private static final int TOGGLE_WIDTH = 20;
-	private static final int TOGGLE_HEIGHT = 14;
-	private static final int ARROW_X = 150;
-	private static final int ARROW_WIDTH = 9;
-	private static final int ARROW_HEIGHT = 8;
-	private static final int MAX_NAME_LENGTH = 32;
-	/** How wide the name becomes while it is being edited: the row, short of its arrows. */
-	private static final int EDIT_WIDTH = ARROW_X - NAME_X - 2;
+	// The row's geometry lives in WorkerStationMenu, where a test can reach it -- see hitRow. These
+	// are aliases so the drawing below reads the way it always has.
+	private static final int NAME_X = WorkerStationMenu.NAME_X;
+	private static final int NAME_WIDTH = WorkerStationMenu.NAME_WIDTH;
+	private static final int FIRST_TOGGLE_X = WorkerStationMenu.FIRST_TOGGLE_X;
+	private static final int TOGGLE_WIDTH = WorkerStationMenu.TOGGLE_WIDTH;
+	private static final int TOGGLE_HEIGHT = WorkerStationMenu.TOGGLE_HEIGHT;
+	private static final int ARROW_X = WorkerStationMenu.ARROW_X;
+	private static final int ARROW_WIDTH = WorkerStationMenu.ARROW_WIDTH;
+	private static final int ARROW_HEIGHT = WorkerStationMenu.ARROW_HEIGHT;
+	private static final int MAX_NAME_LENGTH = WorkerStationMenu.MAX_NAME_LENGTH;
+	private static final int EDIT_WIDTH = WorkerStationMenu.EDIT_WIDTH;
 
 	/** The job whose name is being typed, or -1. */
 	private int editing = -1;
@@ -73,6 +74,12 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 		setWindowSize(WorkerStationMenu.PANEL_WIDTH, WorkerStationMenu.PANEL_HEIGHT);
 		super.init();
 
+		// **Reset, because init runs again on every resize and `editing` is not a widget.**
+		// rebuildWidgets replaces nameBox with an empty one while the field survives, so a window
+		// resized mid-rename left `editing` pointing at a job with a blank, invisible box over it --
+		// and the next click anywhere took the commit branch, where "" differs from the hat's name and
+		// so sent a rename that stripped CUSTOM_NAME off the hat and off everyone wearing a copy.
+		editing = -1;
 		nameBox = new EditBox(font, 0, 0, EDIT_WIDTH, 10, Component.empty());
 		nameBox.setMaxLength(MAX_NAME_LENGTH);
 		nameBox.setBordered(false);
@@ -344,31 +351,29 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 			if (job == null)
 				continue;
 
-			int jx = leftPos + WorkerStationMenu.columnX(index);
-			int jy = topPos + WorkerStationMenu.rowY(index);
-
-			for (Shift shift : Shift.VALUES) {
-				int tx = jx + FIRST_TOGGLE_X + shift.ordinal() * TOGGLE_WIDTH;
-				if (within(mouseX, mouseY, tx, jy + 2, TOGGLE_WIDTH - 2, TOGGLE_HEIGHT)) {
-					toggle(index, job, shift);
+			// The hit test itself is in the menu, so that "a row being renamed answers to nothing"
+			// is a rule something can check rather than one this file has to remember.
+			WorkerStationMenu.RowHit hit = WorkerStationMenu.hitRow(index, editing, mouseX - leftPos,
+				mouseY - topPos);
+			switch (hit.control()) {
+				case SHIFT -> {
+					toggle(index, job, Shift.VALUES[hit.shift()]);
 					return true;
 				}
-			}
-
-			if (within(mouseX, mouseY, jx + NAME_X, jy + 4, NAME_WIDTH, 10)) {
-				startEditing(index);
-				return true;
-			}
-
-			int ax = jx + ARROW_X;
-			if (index > 0 && within(mouseX, mouseY, ax, jy, ARROW_WIDTH, ARROW_HEIGHT)) {
-				send(StationRosterPacket.move(index, index - 1));
-				return true;
-			}
-			if (index < WorkerStationBlockEntity.MAX_SLOTS - 1
-				&& within(mouseX, mouseY, ax, jy + ARROW_HEIGHT + 2, ARROW_WIDTH, ARROW_HEIGHT)) {
-				send(StationRosterPacket.move(index, index + 1));
-				return true;
+				case NAME -> {
+					startEditing(index);
+					return true;
+				}
+				case MOVE_UP -> {
+					send(StationRosterPacket.move(index, index - 1));
+					return true;
+				}
+				case MOVE_DOWN -> {
+					send(StationRosterPacket.move(index, index + 1));
+					return true;
+				}
+				case NONE -> {
+				}
 			}
 		}
 		return false;

@@ -1185,15 +1185,14 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   is why `MAX_SLOTS` is a constant and the config can only cap *below* it). Left alone, a station with
   one job would have three dozen villagers cross the village to be turned away — each of them made a
   Worker by `AssignProfessionFromJobSite` on arrival and un-made by `ResetProfession` a tick later.
-  `reconcileTickets` therefore aims at one invariant, **free tickets equal vacancies**, taking tickets
-  in the station's own name and releasing them as openings appear. That makes "free tickets" mean
-  "openings", after which vanilla's `AcquirePoi` does the enforcing exactly as it does for one
-  librarian per lectern. Aiming at an invariant rather than reacting to events is what makes it repair
-  itself after a load, a config change or a death the station was not loaded to see. `reserved` is
-  persisted because the tickets are — a `PoiRecord` saves its free count with the chunk section — and
-  reset to zero the moment a rack goes from empty to occupied, because an empty station is not a job
-  site at all and the record it is about to get starts full. `aStationAdvertisesOnlyTheOpeningsItHas`
-  bounds it, mutation-checked by dropping the reconciliation, which advertised 36 openings for 4 jobs.
+  **Nothing takes those tickets any more, and the machinery that rationed them is gone.** A station
+  once held back its own surplus through `reconcileTickets`, driving free tickets at `vacancies()` so
+  that "free tickets" meant "openings" and vanilla's `AcquirePoi` did the enforcing. That whole route
+  died with `YieldJobSite`: the station recruits directly now, and `CWProfessions.WORKER` matches
+  nothing with either predicate, so no villager ever claims a station's ticket in the first place.
+  `MAX_TICKETS` survives only because a `PoiType` must be registered with some number and this one
+  must not be *smaller* than the roster it could hold. Don't go looking for `reconcileTickets`,
+  `reserved` or `aStationAdvertisesOnlyTheOpeningsItHas` — none of them exist.
 - **`HAS_JOB` must mean "has a hat", never "has a vacancy".** It is the property the point of interest
   is registered over, so a state change that leaves the set destroys the `PoiRecord` — which releases
   every ticket the station's *living* workers hold and then has `ValidateNearbyPoi` erase their
@@ -1311,14 +1310,6 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   discovers a death on its own clock otherwise, and a corpse is in the world for the twenty ticks of
   its death animation against a look every twenty ticks, so whether a dead worker was replaced promptly
   or sat out the absentee timeout came down to which tick it landed on.
-- **Ticket reconciliation must be able to release more than it took.** The obvious guard —
-  only release a ticket this station held back — makes a leak permanent: a claimant that wandered off
-  and died, or a release vanilla refused because the villager's profession no longer matched the job
-  site, leaves a ticket out on loan forever, and a station whose free count is stuck below its
-  vacancies stands there with openings it never offers anybody. That is what "villagers standing around
-  while shifts are available" looks like from the outside. So it drives free tickets at `vacancies()`
-  from either side and clamps `reserved` at zero afterwards; reading the count low only ever makes the
-  roster audit more cautious.
 - **A crew's working day cannot be longer than `Shift.OFFSET`, and the default used to be.** The three
   crews are a third of a day apart, so a `clockOff` 12000 ticks after `clockOn` puts two of them on the
   clock together for 4000 of every 8000 — three villagers buying about one and a half crews of cover,

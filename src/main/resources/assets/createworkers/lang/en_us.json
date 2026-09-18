@@ -9,7 +9,7 @@
   "createworkers.hard_hat.unprogrammed": "No inventories assigned",
   "createworkers.hard_hat.hint": "Right-click belts, depots, funnels and other Arm-compatible blocks to assign them",
   "createworkers.hard_hat.summary": "%1$s input(s), %2$s output(s)",
-  "createworkers.hard_hat.assign_hint": "Right-click a villager or enderman to put them to work",
+  "createworkers.hard_hat.assign_hint": "Put this in a Worker Station to hire a villager, or right-click an enderman with it",
   "createworkers.hard_hat.bed": "Sleeps at %1$s, %2$s, %3$s",
   "createworkers.station.empty_slot": "Add a programmed hard hat",
   "createworkers.shift.day": "Day",

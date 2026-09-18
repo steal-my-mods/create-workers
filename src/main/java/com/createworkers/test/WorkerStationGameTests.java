@@ -947,6 +947,74 @@ public class WorkerStationGameTests {
 
 
 	/**
+	 * A job row being renamed answers to none of its controls, because none of them are drawn.
+	 *
+	 * <p><b>An invisible control that is still clickable is the defect.</b> The name field grows to
+	 * {@code EDIT_WIDTH} while it is being typed — the row short of its arrows — so it covers all three
+	 * shift toggles, and {@code renderJob} stops drawing them for exactly that reason. The hit test did
+	 * not agree: a click in the right two thirds of the field toggled a shift, which hires or serves
+	 * notice on a real villager, and returned true so the text field never saw the click at all; a
+	 * click in the left third re-entered the rename and committed whatever had been half-typed. Every
+	 * click inside the field did something other than move the caret.
+	 *
+	 * <p>It is testable only because the hit test was moved out of the screen and into the menu, which
+	 * is the same rule the slot positions and the readout lines already follow: client classes do not
+	 * load on a dedicated server, so geometry written inside a screen is geometry nothing can check.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void aRowBeingRenamedAnswersToNoneOfItsControls(GameTestHelper helper) {
+		// The field grows to EDIT_WIDTH while a name is being typed -- the row short of its arrows --
+		// so it covers all three shift toggles. The screen stops drawing them for that reason, and
+		// hit-testing them anyway made every click inside the field do something other than move the
+		// caret: the right two thirds toggled a shift, which hires or serves notice on a real villager
+		// and swallowed the click so the field never saw it, and the left third re-entered the rename
+		// and committed whatever was half-typed.
+		int row = 0;
+		int jx = WorkerStationMenu.columnX(row);
+		int jy = WorkerStationMenu.rowY(row);
+
+		// The overlap is the premise. If the field ever stops covering the toggles this test is
+		// asserting nothing, so it says so rather than passing quietly.
+		int fieldLeft = jx + WorkerStationMenu.NAME_X;
+		int fieldRight = fieldLeft + WorkerStationMenu.EDIT_WIDTH;
+		int firstToggle = jx + WorkerStationMenu.FIRST_TOGGLE_X;
+		helper.assertTrue(firstToggle >= fieldLeft && firstToggle < fieldRight,
+			"precondition: the name field should cover the shift toggles, or there is nothing here to "
+				+ "guard -- field runs " + fieldLeft + ".." + fieldRight + ", toggles start at " + firstToggle);
+
+		for (Shift shift : Shift.VALUES) {
+			double tx = jx + WorkerStationMenu.FIRST_TOGGLE_X + shift.ordinal() * WorkerStationMenu.TOGGLE_WIDTH + 1;
+			double ty = jy + 2 + 1;
+
+			helper.assertTrue(WorkerStationMenu.hitRow(row, -1, tx, ty)
+				.control() == WorkerStationMenu.Control.SHIFT,
+				"with nothing being renamed, a click on the " + shift + " toggle should toggle it");
+			helper.assertTrue(WorkerStationMenu.hitRow(row, row, tx, ty)
+				.control() == WorkerStationMenu.Control.NONE,
+				"but while this row's name is being typed that same click is inside the text field, and "
+					+ "must not reach the " + shift + " toggle drawn underneath it");
+		}
+
+		// The name itself is the other half: clicking it again while editing would commit a half-typed
+		// name rather than move the caret.
+		double nx = jx + WorkerStationMenu.NAME_X + 1;
+		double ny = jy + 4 + 1;
+		helper.assertTrue(WorkerStationMenu.hitRow(row, -1, nx, ny)
+			.control() == WorkerStationMenu.Control.NAME, "a click on a name should start a rename");
+		helper.assertTrue(WorkerStationMenu.hitRow(row, row, nx, ny)
+			.control() == WorkerStationMenu.Control.NONE, "and must not re-enter one already running");
+
+		// Only the row being typed in goes deaf. Its neighbours are still live.
+		int other = 1;
+		double ox = WorkerStationMenu.columnX(other) + WorkerStationMenu.FIRST_TOGGLE_X + 1;
+		double oy = WorkerStationMenu.rowY(other) + 3;
+		helper.assertTrue(WorkerStationMenu.hitRow(other, row, ox, oy)
+			.control() == WorkerStationMenu.Control.SHIFT,
+			"a rename on one row must not deafen the rest of the rack");
+		helper.succeed();
+	}
+
+	/**
 	 * Losing an early job's worker promotes from a <b>later job on the same shift</b>, not only from a
 	 * later shift.
 	 *

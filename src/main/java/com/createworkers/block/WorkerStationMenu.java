@@ -1,6 +1,7 @@
 package com.createworkers.block;
 
 import com.createworkers.registry.CWMenuTypes;
+import com.createworkers.worker.Shift;
 import com.simibubi.create.foundation.gui.menu.MenuBase;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -71,6 +72,83 @@ public class WorkerStationMenu extends MenuBase<WorkerStationBlockEntity> {
 	/** The top edge of the job at {@code index}, its well included. */
 	public static int rowY(int index) {
 		return FIRST_ROW_Y + (index % ROWS_PER_COLUMN) * ROW_HEIGHT;
+	}
+
+	// --- a job row's controls ---------------------------------------------------------------------
+	// Here rather than in the screen, and for the reason the slot positions already are: a screen does
+	// not load on a dedicated server, so anything written inside one is unreachable by every test this
+	// project has. What that cost last time was a warning line drawn four pixels inside the player's
+	// inventory. What it cost this time was worse -- see hitRow.
+
+	public static final int NAME_X = 22;
+	public static final int NAME_WIDTH = 62;
+	public static final int FIRST_TOGGLE_X = 88;
+	public static final int TOGGLE_WIDTH = 20;
+	public static final int TOGGLE_HEIGHT = 14;
+	public static final int ARROW_X = 150;
+	public static final int ARROW_WIDTH = 9;
+	public static final int ARROW_HEIGHT = 8;
+	/** As long a name as an anvil allows. */
+	public static final int MAX_NAME_LENGTH = 32;
+	/** How wide the name field becomes while it is being typed: the row, short of its arrows. */
+	public static final int EDIT_WIDTH = ARROW_X - NAME_X - 2;
+
+	/** What a click on a job row landed on. */
+	public enum Control {
+		NONE,
+		/** A shift toggle; {@link RowHit#shift()} says which. */
+		SHIFT,
+		/** The job's name, which begins a rename. */
+		NAME,
+		MOVE_UP,
+		MOVE_DOWN
+	}
+
+	/** @param shift the shift's ordinal for {@link Control#SHIFT}, otherwise -1. */
+	public record RowHit(Control control, int shift) {
+
+		public static final RowHit MISS = new RowHit(Control.NONE, -1);
+	}
+
+	/**
+	 * What a click at {@code relX}/{@code relY} — measured from the panel's top-left — lands on in the
+	 * job at {@code index}, given that {@code editing} is the job whose name is being typed, or -1.
+	 *
+	 * <p><b>A row being renamed has no controls, because none of them are drawn.</b> The name field
+	 * grows to {@link #EDIT_WIDTH} while it is being typed, which is the row short of its arrows — so
+	 * it covers all three shift toggles, and the screen stops drawing them for exactly that reason.
+	 * Hit-testing them anyway made every click inside the field do something other than move the
+	 * caret: a click in the right two thirds toggled a shift, which hires or serves notice on a real
+	 * villager and swallowed the click so the field never saw it, and a click in the left third
+	 * re-entered the rename and committed whatever had been half-typed. An invisible control that is
+	 * still clickable is the defect, and the fix belongs here rather than at the call site so that a
+	 * test can see it.
+	 */
+	public static RowHit hitRow(int index, int editing, double relX, double relY) {
+		if (index == editing)
+			return RowHit.MISS;
+
+		int jx = columnX(index);
+		int jy = rowY(index);
+
+		for (int shift = 0; shift < Shift.VALUES.length; shift++) {
+			int tx = jx + FIRST_TOGGLE_X + shift * TOGGLE_WIDTH;
+			if (within(relX, relY, tx, jy + 2, TOGGLE_WIDTH - 2, TOGGLE_HEIGHT))
+				return new RowHit(Control.SHIFT, shift);
+		}
+		if (within(relX, relY, jx + NAME_X, jy + 4, NAME_WIDTH, 10))
+			return new RowHit(Control.NAME, -1);
+
+		int ax = jx + ARROW_X;
+		if (index > 0 && within(relX, relY, ax, jy, ARROW_WIDTH, ARROW_HEIGHT))
+			return new RowHit(Control.MOVE_UP, -1);
+		if (index < WorkerStationBlockEntity.MAX_SLOTS - 1 && within(relX, relY, ax, jy + ARROW_HEIGHT + 2, ARROW_WIDTH, ARROW_HEIGHT))
+			return new RowHit(Control.MOVE_DOWN, -1);
+		return RowHit.MISS;
+	}
+
+	private static boolean within(double x, double y, int left, int top, int width, int height) {
+		return x >= left && x < left + width && y >= top && y < top + height;
 	}
 
 	public WorkerStationMenu(MenuType<?> type, int id, Inventory inventory, RegistryFriendlyByteBuf buf) {

@@ -1,7 +1,6 @@
 package com.createworkers;
 
 
-import com.createworkers.worker.WorkerTrades;
 
 import net.neoforged.neoforge.common.ModConfigSpec;
 
@@ -152,10 +151,11 @@ public class CWConfig {
 			.define("workingHours", true);
 
 		REQUIRE_FOOD = builder
-			.comment("Whether Villager Workers eat. They spend one point of food per delivery, taken",
-				"from their own inventory -- a loaf of bread is four points -- and a Worker with none",
-				"left keeps working at a reduced pace rather than stopping. Feeding a crew is what a",
-				"Canteen is for. Turn this off and Workers never eat and never slow down.",
+			.comment("Whether Villager Workers eat. They spend food for every tick they are on the",
+				"clock -- see ticksPerFoodPoint -- taken from their own inventory, where a loaf of",
+				"bread is four points and a potato, carrot or beetroot is one. A Worker with none left",
+				"keeps working at a reduced pace rather than stopping. Feeding a crew is what a Canteen",
+				"is for. Turn this off and Workers never eat and never slow down.",
 				"Endermen are exempt whatever this says. They eat nothing.")
 			.define("requireFood", true);
 
