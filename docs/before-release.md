@@ -37,8 +37,18 @@ explicitly accepted before a `v*` tag is pushed.
   shifts at the default. Watch for workers limping in a base that has plenty of bread in the wrong
   place.
 - **The hungry slowdown floor** (`hungryPace` 0.35) — see
-  [phase-4.md](phase-4.md#open-questions). Neither it nor the particles have been seen in ordinary
-  play, because until the drain moved, hunger essentially never happened.
+  [phase-4.md](phase-4.md#open-questions). **Now seen in play**, by starving a worker deliberately
+  (`/tick sprint 44000` with the Canteen out of range). It works, and the unhappy-villager particles
+  were confirmed as the thing that makes it legible. Two findings.
+  The slowdown is **not** a double penalty, which is worth knowing before anyone retunes it: the walk
+  is multiplied by `hungryPace` and the transfer cooldown divided by it, so every part of a haul cycle
+  stretches by the same 2.86x and **throughput lands at exactly 0.35**. One number, one meaning.
+  What is unresolved is that the one number does **two jobs**: the walk is what a player *sees* (and
+  0.35 of villager pace is a crawl — "very slow, maybe too slow" was the verdict), while the cooldown
+  is what a factory *measures*. They are coupled only because it was simpler. If the crawl turns out
+  to read as punishing during real production rather than during a deliberate starvation test, split
+  them — walk at ~0.6, cooldown left alone — and the cost is unchanged while the limp is less grim.
+  Left at 0.35 for now: legibility is the point, and a third of output is a long way from an outage.
 - **The trade table is loop-proof and priced against the field, but its income has never been
   played.** Two things are settled and need no further thought. There is no emerald loop:
   `theTradeTableHasNoEmeraldLoop` walks the server's own recipes and is mutation-checked, and it is
