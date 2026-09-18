@@ -202,7 +202,7 @@ public class WorkingHoursScene {
 		scene.idle(7);
 		scene.overlay()
 			.showText(80)
-			.text("Sneak and Right-Click a Bed while holding the Hat to say where that Worker sleeps")
+			.text("Sneak and Right-Click a Bed while holding the Hat to say where that job sleeps")
 			.attachKeyFrame()
 			.pointAt(bedTop)
 			.placeNearTarget();
@@ -210,7 +210,7 @@ public class WorkingHoursScene {
 
 		scene.overlay()
 			.showText(80)
-			.text("Given no Bed, they find an unclaimed one near their work — but only one they can walk to")
+			.text("A job on several shifts shares it, so the others take a free bed beside it")
 			.attachKeyFrame()
 			.pointAt(bedTop)
 			.placeNearTarget();

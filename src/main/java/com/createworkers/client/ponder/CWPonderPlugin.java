@@ -34,5 +34,9 @@ public class CWPonderPlugin implements PonderPlugin {
 		helper.addStoryBoard(CreateWorkers.asResource("hard_hat"), "hard_hat", HardHatScene::programming);
 		helper.addStoryBoard(CreateWorkers.asResource("hard_hat"), "worker_station", WorkerStationScene::hiring);
 		helper.addStoryBoard(CreateWorkers.asResource("hard_hat"), "working_hours", WorkingHoursScene::nightShift);
+		helper.addStoryBoard(CreateWorkers.asResource("hard_hat"), "canteen", CanteenScene::feeding);
+		// And again under the Canteen itself, because a player holding one and pressing W is asking
+		// about that block rather than working through the hat's pages in order.
+		helper.addStoryBoard(CreateWorkers.asResource("canteen"), "canteen", CanteenScene::feeding);
 	}
 }

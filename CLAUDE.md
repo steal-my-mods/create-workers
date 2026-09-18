@@ -138,6 +138,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/ponder/HardHatScene` | First scene: what a hat is and how it is programmed. **Stops before hiring**, which is no longer a thing you do to a villager |
 | `client/ponder/WorkerStationScene` | Second: a hat goes into a Station, a villager is taken on, it hauls, and the job outlives it |
 | `client/ponder/WorkingHoursScene` | Third: crews, the last delivery of the day, walk to bed, sleep, the enderman night shift, morning |
+| `client/ponder/CanteenScene` | Fourth: hunger, the trough that feeds without anybody walking to it, and what a Worker trades. Filed under the hat **and** the Canteen |
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
 | `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own. Its job-site predicates match the worker station **and nothing else** |
 | `block/CanteenBlock` | A trough of food, and the only way a night crew is ever fed — vanilla has no container a villager will take food out of. Vault-shaped: nothing goes in or out by hand, a comparator says how full it is and goggles say what of |
@@ -333,6 +334,14 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   template is intentionally empty — tests lay their own floor with `layFloor`. Ponder's schematics
   are a different set of files under a different root: `assets/createworkers/ponder/<name>.nbt`,
   the path Ponder builds by hand as `ponder/%s.nbt`.
+- **A new scene has to be added to `generate_ponder_lang.py`'s `SCENES`, and forgetting is silent.**
+  That list is hand-kept. A storyboard Ponder registers but the generator has never heard of gets no
+  `createworkers.ponder.<scene>.text_<n>` keys at all — and since Ponder goes straight to `I18n` with
+  editing mode off, *every line of the page* renders as its own key in front of a player. The Canteen
+  scene was written that way and only caught because the generator printed "3 scenes" for four files.
+  Nothing else could: the beat-timing check only walks the scenes it is handed, and no game test can
+  load a client class. `check_every_scene_is_listed()` compares `SCENES` against the `*Scene.java`
+  files on disk now, and is mutation-checked by dropping an entry.
 - **Ponder text does not fall back to the string in the code.** The English handed to `.text(...)`
   in a storyboard is only a default; with editing mode off, `PonderLocalization.getSpecific` goes
   straight to `I18n.get`, so a beat with no `createworkers.ponder.<scene>.text_<n>` key renders the

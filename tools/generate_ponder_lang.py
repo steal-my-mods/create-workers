@@ -37,7 +37,33 @@ SCENES = (
     ('hard_hat', 'HardHatScene.java'),
     ('worker_station', 'WorkerStationScene.java'),
     ('working_hours', 'WorkingHoursScene.java'),
+    ('canteen', 'CanteenScene.java'),
 )
+
+def check_every_scene_is_listed():
+    """Every storyboard in the ponder package has to appear in SCENES above.
+
+    **This list is hand-kept and forgetting it is silent.** A scene Ponder registers but this
+    file has never heard of gets no `createworkers.ponder.<scene>.text_<n>` keys at all, and
+    Ponder does not fall back to the English in the storyboard -- with editing mode off it goes
+    straight to I18n, so every line of the new page renders as its own key in front of a player.
+    The Canteen scene was written and shipped exactly that way for the few minutes between
+    adding it and noticing the generator still said "3 scenes".
+
+    Nothing else can catch it. The beat-timing check only walks scenes it is given, the game
+    test suite cannot load a client class, and the page looks fine to whoever wrote it because
+    they read the Java.
+    """
+    listed = {source for _, source in SCENES}
+    found = {name for name in os.listdir(PONDER)
+             if name.endswith('Scene.java')}
+    missing = sorted(found - listed)
+    assert not missing, (
+        'these storyboards are not in SCENES, so they would ship with no lang keys and render '
+        'as raw keys in front of a player: %s' % ', '.join(missing))
+    stale = sorted(listed - found)
+    assert not stale, 'SCENES names storyboards that do not exist: %s' % ', '.join(stale)
+
 
 TITLE = re.compile(r'scene\.title\("([^"]+)",\s*"((?:[^"\\]|\\.)*)"\)')
 TEXT = re.compile(r'\.text\("((?:[^"\\]|\\.)*)"\)')
@@ -129,6 +155,7 @@ def render(blocks):
 
 def main():
     lang = sys.argv[1] if len(sys.argv) > 1 else LANG
+    check_every_scene_is_listed()
     blocks = [scene_entries(scene, os.path.join(PONDER, source)) for scene, source in SCENES]
 
     original = io.open(lang, encoding='utf-8').read()

@@ -8,6 +8,7 @@ import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
+import com.createworkers.registry.CWBlocks;
 import com.createworkers.registry.CWItems;
 import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
@@ -485,6 +486,44 @@ public class WorkerShiftGameTests {
 			"the evening crew is on the clock when its shift begins");
 		helper.assertTrue(WorkerShift.isOffShift(changeover, Shift.NIGHT),
 			"while the night crew is not, or there would be no shifts at all");
+		helper.succeed();
+	}
+
+	/**
+	 * The Canteen scene's plate has a Canteen on it, and the Station it shares the yard with.
+	 *
+	 * <p>A scene is registered by name and its plate is loaded from a file of that name, and nothing
+	 * connects the two. A storyboard whose {@code .nbt} was never generated is a page that fails when
+	 * a player opens it, and a plate missing the block the scene is about is a page that merely looks
+	 * wrong — which is worse, because nobody reports it. Neither is reachable from a dedicated server,
+	 * where Ponder does not load, but the file is in the jar and {@code StructureTemplate} reads it.
+	 *
+	 * <p>Unlike the bed there is nothing here to lose to a missing property: a Canteen has one state
+	 * and no properties at all. What is worth pinning is that the blocks are there.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void theCanteenPlateHasACanteenInIt(GameTestHelper helper) {
+		CompoundTag tag;
+		try (InputStream source = WorkerShiftGameTests.class
+			.getResourceAsStream("/assets/createworkers/ponder/canteen.nbt")) {
+			helper.assertTrue(source != null, "the canteen ponder plate should be in the jar");
+			tag = NbtIo.readCompressed(source, NbtAccounter.unlimitedHeap());
+		} catch (IOException failure) {
+			throw new IllegalStateException("could not read the canteen ponder plate", failure);
+		}
+
+		StructureTemplate plate = new StructureTemplate();
+		plate.load(helper.getLevel()
+			.holderLookup(Registries.BLOCK), tag);
+
+		helper.assertTrue(plate.getSize()
+			.getX() > 0, "a plate that parsed to nothing is a plate that will render as nothing");
+		helper.assertTrue(plate.filterBlocks(BlockPos.ZERO, new StructurePlaceSettings(),
+			CWBlocks.CANTEEN.get())
+			.size() == 1, "the scene is about the Canteen, so the plate should have exactly one");
+		helper.assertTrue(!plate.filterBlocks(BlockPos.ZERO, new StructurePlaceSettings(),
+			CWBlocks.WORKER_STATION.get())
+			.isEmpty(), "and the Station, so the yard reads as the one the earlier scenes used");
 		helper.succeed();
 	}
 

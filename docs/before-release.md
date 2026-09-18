@@ -36,7 +36,13 @@ explicitly accepted before a `v*` tag is pushed.
     `python3 tools/generate_page_art.py`. That part is self-updating; the prose is not.
   Re-run the generator and read the page end to end against the mod before tagging.
 
-- **The Ponder scenes are behind the mod, which is the failure this project has already had once.**
+- **The Ponder scenes are behind the mod — mostly settled.** `CanteenScene` now covers hunger, the
+  Canteen and trades, and `WorkingHoursScene`'s bed line says a job's bed rather than a worker's. What
+  is left is a judgement nobody has made: the Station's own screen, the lamp readout and the shift
+  toggles have no scene, and it is not obvious whether they want one or whether a block with a GUI
+  documents itself. Original note follows.
+- **(Settled above.) The Ponder scenes are behind the mod, which is the failure this project has
+  already had once.**
   They are the only documentation shipped inside the jar and nothing in the game contradicts them, so
   a stale page is worse than a missing one — the hiring scene taught "right-click a villager with a
   hat" for several versions after Stations took that away. Three gaps now:

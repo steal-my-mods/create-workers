@@ -60,6 +60,12 @@ STATION = (1, 1, 5)
 # away from the viewer is a scene about the back of a block.
 STATION_STATE = ('createworkers:worker_station', {'has_job': 'false', 'facing': 'south'})
 
+# The Canteen, on the north edge between the input Depot and where the bed stands in the scene
+# before. It has one state and no properties, so unlike the bed there is nothing here to get
+# wrong -- see theWorkingHoursPlateHasABedInIt for what a missing property costs.
+CANTEEN = (3, 1, 1)
+CANTEEN_STATE = ('createworkers:canteen', {})
+
 
 # --- the smallest NBT writer that will do -------------------------------------
 # Only the five tag types a structure template uses. Names are the wire format's,
@@ -161,6 +167,7 @@ SCENES = {
     'hard_hat': (),
     'worker_station': ((STATION, STATION_STATE),),
     'working_hours': ((STATION, STATION_STATE), (BED_FOOT, BED_FOOT_STATE), (BED_HEAD, BED_HEAD_STATE)),
+    'canteen': ((STATION, STATION_STATE), (CANTEEN, CANTEEN_STATE)),
 }
 
 

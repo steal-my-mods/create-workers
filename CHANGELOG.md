@@ -10,6 +10,13 @@ reading the diff.
 
 ## [Unreleased]
 
+### Added
+
+- **A Ponder page for the Canteen.** Hold W over a Canteen, or page past the hat's other three, and it
+  explains what a Worker eats, why one that has run out slows to a crawl, that a Canteen feeds anyone
+  near it without their walking to it, and that an off-duty Worker will trade with you. Food and
+  trades both shipped with no in-game explanation at all.
+
 ### Changed
 
 - **Workers trade like a supplier now.** A Worker buys what your factory actually makes — andesite
