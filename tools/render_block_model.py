@@ -211,27 +211,48 @@ def resolve(reference, textures, extra):
     return os.path.join(ASSETS, namespace, 'textures', path + '.png')
 
 
-def render(model_path, size, textures_dir, camera=CAMERA, lit=0, dim=0):
+def render(model_path, size, textures_dir, camera=CAMERA, lit=0, dim=0, marks=None, sheets=None):
     with open(model_path) as handle:
         model = json.load(handle)
+    return render_model(model, size, textures_dir, camera, lit, dim, marks, sheets)
 
+
+def render_model(model, size, textures_dir=None, camera=CAMERA, lit=0, dim=0,
+                 marks=None, sheets=None):
+    """The same, over a model already in hand rather than a file on disk.
+
+    `sheets` maps a resolved texture reference to pixels already decoded, which is how
+    generate_page_art draws a vanilla block whose texture lives inside the Minecraft
+    jar: there is no file to point `textures_dir` at, and unpacking somebody else's
+    art into this repo to get one is the thing worth avoiding.
+    """
     internal = size * OVERSAMPLE
     view = View(internal, camera)
     canvas = Canvas(internal)
-    sheets = {}
+
+    supplied = sheets or {}
+    loaded = {}
 
     def sheet_for(reference):
-        path = resolve(reference, model.get('textures', {}), textures_dir)
-        if path not in sheets:
-            sheets[path] = read_png(path)
-        return sheets[path]
+        while reference.startswith('#'):
+            reference = model.get('textures', {})[reference[1:]]
+        if reference in supplied:
+            return supplied[reference]
+        path = resolve(reference, {}, textures_dir)
+        if path not in loaded:
+            loaded[path] = read_png(path)
+        return loaded[path]
 
     for box in model['elements']:
         for name, face in box['faces'].items():
             corner, uv = face_geometry(box, name)
             draw_face(canvas, view, corner, uv, sheet_for(face['texture']), SHADE[name])
 
-    marks = model.get('_preview_marks')
+    # A caller may supply the marks instead of the model carrying them, which is how
+    # generate_page_art lights a Station's lamps without preview data going into a
+    # shipped asset -- and lets it take the positions from the script that draws the
+    # sheet rather than restating them a third time.
+    marks = marks or model.get('_preview_marks')
     if marks:
         draw_marks(canvas, view, marks, lit, dim)
 

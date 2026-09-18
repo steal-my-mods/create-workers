@@ -18,6 +18,7 @@ python3 tools/generate_ponder_structure.py   # all three Ponder scenes' structur
 python3 tools/generate_ponder_lang.py        # ...and their lang entries, read out of the storyboards
 python3 tools/generate_block_textures.py      # the Station's and Canteen's textures, and the checks that hold their files together
 python3 tools/render_block_model.py <model.json> --hats N --lit N --dim N   # draw a block model without a client
+python3 tools/generate_page_art.py           # the CurseForge page's banner, cards and recipe grids, into branding/
 python3 tools/generate_gear_shifts.py        # the evening and night vests, off the day one
 python3 tools/generate_worker_profession.py  # the worker profession's clothing, both variants
 ```
@@ -1454,6 +1455,10 @@ if the thinking changes — the point is that the analysis is not redone from sc
   bell. Corrects `shift-rotation.md` where the two disagree
 - `docs/multiplayer-performance.md` — what a worker costs a server per tick, where that was fixed,
   and the things a shared server still wants that this mod deliberately does not do
+- `docs/curseforge-page.md` — the project page's copy, and the map of which image goes where. Both
+  kinds are marked: the ones `tools/generate_page_art.py` draws, and the screenshots that have to be
+  taken because no generator can draw a worker. Edit this rather than the live page, and edit the
+  script rather than a generated PNG
 - `docs/before-release.md` — **not a backlog of ideas**: the list of things wrong, unmeasured or
   unfinished in code that is about to ship, each with what would settle it. Empty it or accept it
   explicitly before pushing a `v*` tag. Add to it whenever something is knowingly deferred, because a

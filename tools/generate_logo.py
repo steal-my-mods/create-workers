@@ -92,11 +92,37 @@ def read_png(path):
     Keeps the tool self-contained rather than shelling out to an image library.
     """
     with open(path, 'rb') as handle:
-        data = handle.read()
+        return decode_png(handle.read(), path)
+
+
+# Channels per PNG colour type, which is what sets the stride and the filter's step.
+CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+
+
+def decode_png(data, path='<bytes>'):
+    """
+    The same reader, over bytes rather than a file, and over more than one layout.
+
+    Split out because the page art reads sprites straight out of Minecraft's and
+    Create's jars, which are zips -- and extracting them to disk first would mean
+    either littering the repo with somebody else's art or keeping a scratch
+    directory in step with two dependencies. `path` is only ever used to say which
+    file was wrong.
+
+    This repo's own PNGs are all 8-bit RGBA, which is all this used to read.
+    Minecraft's are not: most vanilla and Create sprites are 4- or 8-bit *palette*
+    images with their transparency in a tRNS chunk, so reading them needs palette,
+    greyscale and RGB as well. Everything is returned as RGBA either way, so nothing
+    downstream has to know which it got.
+
+    Interlaced images and 16-bit channels are still refused rather than guessed at;
+    neither appears in a Minecraft resource pack.
+    """
     if data[:8] != b'\x89PNG\r\n\x1a\n':
         raise ValueError('{}: not a PNG'.format(path))
 
-    width = height = None
+    width = height = depth = colour = None
+    palette, transparency = [], b''
     compressed = b''
     offset = 8
     while offset < len(data):
@@ -106,18 +132,32 @@ def read_png(path):
         if kind == b'IHDR':
             width, height, depth, colour, compression, filtering, interlace = \
                 struct.unpack('>IIBBBBB', payload)
-            if (depth, colour, interlace) != (8, 6, 0):
-                raise ValueError('{}: expected 8-bit RGBA, non-interlaced'.format(path))
+            if interlace:
+                raise ValueError('{}: interlaced PNGs are not read'.format(path))
+            if colour not in CHANNELS:
+                raise ValueError('{}: unknown colour type {}'.format(path, colour))
+            if depth == 16 or (colour != 3 and depth != 8):
+                raise ValueError('{}: expected 8 bits per channel, got {}'.format(path, depth))
             if (compression, filtering) != (0, 0):
                 raise ValueError('{}: unexpected compression or filter method'.format(path))
+        elif kind == b'PLTE':
+            palette = [tuple(payload[i:i + 3]) for i in range(0, len(payload), 3)]
+        elif kind == b'tRNS':
+            transparency = payload
         elif kind == b'IDAT':
             compressed += payload
         elif kind == b'IEND':
             break
         offset += 12 + length
 
+    channels = CHANNELS[colour]
+    bits = channels * depth
+    stride = (width * bits + 7) // 8
+    # The filter's step is whole bytes, and never less than one -- which is what makes
+    # a sub-byte palette image filter over bytes rather than over pixels.
+    step = max(1, bits // 8)
+
     raw = zlib.decompress(compressed)
-    stride = width * 4
     rows = []
     previous = bytearray(stride)
     position = 0
@@ -127,9 +167,9 @@ def read_png(path):
         line = bytearray(raw[position:position + stride])
         position += stride
         for i in range(stride):
-            left = line[i - 4] if i >= 4 else 0
+            left = line[i - step] if i >= step else 0
             up = previous[i]
-            upper_left = previous[i - 4] if i >= 4 else 0
+            upper_left = previous[i - step] if i >= step else 0
             if filter_type == 0:
                 pass
             elif filter_type == 1:
@@ -145,9 +185,45 @@ def read_png(path):
                 line[i] = (line[i] + nearest) & 0xFF
             else:
                 raise ValueError('{}: unknown filter {}'.format(path, filter_type))
-        rows.append([tuple(line[x * 4:x * 4 + 4]) for x in range(width)])
+        rows.append(_to_rgba(line, width, depth, colour, palette, transparency, path))
         previous = line
     return width, height, rows
+
+
+def _samples(line, width, depth):
+    """One unfiltered row as a list of samples, unpacking sub-byte depths."""
+    if depth == 8:
+        return list(line[:width])
+    per_byte = 8 // depth
+    mask = (1 << depth) - 1
+    out = []
+    for x in range(width):
+        byte = line[x // per_byte]
+        shift = 8 - depth * (x % per_byte + 1)
+        out.append((byte >> shift) & mask)
+    return out
+
+
+def _to_rgba(line, width, depth, colour, palette, transparency, path):
+    """One unfiltered row, whatever its layout, as RGBA tuples."""
+    if colour == 6:
+        return [tuple(line[x * 4:x * 4 + 4]) for x in range(width)]
+    if colour == 2:
+        return [tuple(line[x * 3:x * 3 + 3]) + (255,) for x in range(width)]
+    if colour == 4:
+        return [(line[x * 2], line[x * 2], line[x * 2], line[x * 2 + 1]) for x in range(width)]
+    if colour == 0:
+        return [(value, value, value, 255) for value in _samples(line, width, depth)]
+
+    if not palette:
+        raise ValueError('{}: palette image with no PLTE'.format(path))
+    out = []
+    for index in _samples(line, width, depth):
+        # tRNS is shorter than the palette whenever the entries past it are opaque,
+        # which is the usual case: one transparent entry at the front and no more.
+        alpha = transparency[index] if index < len(transparency) else 255
+        out.append(palette[index] + (alpha,))
+    return out
 
 
 def opaque_bounds(width, height, pixels):

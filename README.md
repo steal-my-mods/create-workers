@@ -318,6 +318,55 @@ square, which is the one thing the whole approach exists to avoid. The jar keeps
 because the mods list draws it small. CurseForge wants 512 for the project page, and it downscales
 well but never upscales.
 
+### The project page's art
+
+The images the CurseForge page is built out of are generated too, from the same assets the game
+loads:
+
+```bash
+python3 tools/generate_page_art.py                 # everything, into branding/
+python3 tools/generate_page_art.py --only canteen  # one sheet, while iterating
+```
+
+It writes `branding/banner.png` (1280x640 — the name and the three things the mod adds in a row), a
+`branding/card-<thing>.png` at 960x540 for each of them, and a `branding/recipe-<thing>.png` for
+every shaped recipe the mod ships. They share the badge's blue graph paper, white keyline and soft
+shadow, with the palette imported from `generate_logo.py` rather than restated, so the page and the
+icon beside it in a mod list read as one family.
+
+The recipe sheets are drawn from `data/createworkers/recipe/*.json`, so a rebalanced recipe redraws
+instead of going stale, and a new one gets a picture without this script being touched. Most of what
+is *in* them belongs to somebody else — andesite alloy is Create's, dye and planks are Mojang's — and
+none of it is copied into this repo: the sprites are read out of the jars Gradle has already cached,
+at the moment the image is drawn. What is committed is a finished picture, which puts these in the
+same position as a screenshot of a crafting table rather than in the position of a repo that
+redistributes two other projects' textures. That means recipe sheets need a build to have run once;
+the banner and the cards need nothing (`--minecraft-jar` / `--create-jar` override the search).
+
+`docs/curseforge-page.md` holds the page's actual copy, with each image slotted in where it goes —
+including briefs for the screenshots that have to be taken rather than generated.
+
+Nothing in them is typed twice. The block pictures are `render_block_model.py` drawing the shipped
+models; the names come out of `lang/en_us.json`, so renaming a block renames it on the page; and the
+Station's lamps are placed from the constants in `generate_block_textures.py`, which is what lets the
+page show a staffed rack — the lamps are drawn by `WorkerStationRenderer`, not by the block model, so
+a plain model render shows an empty one. Change a texture and re-run this, and the page catches up.
+The headings are set in `tools/pixel_font.py`, a bitmap font written out here rather than loaded from
+the system, so that the output is byte-identical on any machine.
+
+**What it cannot draw is a worker.** A villager in a hard hat and a hi-vis vest only exists once
+vanilla's model, its textures and `WorkerGearModels.fitTo` have met inside a running client — the
+gear is *fitted* to whatever model wears it, which is the whole point of it, and a hand-written
+reconstruction of that in a drawing tool would be a picture of what we hope happens rather than of
+what does. That is the mod's best picture and it has to be a screenshot; the gallery wants those.
+This covers the rest of the page, repeatably.
+
+Adding a thing to the page is one entry in `SUBJECTS`: its card comes for free, the banner grows a
+column, and its recipe draws itself. Neither CI workflow re-runs this one — unlike the logo and the
+Ponder plates, these files never enter the jar, so a stale one costs a wrong picture on a web page
+rather than a wrong mod, and the recipe sheets need dependency jars a CI runner would have to fetch
+to draw at all.
+
 ### The Ponder scene's plate
 
 The little diorama the Ponder scenes play out on is generated as well, rather than built in a
