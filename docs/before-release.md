@@ -36,6 +36,52 @@ explicitly accepted before a `v*` tag is pushed.
     `python3 tools/generate_page_art.py`. That part is self-updating; the prose is not.
   Re-run the generator and read the page end to end against the mod before tagging.
 
+- **The Ponder scenes are behind the mod, which is the failure this project has already had once.**
+  They are the only documentation shipped inside the jar and nothing in the game contradicts them, so
+  a stale page is worse than a missing one — the hiring scene taught "right-click a villager with a
+  hat" for several versions after Stations took that away. Three gaps now:
+  - **`WorkingHoursScene` still says a bed is where *that* Worker sleeps.** It is a dormitory anchor:
+    a job's shift-workers share one hat and therefore one bed, and the ones who miss out take a free
+    bed beside it. Same wording problem as the project page, and the same fix.
+  - **No scene mentions the Canteen, food or hunger.** A Worker that slows to a crawl and throws angry
+    particles has no in-game explanation at all, and the block that feeds it is undocumented.
+  - **No scene mentions trades.** 86 listings across five levels, invisible to anyone who does not
+    right-click a Worker on spec.
+  CLAUDE.md's rule is that when a mechanic changes the scene is part of the change; this session
+  changed four and wrote none. `tools/generate_ponder_lang.py` regenerates the text and checks the
+  beat timing, so the cost is the storyboards rather than the bookkeeping.
+
+## Found by the high-effort review, plausible but not chased
+
+Reported with a `PLAUSIBLE` verdict and left alone: each was read in the code but not run down, so
+the failure scenario is reasoning rather than observation.
+
+- **The Ponder plate's Station faces south and the scene points at its north face.**
+  `tools/generate_ponder_structure.py` writes `facing: south` and `WorkerStationScene` derives its
+  pointer from `Direction.NORTH`, with a comment claiming nothing in the generator turns the block.
+  `WorkerStationRenderer` draws the lamps on `FACING`, so the "one lamp per job" beat would indicate
+  the unlit back. Nothing can catch it: `theHiringPlateHasAnEmptyStationInIt` never asserts `FACING`,
+  and Ponder does not load on a dedicated server. Worth ten minutes with a client.
+- **Lowering `stationSlots` does not shrink an existing rack.** It is enforced only on insertion;
+  `loadAdditional` accepts any index below `MAX_SLOTS` and every roster loop runs to `MAX_SLOTS`, so
+  an admin cutting it from 12 to 4 to reduce per-tick cost gets no reduction on a rack already built.
+  `rack.setStackInSlot` also bypasses `capacity()` and the hard-hat check, and `CWCapabilities`
+  exposes the rack to any item-handler consumer.
+- **The lamp self-consistency check is one-dimensional.** The overlap and centring assertions in
+  `generate_block_textures.py` both walk `xs` only, so changing `LAMP_PITCH_Y` in both files leaves
+  the two-file equality intact, all three rows on the panel, and the generator reporting success while
+  the rendered lamps overlap vertically.
+
+## Decisions nobody has actually made
+
+- **The Canteen's three readouts measure two different things, deliberately but unsigned-off.** The
+  comparator scales **food points** against `PLENTY`; the heap on the top and the bar on the flanks
+  count **slots**. So a full rack of beetroot is nine bright cells, a full bar and a comparator
+  reading of 4. The argument for it is that the block shows what is in it while the comparator shows
+  how much feeding it is worth — and the comparator measures points precisely so a restock line does
+  not fire at the wrong time for three foods out of four. The argument against is that one block
+  should not answer "how full" two ways. It has been raised twice and settled neither way.
+
 ## Numbers that were chosen rather than measured
 
 - **The Canteen's nine slots are still a guess, and the arithmetic now says they are generous.**
