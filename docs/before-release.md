@@ -17,23 +17,27 @@ explicitly accepted before a `v*` tag is pushed.
 
 ## Numbers that were chosen rather than measured
 
-- **The Canteen holds nine slots, and nine is a guess.** For comparison: a Create Item Vault is 20
-  slots per block (config `vaultCapacity`, default 20) and combines up to 3×3×9 blocks; a vanilla
-  chest is 27; a dispenser is 9; a hopper is 5. So the Canteen is the smallest real container in the
-  family, at 576 items if filled with one food.
-  The two reasons in the code are that it should read as a trough rather than as storage, and that it
-  keeps the comparator from jumping to full on the first item — the second is true of almost any slot
-  count, so really there is one reason and it is a feeling.
-  **What would settle it:** the food drain rate, which now exists — one delivery per point,
-  `deliveriesPerFoodPoint` 25 by default, so a loaf is 100 deliveries. What is still missing is a real
-  line to measure against: how many deliveries a crew makes in a shift, how many crews one trough
-  serves now that a Canteen feeds everyone within `canteenRange`, and therefore how long nine slots
-  last. That is an hour in a world, not an argument.
-  It is a single constant (`CanteenBlockEntity.SLOTS`) and the comparator scales off it automatically.
-  If it still cannot be measured, 20 is the defensible arbitrary number, because it is the one Create
-  already uses for a block of this kind.
-- **How much food a shift costs**, and **the slowdown floor for a hungry worker** — see
-  [phase-4.md](phase-4.md#open-questions), which holds the bounds each wants to satisfy.
+- **The Canteen's nine slots are still a guess, and the arithmetic now says they are generous.**
+  Measured off the defaults: a delivery cycle is `20d + 20` ticks for a beat `d` blocks wide at the
+  mod's own ~10 ticks per block, so an 8000-tick shift is 24–80 deliveries — about 44 on a typical
+  eight-block beat. At `deliveriesPerFoodPoint` 10 that is ~1.1 loaves a shift, so a full nine-slot
+  canteen of bread (2304 points) feeds a maximum 36-worker station for **about a fortnight**, and a
+  four-worker line for **months**.
+  So capacity is not the binding constraint and never was — the drain is, which is why that moved and
+  this did not. Nine slots stays until somebody has played with it; the number to watch is whether
+  restocking a canteen feels like a chore or like something you never think about.
+  For comparison: a Create Item Vault is 20 slots per block, a vanilla chest 27, a dispenser 9.
+  It is one constant (`CanteenBlockEntity.SLOTS`) and the comparator scales off it automatically.
+- **`deliveriesPerFoodPoint` is 10, derived rather than measured.** It was picked as the value where
+  a full canteen feeds a full station for a fortnight and a topped-up worker keeps going for about
+  three shifts away from one — but a villager will only ever hold twelve points of food, so this
+  number also silently sets **how far a worker can stray from a canteen**, and that half has never
+  been seen in play. Watch for workers limping in a base that has plenty of bread in the wrong place.
+- **The hungry slowdown floor** (`hungryPace` 0.35) — see
+  [phase-4.md](phase-4.md#open-questions). Neither it nor the particles have been seen in ordinary
+  play, because until the drain moved, hunger essentially never happened.
+- **The trade prices are a first pass.** Nothing in the list skips a gate, which was the rule, but the
+  quantities and emerald costs were chosen rather than weighed against what a villager hall pays.
 
 ## Found by review, judged and deferred
 

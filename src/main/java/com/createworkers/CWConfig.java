@@ -158,10 +158,14 @@ public class CWConfig {
 
 		DELIVERIES_PER_FOOD_POINT = builder
 			.comment("How far one point of food goes, counted in deliveries. Vanilla values a loaf of",
-				"bread at four points and a carrot, potato or beetroot at one, so at the default a",
-				"loaf carries a Worker through a hundred deliveries -- roughly a shift on a busy line.",
-				"Lower numbers make feeding a crew the thing your factory is mostly doing.")
-			.defineInRange("deliveriesPerFoodPoint", 25, 1, 10000);
+				"bread at four points and a carrot, potato or beetroot at one, so at the default a loaf",
+				"carries a Worker through forty deliveries -- about one shift on an ordinary beat.",
+				"",
+				"It also decides how far a Worker can stray from a Canteen, because a villager will only",
+				"ever hold twelve points of food: at the default that is about three shifts away from a",
+				"trough before it starts to limp. Lower numbers make feeding a crew the thing your",
+				"factory is mostly doing; higher ones make it something you set up once and forget.")
+			.defineInRange("deliveriesPerFoodPoint", 10, 1, 10000);
 
 		HUNGRY_PACE = builder
 			.comment("How fast a hungry Worker works, as a fraction of its normal pace: it walks this",

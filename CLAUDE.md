@@ -734,6 +734,20 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   forgotten. What counts as food is the item's own `FOOD` component rather than a list kept here — a
   list is wrong the day any mod adds a bread, and the component is the same question `FOOD_POINTS`
   will be asking. (`aCanteenTakesFoodAndNothingElse`.)
+- **Food is priced in points, and three of vanilla's four foods are worth a quarter of the fourth.**
+  `Villager.FOOD_POINTS` is bread 4, potato, carrot and beetroot 1 — and `wantsMoreFood()` counts
+  **points**, not items, so a canteen tops every villager up to twelve points whatever it is feeding
+  them. **So poor food does not make a worker hungrier**; its autonomy is identical. What it costs is
+  logistics: a canteen of roots holds a quarter of the feeding of one of bread, needs restocking four
+  times as often, and takes four servings to do what one loaf does. That makes the wheat→bread craft a
+  4× compression step on a food supply line, which is a good trade to have arrived at for free.
+  **The consequence is that a comparator must measure points rather than stacks**, or a trough of
+  beetroot and one of bread both read fifteen while holding four times different amounts of feeding,
+  and a restock line wired to it fires at the wrong time for three foods out of four. The scale is
+  `PLENTY` — a full block of the *cheapest* food — deliberately rather than the dearest: against an
+  all-bread maximum a physically full carrot trough would read four and the signal would be demanding
+  a top-up that cannot happen, and **a readout that asks for the impossible is worse than an imprecise
+  one**. (`aCanteensComparatorMeasuresFeedingRatherThanFullness`, mutation-checked.)
 - **Trading locks a villager to its profession, which breaks retirement — and the fix is to lean on
   that rather than fight it.** `ResetProfession` wants `getVillagerXp() == 0` **and**
   `getLevel() <= 1`, so a worker a player has traded with is one vanilla will never hand back.

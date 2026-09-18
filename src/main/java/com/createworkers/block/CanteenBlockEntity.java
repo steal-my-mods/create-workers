@@ -64,6 +64,14 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	 */
 	private static final int SERVING_INTERVAL = 100;
 
+	/**
+	 * The food value a full comparator signal means: a canteen filled with the cheapest food there is.
+	 *
+	 * <p>One point per item the block can hold. Anything full reads full, and bread — worth four
+	 * apiece — is simply carrying three quarters of its value as headroom above the top of the scale.
+	 */
+	private static final int PLENTY = SLOTS * 64;
+
 	private final ItemStackHandler stock = new ItemStackHandler(SLOTS) {
 
 		@Override
@@ -210,17 +218,37 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		return all;
 	}
 
-	/** How full it is, on the fifteen steps a comparator has. Anything at all reads as at least one. */
+	/**
+	 * How much <b>feeding</b> is left, on the fifteen steps a comparator has.
+	 *
+	 * <p>Points rather than stacks, and that is the whole change. Measured the ordinary way — how full
+	 * the container is — a canteen of beetroot and a canteen of bread both read fifteen while holding
+	 * four times different amounts of food, because vanilla prices bread at four points and every root
+	 * at one. A player wiring a restock line to the cheap readout would have it fire at the wrong time
+	 * for three of the four foods in the game, and nothing anywhere would say why. The question this
+	 * block exists to answer is "is there enough feeding in here", so that is the question it answers.
+	 *
+	 * <p><b>Scaled against {@link #PLENTY} and clamped, rather than against the maximum possible.</b>
+	 * A full canteen of bread is 2304 points and a full canteen of carrots is 576; scaling against the
+	 * larger would leave a physically full carrot trough reading four out of fifteen, with the signal
+	 * asking for a top-up that cannot happen — and <b>a readout that demands the impossible is worse
+	 * than an imprecise one</b>. Against 576, any food reads full when the block is full, and bread
+	 * simply carries headroom: a bread canteen holds at fifteen until it is down to a quarter, then
+	 * falls. Which is right, because at that point it still holds more feeding than a full trough of
+	 * roots.
+	 *
+	 * <p>What is given up is "can this accept more", which a comparator means everywhere else. Nothing
+	 * needs it here: a funnel filling a canteen backs up by itself once the slots are full.
+	 */
 	public int comparatorOutput() {
-		float filled = 0;
+		int points = 0;
 		for (int slot = 0; slot < SLOTS; slot++) {
 			ItemStack held = stock.getStackInSlot(slot);
-			if (!held.isEmpty())
-				filled += held.getCount() / (float) Math.min(stock.getSlotLimit(slot), held.getMaxStackSize());
+			points += foodPoints(held) * held.getCount();
 		}
-		if (filled == 0)
+		if (points == 0)
 			return 0;
-		return Math.max(1, Math.round(filled / SLOTS * 14) + 1);
+		return Math.min(15, 1 + Math.round(points / (float) PLENTY * 14));
 	}
 
 	/**

@@ -1461,6 +1461,57 @@ public class WorkerGameTests {
 	}
 
 	/**
+	 * A Canteen's comparator measures feeding, not fullness.
+	 *
+	 * <p>Vanilla prices bread at four points and every root at one, so measured the ordinary way — how
+	 * full the container is — a trough of beetroot and a trough of bread both read fifteen while
+	 * holding four times different amounts of food. A restock line wired to that fires at the wrong
+	 * time for three of the four foods in the game, and nothing in the world says why.
+	 *
+	 * <p>The scale is deliberately the <em>cheapest</em> food rather than the dearest. Against an
+	 * all-bread maximum a physically full carrot trough would read four out of fifteen and the signal
+	 * would be asking for a top-up that cannot happen — <b>a readout that demands the impossible is
+	 * worse than an imprecise one</b>. So anything full reads full, and bread carries its extra value
+	 * as headroom: it holds at fifteen down to a quarter, which is exactly when it stops having more
+	 * feeding in it than a full trough of roots.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aCanteensComparatorMeasuresFeedingRatherThanFullness(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
+		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
+			throw new GameTestAssertException("the canteen should have a block entity");
+
+		helper.assertTrue(canteen.comparatorOutput() == 0, "an empty canteen should read zero");
+
+		// Same item count, four times the feeding.
+		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.CARROT, 16), false);
+		int roots = canteen.comparatorOutput();
+		helper.assertTrue(roots > 0, "a canteen with food in it should read something");
+
+		canteen.stock()
+			.extractItem(0, 64, false);
+		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.BREAD, 16), false);
+		int loaves = canteen.comparatorOutput();
+		helper.assertTrue(loaves > roots,
+			"sixteen loaves should read higher than sixteen carrots -- they are four times the feeding, "
+				+ "and a comparator that called them equal is the thing this change is for (bread "
+				+ loaves + ", carrots " + roots + ")");
+
+		// And a full trough of the cheapest food still reads full, or the signal would be asking for
+		// a top-up that cannot happen.
+		canteen.stock()
+			.extractItem(0, 64, false);
+		for (int slot = 0; slot < CanteenBlockEntity.SLOTS; slot++)
+			canteen.stock()
+				.setStackInSlot(slot, new ItemStack(Items.BEETROOT, 64));
+		helper.assertTrue(canteen.comparatorOutput() == 15,
+			"a canteen full of the cheapest food there is should still read full, and read "
+				+ canteen.comparatorOutput());
+		helper.succeed();
+	}
+
+	/**
 	 * A Canteen's stock reaches the client, or the goggles lie about it.
 	 *
 	 * <p>This shipped broken: a chute filled a canteen all morning and a pair of goggles read "Empty"
