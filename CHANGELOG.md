@@ -8,6 +8,30 @@ Notable changes to Create: Workers, newest first. The format follows
 CurseForge and GitHub — so write entries for a player reading a download page, not for someone
 reading the diff.
 
+## [Unreleased]
+
+### Changed
+
+- **Workers trade like a supplier now.** A Worker buys what your factory actually makes — andesite
+  alloy, shafts, cogwheels, casings, pressed sheets, and at the top the components that are a real
+  chore to automate — and sells you assembled machines for them. Buying your output is where the
+  emeralds come from; a Worker that only bought wheat and andesite gave a factory no income worth
+  having.
+- **What a Worker offers follows what you are building.** Andesite kinetics and your first water
+  wheel early, then logistics, then processing machines, then contraptions and fluids, and the
+  package network last — rather than cheap things first and dear things later. A Redstone Contact now
+  sits beside the Rope Pulley you need to make any use of it.
+- **Prices are dearer, because emeralds are easier.** Still the cheapest of any Create trading mod or
+  pack measured, but no longer several times under all of them.
+- **The Worker's trade list is no longer a config file.** Packs retune villager trades with KubeJS,
+  which can already add to, replace or clear this list — a second, bespoke format only got in the way.
+
+### Removed
+
+- **Zinc Ingots are no longer sold.** One zinc ingot becomes nine andesite alloy, and a saw cuts each
+  of those into six shafts: selling zinc and buying kinetics returned about four emeralds for every
+  one spent, indefinitely. Brass Ingots are still sold at the top level.
+
 ## [0.4.0] — 2026-09-07
 
 Workers turn up in uniform in mods that replace villagers, and taking the hat is now a real change

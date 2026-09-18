@@ -1,8 +1,12 @@
 package com.createworkers.test;
 
 import java.io.InputStream;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.createworkers.CWConfig;
 import com.createworkers.CreateWorkers;
@@ -29,10 +33,13 @@ import com.simibubi.create.content.logistics.funnel.FunnelBlock;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.blockEntity.behaviour.filtering.FilteringBehaviour;
 import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint.Mode;
+import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
@@ -65,6 +72,8 @@ import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
@@ -1336,40 +1345,182 @@ public class WorkerGameTests {
 	}
 
 	/**
-	 * Every trade this mod ships parses, and names items that exist.
+	 * Every trade this mod ships names an item that exists, and none of them is a Hard Hat.
 	 *
-	 * <p>The list is configuration, so it is <b>text</b> — and a typo in a shipped default is a trade
-	 * that silently never appears, with one line in a log nobody reads. Nothing else can catch that:
-	 * the compiler sees a string, and the trade only fails at world load. So the defaults are parsed
-	 * here exactly as the config parses them, and every item id is resolved against the registry.
-	 *
-	 * <p>It also pins the mod's own rule, which the config deliberately does <em>not</em> enforce on a
-	 * server owner: nothing we ship may sell a Hard Hat, because that is this mod's gate.
+	 * <p>Item ids are <b>strings</b>, deliberately — {@code WorkerTrades.listing} skips one it cannot
+	 * resolve so that an id Create moves between versions costs a shop line rather than a world. The
+	 * cost of that leniency is that a typo is invisible: the compiler sees a string and the trade
+	 * merely never appears, with one line in a log nobody reads. So every id is resolved here.
 	 */
 	@GameTest(template = "work_site", timeoutTicks = 100)
-	public static void everyShippedTradeParsesAndNamesRealItems(GameTestHelper helper) {
-		List<String> shipped = WorkerTrades.defaults();
+	public static void everyShippedTradeNamesRealItems(GameTestHelper helper) {
+		List<WorkerTrades.Trade> shipped = WorkerTrades.table();
 		helper.assertTrue(!shipped.isEmpty(), "the shipped trade list should not be empty");
 
-		for (String line : shipped) {
-			helper.assertTrue(WorkerTrades.parse(line) != null,
-				"a shipped trade does not parse, so it would be dropped with a log warning: " + line);
-
-			String[] parts = line.split(";");
-			for (String field : new String[] { parts[1], parts[3] })
-				helper.assertTrue(!field.trim()
-					.equals("createworkers:hard_hat"),
-					"nothing this mod ships may trade a Hard Hat -- it is our own gate: " + line);
+		for (WorkerTrades.Trade trade : shipped) {
+			for (String id : new String[] { trade.cost(), trade.result() }) {
+				helper.assertTrue(WorkerTrades.item(id) != null,
+					"a shipped trade names an item that does not exist, so it would be dropped with a "
+						+ "log warning: " + id);
+				helper.assertTrue(!id.equals("createworkers:hard_hat"),
+					"nothing this mod ships may trade a Hard Hat -- it is our own gate");
+			}
+			helper.assertTrue(trade.level() >= 1 && trade.level() <= 5,
+				"a trade level outside 1-5 has nowhere to go: " + trade.goods());
+			helper.assertTrue(trade.isSale() != trade.isPurchase(),
+				"a trade is one direction or the other, never both or neither: " + trade.goods());
 		}
-
-		// And a line naming an item nobody has installed is skipped, not fatal. That is the expected
-		// case for a config whose obvious use is naming items from other mods.
-		helper.assertTrue(WorkerTrades.parse("1;minecraft:emerald;1;somemod:widget;1;12;2") == null,
-			"an unknown item should be refused rather than crashing a world load");
-		helper.assertTrue(WorkerTrades.parse("nonsense") == null, "and so should a malformed line");
-		helper.assertTrue(WorkerTrades.parse("9;minecraft:emerald;1;minecraft:stick;1;12;2") == null,
-			"and a level outside 1-5, which has nowhere to go");
 		helper.succeed();
+	}
+
+	/**
+	 * Nothing the Worker sells can be crafted into something it buys for more than it cost.
+	 *
+	 * <p><b>This is the rule that makes the buy side safe at all.</b> Crafting runs one way, so a
+	 * table that buys upstream and sells downstream cannot be looped; one that sells a material and
+	 * buys what the material becomes is an emerald printer, and the multiplication is not subtle.
+	 * Create's saw cuts <em>one</em> Andesite Alloy into six Shafts, a Shaft and a plank make a
+	 * Cogwheel, and a Zinc Ingot mixes into nine alloy — so a zinc ingot reaches fifty-four cogwheels.
+	 * Selling zinc was in the shipped table until this test was written, at a price that would have
+	 * returned four emeralds on every one spent, for ever, with no factory behind it.
+	 *
+	 * <p>It walks <b>the server's own recipe manager</b> rather than a list kept here, so it stays
+	 * true as Create changes its recipes and covers any other mod's recipes too. Create's processing
+	 * recipes are read through {@code ProcessingRecipe} for their <em>secondary</em> outputs, the
+	 * bonus nugget a crushing recipe rolls; their primary output already arrives through
+	 * {@code Recipe.getResultItem}, so <b>nothing in the table as it stands depends on that branch</b>
+	 * — mutation-checked by removing it, which still catches zinc at the same factor. It is here
+	 * because a secondary output is a real way to multiply an item and the next edit to this table
+	 * should not have to know that.
+	 *
+	 * <p>Every approximation here is deliberately generous to the loop: output chances are ignored
+	 * (a rollable result counts at its full stack), an ingredient slot counts for every item it
+	 * accepts, and the search takes the best multiplication it can find. A guard that errs towards
+	 * finding loops is the right kind of wrong.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void theTradeTableHasNoEmeraldLoop(GameTestHelper helper) {
+		Map<Item, List<Craft>> byIngredient = recipeGraph(helper);
+		helper.assertTrue(byIngredient.size() > 100,
+			"the recipe graph looks empty (" + byIngredient.size() + " ingredients), so this test "
+				+ "would pass whatever the table said");
+
+		Map<Item, Double> bid = new HashMap<>();
+		Map<Item, Double> ask = new HashMap<>();
+		for (WorkerTrades.Trade trade : WorkerTrades.table()) {
+			Item goods = WorkerTrades.item(trade.goods());
+			if (goods == null)
+				continue;
+			if (trade.isPurchase())
+				bid.merge(goods, trade.emeraldsEach(), Math::max);
+			else
+				ask.merge(goods, trade.emeraldsEach(), Math::min);
+		}
+		for (Item both : ask.keySet())
+			helper.assertTrue(!bid.containsKey(both),
+				"the Worker both sells and buys " + id(both) + ", which is a loop on its own");
+
+		for (Map.Entry<Item, Double> sold : ask.entrySet()) {
+			for (Map.Entry<Item, Double> reached : downstream(helper, sold.getKey(), byIngredient)
+				.entrySet()) {
+				Double pays = bid.get(reached.getKey());
+				if (pays == null)
+					continue;
+				double back = pays * reached.getValue();
+				helper.assertTrue(back < sold.getValue(),
+					"emerald loop: " + id(sold.getKey()) + " sells at " + sold.getValue()
+						+ "e and crafts x" + reached.getValue() + " into " + id(reached.getKey())
+						+ ", which the Worker buys back for " + back + "e");
+			}
+		}
+		helper.succeed();
+	}
+
+	/** One recipe, flattened to what it consumes and the one output being considered. */
+	private record Craft(Map<Item, Integer> consumes, Item produces, int yield) {}
+
+	/** How far a craft chain is followed. Deep enough for any real chain, shallow enough to end. */
+	private static final int CRAFT_DEPTH = 6;
+
+	/** Everything craftable from {@code start}, with the best per-unit multiplication found. */
+	private static Map<Item, Double> downstream(GameTestHelper helper, Item start,
+		Map<Item, List<Craft>> byIngredient) {
+		Map<Item, Double> best = new HashMap<>();
+		best.put(start, 1.0);
+		Deque<Object[]> frontier = new ArrayDeque<>();
+		frontier.push(new Object[] { start, 1.0, 0 });
+		int expansions = 0;
+		while (!frontier.isEmpty()) {
+			Object[] at = frontier.pop();
+			Item item = (Item) at[0];
+			double factor = (Double) at[1];
+			int depth = (Integer) at[2];
+			if (depth >= CRAFT_DEPTH)
+				continue;
+			for (Craft craft : byIngredient.getOrDefault(item, List.of())) {
+				// A guard that quietly gives up is cover, so say so instead.
+				helper.assertTrue(++expansions < 200_000,
+					"the craft walk from " + id(start) + " did not settle, so this test cannot vouch "
+						+ "for the table");
+				double next = factor * craft.yield() / craft.consumes()
+					.get(item);
+				if (next > best.getOrDefault(craft.produces(), 0.0) * 1.000001) {
+					best.put(craft.produces(), next);
+					frontier.push(new Object[] { craft.produces(), next, depth + 1 });
+				}
+			}
+		}
+		best.remove(start);
+		return best;
+	}
+
+	/** Every recipe on the server, indexed by the items that go into it. */
+	private static Map<Item, List<Craft>> recipeGraph(GameTestHelper helper) {
+		HolderLookup.Provider registries = helper.getLevel()
+			.registryAccess();
+		Map<Item, List<Craft>> byIngredient = new HashMap<>();
+		for (RecipeHolder<?> held : helper.getLevel()
+			.getServer()
+			.getRecipeManager()
+			.getRecipes()) {
+			Recipe<?> recipe = held.value();
+
+			Map<Item, Integer> consumes = new HashMap<>();
+			try {
+				for (Ingredient slot : recipe.getIngredients())
+					for (ItemStack accepted : slot.getItems())
+						consumes.merge(accepted.getItem(), 1, Integer::sum);
+			} catch (RuntimeException awkward) {
+				continue;   // a recipe that will not describe its inputs cannot be walked
+			}
+			if (consumes.isEmpty())
+				continue;
+
+			List<ItemStack> outputs = new ArrayList<>();
+			try {
+				// Create's processing recipes carry several outputs; Recipe.getResultItem reports one.
+				if (recipe instanceof ProcessingRecipe<?, ?> processing)
+					outputs.addAll(processing.getRollableResultsAsItemStacks());
+				else
+					outputs.add(recipe.getResultItem(registries));
+			} catch (RuntimeException awkward) {
+				continue;
+			}
+
+			for (ItemStack out : outputs) {
+				if (out == null || out.isEmpty())
+					continue;
+				for (Map.Entry<Item, Integer> in : consumes.entrySet())
+					byIngredient.computeIfAbsent(in.getKey(), any -> new ArrayList<>())
+						.add(new Craft(consumes, out.getItem(), out.getCount()));
+			}
+		}
+		return byIngredient;
+	}
+
+	private static String id(Item item) {
+		return BuiltInRegistries.ITEM.getKey(item)
+			.toString();
 	}
 
 	/**

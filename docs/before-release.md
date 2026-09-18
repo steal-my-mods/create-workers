@@ -39,13 +39,27 @@ explicitly accepted before a `v*` tag is pushed.
 - **The hungry slowdown floor** (`hungryPace` 0.35) — see
   [phase-4.md](phase-4.md#open-questions). Neither it nor the particles have been seen in ordinary
   play, because until the drain moved, hunger essentially never happened.
-- **The trade prices have been checked against vanilla's tables and hold.** 20 wheat for an emerald is
-  the Farmer's own rate; 24 andesite is 50% stingier than the Mason's 16, so nobody uses a Worker to
-  dump stone; and there is no arbitrage loop in either direction, every rate being equal to or worse
-  than the vanilla profession that specialises in it. Two notes rather than faults: a Worker buying
-  wheat at the Farmer's rate is a second emerald source competing with farmers, and the listings carry
-  2-5 XP where vanilla ramps 2/10/20/30, so **a Worker levels noticeably slower** and its upper trades
-  are further away than they look.
+- **The trade table is loop-proof and priced against the field, but its income has never been
+  played.** Two things are settled and need no further thought. There is no emerald loop:
+  `theTradeTableHasNoEmeraldLoop` walks the server's own recipes and is mutation-checked, and it is
+  what removed the Zinc Ingot sell (a zinc ingot reaches 54 cogwheels through `create:cutting`, which
+  returned 4 emeralds on every 1 spent). And the prices sit at roughly the cheapest general-play
+  comparator measured — Create: Engineers, A Distant Journey, flesh-and-steel — rather than under all
+  of them as they did before: Drill 3e against their 5, Fan 2e against 3, Mixer 3e against 4.
+  What is **unvalidated is the size of the buy side**, which is the new thing. It is metered by
+  `maxUses` rather than by price: a purchase yields at most 16 emeralds before the Worker must
+  restock, which it can only do twice a day, and any one Worker shows only two of a level's listings.
+  On paper a full station is a few hundred emeralds a day; nobody has played it. Watch for a factory
+  that makes emeralds faster than it makes anything else, and turn `maxUses` down rather than prices
+  up if so.
+  Also unvalidated, and cheaper to settle: whether four Create foods on the buy side is three too
+  many, since they compete with each other for the two listings a level shows.
+
+- **The CHANGELOG has no entries for most of what is unreleased.** `## [Unreleased]` covers the trade
+  rework and nothing else, while everything since 0.4.0 — the Worker Station and its screen, shifts,
+  muster and leisure, the Canteen, food — has no player-facing note at all. `mod_version` is also
+  still `0.4.0`, so `publishMods` would happily find that heading and ship the previous release's
+  notes under a new tag. Bump the version and write the section before any `v*` tag.
 
 ## Found by review, judged and deferred
 

@@ -125,7 +125,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `worker/Shift` | Which crew a worker is on. **An offset into the configured working day, not a pair of times** — one third of a day per crew, so the span stays the operator's single choice |
 | `worker/WalkLocomotion` | Villagers. Also owns `returnTo`, the wander leash |
 | `worker/TeleportLocomotion` | Endermen. Holds the teleport cooldown, so locomotion instances are **per-worker**, not shared |
-| `worker/WorkerTrades` | What a Worker sells and buys — **read from config**, one trade per line, so a server can add items from any mod. Holds the shipped default and the parser |
+| `worker/WorkerTrades` | What a Worker sells and buys. One typed table, **no config** — KubeJS already hooks the same event, so a pack retunes it there. Buys upstream, sells downstream |
 | `worker/WorkerEvents` | Hiring, retiring, drops, conversion, client sync, cleanup, and the vetoes that stop vanilla's own enderman AI from undoing the job |
 | `client/HatSelectionHandler` | Client-side programming UX (mirrors `ArmInteractionPointHandler`) |
 | `client/WorkerGearLayer` | Hard hat + hi-vis vest render layer |
@@ -765,11 +765,41 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   Also: **a worker can never restock by itself.** `WorkAtPoi` is what calls `shouldRestock`/`restock`
   and it requires a `JOB_SITE`, which a worker deliberately has none of — so trades are restocked at
   the start of a shift instead, guarded by vanilla's own public `shouldRestock()` so the twice-a-day
-  cap comes for free. And the trade list follows one rule, **nothing that skips a gate**: shafts, cogs
-  and andesite alloy, never precision mechanisms or brass casings, and **never a hard hat**, because
-  the hat is this mod's own gate and the rule applies to us first.
-  (`aWorkerHasTradesAndNoneOfThemIsAHardHat`, `aWorkerThatHasTradedIsACareerWorker`, both
-  mutation-checked.)
+  cap comes for free.
+- **The trade table buys upstream and sells downstream, and that is a safety property rather than a
+  theme.** Crafting runs one way, so a table that sells a material and buys what the material becomes
+  is an emerald printer — and Create's multipliers are not subtle. `create:cutting` puts **one**
+  Andesite Alloy through a saw for **six** Shafts, a Shaft and a plank make a Cogwheel, and a Zinc
+  Ingot mixes into **nine** alloy: so a zinc ingot reaches fifty-four cogwheels. Selling zinc was in
+  the shipped table, at a price that returned four emeralds on every one spent, for ever, with no
+  factory behind it. So the Worker **buys** a line's basic output (alloy, shafts, cogwheels, casings,
+  pressed sheets, and the components that are a real chore to automate) and **sells** assembled
+  machines, which craft into nothing it buys. That buy side is also the answer to "where do emeralds
+  come from", which a table buying only raw wheat and andesite could never be.
+  `theTradeTableHasNoEmeraldLoop` walks **the server's own recipe manager** and is what settles it —
+  never reason about this by eye. It is mutation-checked by putting zinc back. Its `ProcessingRecipe`
+  branch is *not* load-bearing (a processing recipe's primary output already arrives through
+  `Recipe.getResultItem`); it is there for secondary outputs, and the javadoc says so rather than
+  implying otherwise.
+- **The second trade rule is *nothing that skips a gate*, and it binds the sell side only.** Buying a
+  gated item is always fine — the player had to be past the gate to hold one, which is why precision
+  mechanisms and brass casings are on the buy side. The one sell-side relaxation is Brass Ingots at
+  level five. **Never a hard hat**, because the hat is this mod's own gate and the rule applies to us
+  first. Level is **progression, not price**: andesite kinetics, logistics, processing, contraptions
+  and fluids, the package network — prices stay in a narrow band and the *tier* is what rises.
+  `maxUses`, not price, is what meters the emerald income.
+  (`aWorkerHasTradesAndNoneOfThemIsAHardHat`, `everyShippedTradeNamesRealItems`,
+  `aWorkerThatHasTradedIsACareerWorker`, all mutation-checked.)
+- **There is deliberately no config for the trade list, and there was one for two commits.** Every
+  Create modpack that retunes villager trades does it with **KubeJS**, which hooks the same
+  `VillagerTradesEvent` NeoForge fires for our profession — so a pack can already add to, replace or
+  clear the table without our help, and a bespoke `level;item;count;…` string format served only
+  someone who has the standard tool and is not using it. Its one real cost is worth remembering: a
+  trade list read from a `SERVER` config threw *"Cannot get config value before config is loaded"* and
+  took the world down with it, because `VillagerTradesEvent` fires from `TagsUpdatedEvent`
+  `SERVER_DATA_LOAD` — before a server config exists. If a data-driven list is ever wanted, the
+  datapack route is the one that works (and is what Create: Engineers ships), because reload listeners
+  have run by the time that event fires.
 - **Food has to be items, because a villager's hunger is unreachable.** `Villager.foodLevel` is
   **private**, nothing public reads it, and the only public thing that moves it is
   `eatAndDigestFood()` — which eats to full and spends twelve in one go for breeding. There is no way

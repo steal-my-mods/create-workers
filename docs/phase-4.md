@@ -304,13 +304,43 @@ The rule is **nothing that skips a gate**. A shaft is andesite alloy and a plank
 They are available in the first hour, gated behind nothing, and mass-producing them by hand is the
 tedium Create wants you to automate past. What a labourer has to sell is the product of labour.
 
-- **Sell:** shafts, cogs, andesite alloy.
-- **Buy:** raw materials, food.
 - **Not:** precision mechanisms, brass casings, sturdy sheets — what a factory is the *answer* to.
-  *(Relaxed once in the build: zinc and brass **ingots** are sold at level 5, where 250 experience of
-  trading is more work than a zinc mine. Materials only — nothing brass-tier and finished.)*
+  *(Relaxed once in the build: brass **ingots** are sold at level 5, where 250 experience of trading
+  is more work than a zinc mine. Materials only — nothing brass-tier and finished.)*
 - **Not hard hats.** The hat is this mod's own gate, and the same rule applies to us: a player who can
   buy one has bought past the item the mod is about.
+
+### What the build changed: the direction reversed
+
+The plan above has the Worker **selling** shafts, cogs and andesite alloy and **buying** raw
+materials. The built table does the opposite, and the reason is arithmetic rather than taste.
+
+Two complaints in play drove it. Trading felt *stingy*, which turned out not to be about prices —
+measured against Create: Engineers, A Distant Journey and flesh-and-steel, every overlapping price
+here was already 2–8× cheaper than the cheapest of them. It was about **emeralds**: buying only raw
+wheat and andesite gives a factory no income proportionate to what it produces, and the field's answer
+is uniform — Create: Engineers' entire Novice level is the player *selling* Create items, at 31 to 53
+emeralds a listing.
+
+Adding that buy side makes the planned sell side unsafe, and not marginally. Crafting runs one way, so
+a table that sells a material and buys what the material becomes is an emerald printer:
+`create:cutting` puts **one** Andesite Alloy through a saw for **six** Shafts, a Shaft and a plank make
+a Cogwheel, and a Zinc Ingot mixes into **nine** alloy. Zinc therefore reaches **fifty-four**
+cogwheels — the level-5 zinc sell above returned about four emeralds on every one spent, for ever,
+with no factory behind it. No price fixes that; only the direction does.
+
+So the rule is now **buy upstream, sell downstream, never both sides of one chain.** The Worker buys a
+line's basic output and sells assembled machines, which craft into nothing it buys. That is a better
+fantasy as well as a safe one: you make the kinetics, they assemble the machines.
+`theTradeTableHasNoEmeraldLoop` enforces it against the server's own recipe manager, because this is
+not a thing to reason about by eye — the zinc loop survived a careful reading and was found by the
+check.
+
+The other two departures: **level is progression rather than price** (andesite kinetics, logistics,
+processing, contraptions and fluids, the package network), which is what the field does and what fixes
+oddities like a Redstone Contact being cheaper than the Rope Pulley its only real use needs; and there
+is **no config**, because every Create pack that retunes trades uses KubeJS, which hooks the same
+event and can already replace the table wholesale.
 
 Mechanically it is one event — `VillagerTrades.TRADES` is a plain mutable map keyed by profession, and
 NeoForge's `VillagerTradesEvent` is the supported way in.
