@@ -798,9 +798,17 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   right genre — and it feeds *any* villager short of food, `wantsMoreFood()` being vanilla's own test,
   so a canteen near a farm feeds the farmers and one near a Station feeds whichever crew is awake. It
   reaches through walls, which funnels do too, and the alternative is the A* this exists to avoid.
-  (`aCanteenFeedsWhoeverIsNearItWithoutAnybodyWalking`, mutation-checked, and deliberately uses a
-  villager with `setNoAi` — what is being asserted is that *nobody walked*, so a villager that could
-  stroll into range would prove nothing.)
+  **It fills a villager in one serving rather than an item at a time**, and the rate limit that used
+  to be there protected nothing: `wantsMoreFood` caps every villager at twelve points and vanilla
+  enforces it, so a trough could never empty into a passer-by. What the limit did cost is the case
+  that decides where a Canteen goes — a worker that merely *passes* one on its commute. Crossing a
+  sixteen-block reach is about 320 ticks, three servings, which at one item apiece was a full top-up
+  in bread and a quarter of one in carrots; a crew clipping the edge with roots in the trough starved
+  slowly while walking past a full Canteen twice a day.
+  (`aCanteenFeedsWhoeverIsNearItWithoutAnybodyWalking`, mutation-checked, and it is stocked with
+  **carrots on purpose** — on bread, "filled in one pass" and "filled in three" both end with a full
+  villager and differ only in how long they took, which a waiting assertion cannot see. It also uses
+  `setNoAi`, because what it asserts is that *nobody walked*.)
 - **A hungry worker is slowed and never stopped, and `hungryPace` is a floor rather than a slide.** A
   line that halts is a line whose owner has to go and find out why, and food must not be the one
   mechanic here that fails invisibly — but a hard stop turns a supply hiccup into an outage. It is

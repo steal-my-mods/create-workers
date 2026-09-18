@@ -305,8 +305,18 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	 * the behaviour that shares food between villagers runs in the idle package, so the farmer who
 	 * would hand a night Worker its dinner is asleep at the hour it is awake.
 	 *
-	 * <p>One item per villager per serving, so a full trough drains at a rate a player can watch
-	 * rather than emptying into the first passer-by.
+	 * <p><b>Served until they stop wanting more, not one item a pass.</b> The rate limit was there to
+	 * stop a trough "emptying into the first passer-by" — which it never could, because
+	 * {@code wantsMoreFood} caps every villager at twelve points and vanilla enforces that for us. So
+	 * it protected nothing, and it cost the case that matters most for where a Canteen goes: a Worker
+	 * that merely <em>passes</em> one on its way to and from work. Crossing the middle of a sixteen
+	 * block reach is about 320 ticks of walking, which at one item per five seconds was three items —
+	 * a full top-up in bread and a quarter of one in carrots, and a Worker clipping the edge with
+	 * roots in the trough starved slowly while walking past a full Canteen twice a day.
+	 *
+	 * <p>Filling in one pass makes a Canteen somewhere a crew goes <em>past</em> rather than somewhere
+	 * they have to live, whatever it is stocked with. The total handed out is identical either way —
+	 * twelve points a villager — it just arrives while they are still in range.
 	 */
 	private void serve(Level level, BlockPos pos) {
 		if (isEmpty())
@@ -315,20 +325,27 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		double range = CWConfig.CANTEEN_RANGE.get();
 		List<Villager> nearby = level.getEntitiesOfClass(Villager.class, new AABB(pos).inflate(range),
 			Villager::wantsMoreFood);
-		for (Villager hungry : nearby) {
-			int slot = firstFood();
-			if (slot < 0)
-				return; // emptied partway through the queue
-			ItemStack meal = stock.extractItem(slot, 1, false);
-			if (meal.isEmpty())
-				return;
-			// Straight into the inventory rather than onto the floor. A villager only picks items up
-			// when its brain is free to want them, which a Worker's never is.
-			ItemStack refused = hungry.getInventory()
-				.addItem(meal);
-			if (!refused.isEmpty())
-				stock.insertItem(slot, refused, false); // its pockets are full; keep the loaf
-		}
+		for (Villager hungry : nearby)
+			// Bounded by vanilla: twelve points is the most a villager will hold, so this is at most
+			// twelve items even on the cheapest food, and it stops on its own.
+			while (hungry.wantsMoreFood()) {
+				int slot = firstFood();
+				if (slot < 0)
+					return; // emptied partway through the queue
+				ItemStack meal = stock.extractItem(slot, 1, false);
+				if (meal.isEmpty())
+					return;
+				// Straight into the inventory rather than onto the floor. A villager only picks items up
+				// when its brain is free to want them, which a Worker's never is.
+				ItemStack refused = hungry.getInventory()
+					.addItem(meal);
+				if (!refused.isEmpty()) {
+					// Its pockets are full of something else. Keep the loaf, and stop asking -- without
+					// this, a villager carrying eight stacks of seeds is an endless loop.
+					stock.insertItem(slot, refused, false);
+					break;
+				}
+			}
 	}
 
 	/** @return the first slot with food in it, or -1. */

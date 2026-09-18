@@ -1363,7 +1363,11 @@ public class WorkerGameTests {
 		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
 		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
 			throw new GameTestAssertException("the canteen should have a block entity");
-		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.BREAD, 8), false);
+		// Carrots, not bread, and that is what gives the last assertion any teeth. A villager stops at
+		// twelve points, which is three loaves but twelve carrots -- so on bread "filled in one pass"
+		// and "filled in three" both end with a full villager and only differ in how long they took,
+		// which a waiting assertion cannot see. On carrots the difference is 1 against 12, in one tick.
+		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.CARROT, 32), false);
 
 		Villager beside = helper.spawn(EntityType.VILLAGER, SOURCE.offset(1, 0, 0));
 		// Held still on purpose: what is being asserted is that nobody had to walk anywhere, so a
@@ -1374,12 +1378,27 @@ public class WorkerGameTests {
 			.isEmpty(), "precondition: the villager starts with nothing to eat");
 		helper.assertTrue(beside.wantsMoreFood(), "precondition: and vanilla agrees it is short of food");
 
-		helper.succeedWhen(() -> {
-			helper.assertTrue(!beside.getInventory()
-				.isEmpty(), "a canteen should hand food to a villager standing next to it");
-			helper.assertTrue(CanteenBlockEntity.foodPoints(beside.getInventory()
-				.getItem(0)) > 0, "and what it hands over should be food");
-		});
+		helper.startSequence()
+			.thenWaitUntil(() -> {
+				helper.assertTrue(!beside.getInventory()
+					.isEmpty(), "a canteen should hand food to a villager standing next to it");
+				helper.assertTrue(CanteenBlockEntity.foodPoints(beside.getInventory()
+					.getItem(0)) > 0, "and what it hands over should be food");
+			})
+			// Checked on the tick *after* the food first appears, which is still inside the same serving
+			// -- the next one is a hundred ticks away. So this sees exactly what one pass handed over.
+			//
+			// **Filled in one serving, not one item at a time.** The case it protects is the Worker that
+			// merely walks past a Canteen on its way to and from work: crossing a sixteen-block reach is
+			// about three servings, which at one item apiece was a quarter of a top-up in carrots -- so a
+			// crew clipping the edge starved slowly while walking past a full trough twice a day.
+			// Vanilla caps the villager at twelve points either way, so nothing is spent faster; it just
+			// arrives while they are still in range.
+			.thenExecute(() -> helper.assertTrue(!beside.wantsMoreFood(),
+				"one serving should fill a villager rather than top it up by one item, and this one is "
+					+ "still short after a whole pass -- a Worker walking past is only in range for about "
+					+ "three of them"))
+			.thenSucceed();
 	}
 
 	/**
