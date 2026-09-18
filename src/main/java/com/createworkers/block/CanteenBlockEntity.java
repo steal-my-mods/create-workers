@@ -66,13 +66,6 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	 */
 	private static final int SERVING_INTERVAL = 100;
 
-	/**
-	 * The food value a full comparator signal means: a canteen filled with the cheapest food there is.
-	 *
-	 * <p>One point per item the block can hold. Anything full reads full, and bread — worth four
-	 * apiece — is simply carrying three quarters of its value as headroom above the top of the scale.
-	 */
-	private static final int PLENTY = SLOTS * 64;
 
 	private final ItemStackHandler stock = new ItemStackHandler(SLOTS) {
 
@@ -289,36 +282,43 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	}
 
 	/**
-	 * How much <b>feeding</b> is left, on the fifteen steps a comparator has.
+	 * How full it is, on the fifteen steps a comparator has — the ordinary way, as every other
+	 * container in the game measures.
 	 *
-	 * <p>Points rather than stacks, and that is the whole change. Measured the ordinary way — how full
-	 * the container is — a canteen of beetroot and a canteen of bread both read fifteen while holding
-	 * four times different amounts of food, because vanilla prices bread at four points and every root
-	 * at one. A player wiring a restock line to the cheap readout would have it fire at the wrong time
-	 * for three of the four foods in the game, and nothing anywhere would say why. The question this
-	 * block exists to answer is "is there enough feeding in here", so that is the question it answers.
+	 * <p><b>This measured food <em>points</em> until the block could show its own stock, and the
+	 * reason it stopped is that the block now says the same thing three ways.</b> The top draws a
+	 * heap per slot and the flanks a bar per slot; a comparator scaling points would have made a full
+	 * rack of beetroot nine bright cells, a full bar and a reading of four. One block cannot answer
+	 * "how full" two ways and be trusted on either.
 	 *
-	 * <p><b>Scaled against {@link #PLENTY} and clamped, rather than against the maximum possible.</b>
-	 * A full canteen of bread is 2304 points and a full canteen of carrots is 576; scaling against the
-	 * larger would leave a physically full carrot trough reading four out of fifteen, with the signal
-	 * asking for a top-up that cannot happen — and <b>a readout that demands the impossible is worse
-	 * than an imprecise one</b>. Against 576, any food reads full when the block is full, and bread
-	 * simply carries headroom: a bread canteen holds at fifteen until it is down to a quarter, then
-	 * falls. Which is right, because at that point it still holds more feeding than a full trough of
-	 * roots.
+	 * <p>What the points scale was protecting is real and is worth writing down, because it is the
+	 * cost of this: vanilla prices bread at four points and every root at one, so a trough of carrots
+	 * and a trough of bread now read alike at the same item count while holding four times different
+	 * amounts of feeding. A restock line wired to a carrot canteen refills it on the same signal as a
+	 * bread one and buys a quarter as much autonomy.
 	 *
-	 * <p>What is given up is "can this accept more", which a comparator means everywhere else. Nothing
-	 * needs it here: a funnel filling a canteen backs up by itself once the slots are full.
+	 * <p>That information is not gone, it moved. <b>The top of the block says which food it is</b> —
+	 * a carrot trough is orange and a bread one is tan, from across the room — and the goggles name it
+	 * outright. What a comparator is for everywhere else in Minecraft is "how full is this", and a
+	 * player wiring one has every right to expect that answer rather than a bespoke one.
+	 *
+	 * <p>Per-slot proportion rather than a raw item count, which is vanilla's own formula and is also
+	 * exactly what the heap and the bar draw: a slot holding one carrot is a ninth of a slot, not a
+	 * 576th of a block.
 	 */
 	public int comparatorOutput() {
-		int points = 0;
+		float filled = 0.0F;
+		boolean any = false;
 		for (int slot = 0; slot < SLOTS; slot++) {
 			ItemStack held = stock.getStackInSlot(slot);
-			points += foodPoints(held) * held.getCount();
+			if (held.isEmpty())
+				continue;
+			any = true;
+			filled += held.getCount() / (float) Math.min(stock.getSlotLimit(slot), held.getMaxStackSize());
 		}
-		if (points == 0)
+		if (!any)
 			return 0;
-		return Math.min(15, 1 + Math.round(points / (float) PLENTY * 14));
+		return Math.min(15, 1 + Math.round(filled / SLOTS * 14.0F));
 	}
 
 	/**

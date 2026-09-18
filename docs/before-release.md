@@ -78,16 +78,6 @@ the failure scenario is reasoning rather than observation.
   the two-file equality intact, all three rows on the panel, and the generator reporting success while
   the rendered lamps overlap vertically.
 
-## Decisions nobody has actually made
-
-- **The Canteen's three readouts measure two different things, deliberately but unsigned-off.** The
-  comparator scales **food points** against `PLENTY`; the heap on the top and the bar on the flanks
-  count **slots**. So a full rack of beetroot is nine bright cells, a full bar and a comparator
-  reading of 4. The argument for it is that the block shows what is in it while the comparator shows
-  how much feeding it is worth — and the comparator measures points precisely so a restock line does
-  not fire at the wrong time for three foods out of four. The argument against is that one block
-  should not answer "how full" two ways. It has been raised twice and settled neither way.
-
 ## Numbers that were chosen rather than measured
 
 - **The Canteen's nine slots are still a guess, and the arithmetic now says they are generous.**

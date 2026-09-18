@@ -768,13 +768,19 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   logistics: a canteen of roots holds a quarter of the feeding of one of bread, needs restocking four
   times as often, and takes four servings to do what one loaf does. That makes the wheat→bread craft a
   4× compression step on a food supply line, which is a good trade to have arrived at for free.
-  **The consequence is that a comparator must measure points rather than stacks**, or a trough of
-  beetroot and one of bread both read fifteen while holding four times different amounts of feeding,
-  and a restock line wired to it fires at the wrong time for three foods out of four. The scale is
-  `PLENTY` — a full block of the *cheapest* food — deliberately rather than the dearest: against an
-  all-bread maximum a physically full carrot trough would read four and the signal would be demanding
-  a top-up that cannot happen, and **a readout that asks for the impossible is worse than an imprecise
-  one**. (`aCanteensComparatorMeasuresFeedingRatherThanFullness`, mutation-checked.)
+  **The comparator measured those points for a while and no longer does, and the reversal is worth
+  understanding rather than re-litigating.** Points were right on their own terms — a restock line
+  fires at the right moment whatever the trough holds, where a fullness scale has a carrot canteen and
+  a bread one refilling on the same signal for a quarter of the autonomy. What killed it is that the
+  block learned to draw its own stock: the top is a heap per slot and the flanks a bar per slot, so a
+  points scale made a full rack of beetroot nine bright cells, a full bar, and a reading of four. **One
+  block cannot answer "how full" two ways and be trusted on either**, and a comparator means "how
+  full" everywhere else in the game. The information points carried did not vanish, it moved to where
+  a player actually looks: the top is orange for carrots and tan for bread from across the room.
+  (`aCanteensComparatorAgreesWithWhatItDraws` pins the *agreement* rather than the formula — testing
+  the formula alone would pass just as happily with the face and the redstone back out of step.
+  Mutation-checked by restoring the points scale.)
+
 - **Trading locks a villager to its profession, which breaks retirement — and the fix is to lean on
   that rather than fight it.** `ResetProfession` wants `getVillagerXp() == 0` **and**
   `getLevel() <= 1`, so a worker a player has traded with is one vanilla will never hand back.

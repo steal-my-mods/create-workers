@@ -19,6 +19,12 @@ reading the diff.
 
 ### Changed
 
+- **A Canteen's comparator now measures how full it is**, like every other container in the game,
+  instead of how much feeding it holds. It used to weigh bread as four times a carrot, which was
+  defensible until the block started showing its stock on its own face — a full trough of beetroot
+  looked full and read a quarter full, and no block should answer the same question two ways. Which
+  food it is holding is now something you can see from across the room.
+
 - **Workers trade like a supplier now.** A Worker buys what your factory actually makes — andesite
   alloy, shafts, cogwheels, casings, pressed sheets, and at the top the components that are a real
   chore to automate — and sells you assembled machines for them. Buying your output is where the

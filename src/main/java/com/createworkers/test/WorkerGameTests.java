@@ -1838,22 +1838,25 @@ public class WorkerGameTests {
 	}
 
 	/**
-	 * A Canteen's comparator measures feeding, not fullness.
+	 * A Canteen's comparator measures how full it is, and agrees with the block's own face.
 	 *
-	 * <p>Vanilla prices bread at four points and every root at one, so measured the ordinary way — how
-	 * full the container is — a trough of beetroot and a trough of bread both read fifteen while
-	 * holding four times different amounts of food. A restock line wired to that fires at the wrong
-	 * time for three of the four foods in the game, and nothing in the world says why.
+	 * <p><b>It measured food <em>points</em> until the block could draw its own stock.</b> That was
+	 * defensible on its own terms — vanilla prices bread at four and every root at one, so a restock
+	 * line on a points scale fires at the right time whatever the trough holds — but it stopped being
+	 * defensible once the top drew a heap per slot and the flanks a bar per slot. A full rack of
+	 * beetroot would have been nine bright cells, a full bar, and a comparator reading of four. One
+	 * block cannot answer "how full" two ways and be trusted on either.
 	 *
-	 * <p>The scale is deliberately the <em>cheapest</em> food rather than the dearest. Against an
-	 * all-bread maximum a physically full carrot trough would read four out of fifteen and the signal
-	 * would be asking for a top-up that cannot happen — <b>a readout that demands the impossible is
-	 * worse than an imprecise one</b>. So anything full reads full, and bread carries its extra value
-	 * as headroom: it holds at fifteen down to a quarter, which is exactly when it stops having more
-	 * feeding in it than a full trough of roots.
+	 * <p>So the thing this pins is <b>agreement</b>, not a formula: what the comparator says and what
+	 * {@code servings()} draws have to move together. Testing the formula alone would pass just as
+	 * happily with the two out of step again.
+	 *
+	 * <p>The cost is real and is the reason this was argued twice: carrots and bread now read alike at
+	 * the same item count while holding four times different feeding. What carries that difference now
+	 * is the top of the block, which is orange for one and tan for the other from across the room.
 	 */
 	@GameTest(template = "work_site", timeoutTicks = 100)
-	public static void aCanteensComparatorMeasuresFeedingRatherThanFullness(GameTestHelper helper) {
+	public static void aCanteensComparatorAgreesWithWhatItDraws(GameTestHelper helper) {
 		layFloor(helper);
 		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
 		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
@@ -1861,30 +1864,42 @@ public class WorkerGameTests {
 
 		helper.assertTrue(canteen.comparatorOutput() == 0, "an empty canteen should read zero");
 
-		// Same item count, four times the feeding.
-		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.CARROT, 16), false);
+		// The same item count of two foods worth four times different amounts of feeding. They fill
+		// the block equally, so they read equally -- which is the change, and is what every other
+		// container in the game does.
+		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.CARROT, 32), false);
 		int roots = canteen.comparatorOutput();
-		helper.assertTrue(roots > 0, "a canteen with food in it should read something");
-
 		canteen.stock()
 			.extractItem(0, 64, false);
-		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.BREAD, 16), false);
-		int loaves = canteen.comparatorOutput();
-		helper.assertTrue(loaves > roots,
-			"sixteen loaves should read higher than sixteen carrots -- they are four times the feeding, "
-				+ "and a comparator that called them equal is the thing this change is for (bread "
-				+ loaves + ", carrots " + roots + ")");
+		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.BREAD, 32), false);
+		helper.assertTrue(canteen.comparatorOutput() == roots,
+			"half a slot of carrots and half a slot of bread fill the block equally, so they should "
+				+ "read equally; got " + roots + " and " + canteen.comparatorOutput());
 
-		// And a full trough of the cheapest food still reads full, or the signal would be asking for
-		// a top-up that cannot happen.
+		// And the signal has to track the same per-slot fullness the block draws, or the face and the
+		// redstone disagree about one block.
 		canteen.stock()
 			.extractItem(0, 64, false);
-		for (int slot = 0; slot < CanteenBlockEntity.SLOTS; slot++)
+		int previous = 0;
+		for (int slot = 0; slot < CanteenBlockEntity.SLOTS; slot++) {
 			canteen.stock()
 				.setStackInSlot(slot, new ItemStack(Items.BEETROOT, 64));
-		helper.assertTrue(canteen.comparatorOutput() == 15,
-			"a canteen full of the cheapest food there is should still read full, and read "
-				+ canteen.comparatorOutput());
+
+			int signal = canteen.comparatorOutput();
+			helper.assertTrue(signal >= previous,
+				"filling another slot must never lower the signal; slot " + slot + " took it from "
+					+ previous + " to " + signal);
+			previous = signal;
+
+			int drawn = 0;
+			for (CanteenBlockEntity.Serving serving : canteen.servings())
+				if (!serving.isEmpty())
+					drawn++;
+			helper.assertTrue(drawn == slot + 1,
+				"the block should be drawing " + (slot + 1) + " slots of food and is drawing " + drawn);
+		}
+		helper.assertTrue(previous == 15,
+			"a physically full canteen reads full whatever is in it, and read " + previous);
 		helper.succeed();
 	}
 
