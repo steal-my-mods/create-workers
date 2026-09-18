@@ -17,6 +17,14 @@ reading the diff.
   near it without their walking to it, and that an off-duty Worker will trade with you. Food and
   trades both shipped with no in-game explanation at all.
 
+### Removed
+
+- **Three shift settings are gone: `clockOff`, `leisureLength` and `musterLength`.** A crew's working
+  day has to be exactly a third of a day or the three crews overlap or leave gaps, so `clockOff` had
+  one correct value and every other one broke coverage. The other two could, between them, leave a
+  crew no night at all — which silently put it back on the village's hours. `clockOn` still moves the
+  whole working day, and `workingHours` still turns the feature off.
+
 ### Changed
 
 - **A Canteen's comparator now measures how full it is**, like every other container in the game,

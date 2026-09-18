@@ -129,6 +129,96 @@ the failure scenario is reasoning rather than observation.
 
 ## Found by review, judged and deferred
 
+From the `/code-review` pass over the leisure and muster work. **All four are now dealt with**, three
+by code and one by deleting the settings that made it reachable.
+
+- **`parts()` reserving nothing for rest — settled by deletion.** `clockOff`, `leisureLength` and
+  `musterLength` are gone; the span is `Shift.OFFSET` and the other two are constants, so there is no
+  longer a way to configure a crew out of its night.
+- **A config reload not re-applying schedules — mostly settled by the same deletion, and what is left
+  is smaller than it was.** Only `workingHours` and `clockOn` still feed a schedule, so toggling
+  either at runtime leaves already-loaded workers on the old one until their chunk reloads. Worth a
+  line in the config comments rather than a sweep, unless somebody actually retunes hours on a live
+  server.
+- **Panic and the stall clocks — guarded, and the guard is untestable on purpose.** See CLAUDE.md:
+  `Progress.stalled` resets when the mob gets closer and a panicking villager thrashes, so the leash
+  is already protected by accident; two tests were written to catch it and both passed with the guard
+  removed, so neither shipped.
+- **The bed-absence assertions — fixed.** They name the bed that must not be chosen now, which is the
+  shape CLAUDE.md asks for.
+
+## Found by the high-effort review, plausible but not chased
+
+Reported with a `PLAUSIBLE` verdict and left alone: each was read in the code but not run down, so
+the failure scenario is reasoning rather than observation.
+
+- **The Ponder plate's Station faces south and the scene points at its north face.**
+  `tools/generate_ponder_structure.py` writes `facing: south` and `WorkerStationScene` derives its
+  pointer from `Direction.NORTH`, with a comment claiming nothing in the generator turns the block.
+  `WorkerStationRenderer` draws the lamps on `FACING`, so the "one lamp per job" beat would indicate
+  the unlit back. Nothing can catch it: `theHiringPlateHasAnEmptyStationInIt` never asserts `FACING`,
+  and Ponder does not load on a dedicated server. Worth ten minutes with a client.
+- **Lowering `stationSlots` does not shrink an existing rack.** It is enforced only on insertion;
+  `loadAdditional` accepts any index below `MAX_SLOTS` and every roster loop runs to `MAX_SLOTS`, so
+  an admin cutting it from 12 to 4 to reduce per-tick cost gets no reduction on a rack already built.
+  `rack.setStackInSlot` also bypasses `capacity()` and the hard-hat check, and `CWCapabilities`
+  exposes the rack to any item-handler consumer.
+- **The lamp self-consistency check is one-dimensional.** The overlap and centring assertions in
+  `generate_block_textures.py` both walk `xs` only, so changing `LAMP_PITCH_Y` in both files leaves
+  the two-file equality intact, all three rows on the panel, and the generator reporting success while
+  the rendered lamps overlap vertically.
+
+## Numbers that were chosen rather than measured
+
+- **The Canteen's nine slots are still a guess, and the arithmetic now says they are generous.**
+  Measured off the defaults: a delivery cycle is `20d + 20` ticks for a beat `d` blocks wide at the
+  mod's own ~10 ticks per block, so an 8000-tick shift is 24–80 deliveries — about 44 on a typical
+  eight-block beat. At `deliveriesPerFoodPoint` 10 that is ~1.1 loaves a shift, so a full nine-slot
+  canteen of bread (2304 points) feeds a maximum 36-worker station for **about a fortnight**, and a
+  four-worker line for **months**.
+  So capacity is not the binding constraint and never was — the drain is, which is why that moved and
+  this did not. Nine slots stays until somebody has played with it; the number to watch is whether
+  restocking a canteen feels like a chore or like something you never think about.
+  For comparison: a Create Item Vault is 20 slots per block, a vanilla chest 27, a dispenser 9.
+  It is one constant (`CanteenBlockEntity.SLOTS`) and the comparator scales off it automatically.
+- **`ticksPerFoodPoint` is 1800, and it is now exact rather than estimated.** Charging by time
+  removed the guesswork: a worker eats 8000/1800 = 4.4 points a shift, always, whatever its beat looks
+  like. 1800 was chosen so that an ordinary eight-block beat consumes exactly what it did under the
+  old per-delivery scheme, so nothing rebalanced when the unit changed.
+  What is still unvalidated is whether that *rate* is the right one to want. A villager holds at most
+  twelve points, so this number also sets **how far a worker can stray from a canteen** — about three
+  shifts at the default. Watch for workers limping in a base that has plenty of bread in the wrong
+  place.
+- **The hungry slowdown floor** (`hungryPace` 0.35) — **accepted; ships as it stands.** Seen in play
+  by starving a worker on purpose (`/tick sprint 44000` with the Canteen out of range). It works, and
+  the unhappy-villager particles are what make it legible.
+  Two things were learned and are worth having before anyone retunes it. It is **not** a double
+  penalty: the walk is multiplied by `hungryPace` and the transfer cooldown divided by it, so every
+  part of a haul cycle stretches by the same 2.86x and **throughput lands at exactly 0.35** — one
+  number, one meaning. But that one number does **two jobs**: the walk is what a player *sees* (0.35
+  of villager pace is a crawl, and "very slow, maybe too slow" was the verdict), while the cooldown is
+  what a factory *measures*. They are coupled only because it was simpler.
+  **Revisit only if the crawl reads as punishing during ordinary production** rather than during a
+  deliberate starvation test. The remedy is already worked out: split them, walk at ~0.6 and leave the
+  cooldown alone, and the cost is unchanged while the limp is less grim.
+
+- **The trade table's buy-side income — accepted; ships unplayed.** Two things about the table are
+  settled and need no further thought. There is no emerald loop:
+  `theTradeTableHasNoEmeraldLoop` walks the server's own recipes and is mutation-checked, and it is
+  what removed the Zinc Ingot sell (a zinc ingot reaches 54 cogwheels through `create:cutting`, which
+  returned 4 emeralds on every 1 spent). And the prices sit at roughly the cheapest general-play
+  comparator measured — Create: Engineers, A Distant Journey, flesh-and-steel — rather than under all
+  of them as they did before: Drill 3e against their 5, Fan 2e against 3, Mixer 3e against 4.
+  What has **not** been played is the size of the buy side, which is the new thing. It is metered by
+  `maxUses` rather than by price: a purchase yields at most 16 emeralds before the Worker must
+  restock, which it can only do twice a day, and any one Worker shows only two of a level's listings.
+  On paper a full station is a few hundred emeralds a day.
+  **Revisit if players report a factory minting emeralds faster than it makes anything else**, and
+  turn `maxUses` down rather than prices up. Cheaper to settle at the same time: whether four Create
+  foods on the buy side is three too many, since they compete for the two listings a level shows.
+
+## Found by review, judged and deferred
+
 From the `/code-review` pass over the leisure and muster work. Each was verified against the code;
 these are the ones that were real but not worth stopping for at the time.
 

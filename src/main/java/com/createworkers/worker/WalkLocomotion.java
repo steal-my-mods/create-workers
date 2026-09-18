@@ -171,7 +171,14 @@ public class WalkLocomotion implements WorkerLocomotion {
 		return workingSpeed() * (float) (double) CWConfig.IDLE_SPEED_FACTOR.get();
 	}
 
-	private static boolean isPanicking(Mob mob) {
+	/**
+	 * Whether the brain has taken this villager over, which is vanilla's own test rather than ours.
+	 *
+	 * <p>Public because the stall clocks have to ask it too. Every walk in here already stands aside
+	 * for a fleeing villager, but the clocks that give up on those walks were evaluated first, so a
+	 * worker punished by a zombie was punished twice.
+	 */
+	public static boolean isPanicking(Mob mob) {
 		return VillagerPanicTrigger.isHurt(mob) || VillagerPanicTrigger.hasHostile(mob);
 	}
 

@@ -478,6 +478,13 @@ public class WorkerJobGoal extends Goal {
 			return;
 		}
 
+		// **A fleeing villager is not a worker failing to reach its bed.** commuteTo already stands
+		// aside for one -- the brain owns a panicking villager, which is a rule held everywhere here --
+		// but this clock was read first, so a worker that met a zombie on its way to bed had the bed
+		// written off for BED_REST_TICKS and spent the rest of the night standing where it stopped.
+		if (WalkLocomotion.isPanicking(mob))
+			return;
+
 		if (commute.stalled(mob, bed, CWConfig.PATH_TIMEOUT.get())) {
 			// Could not get there. Same reasoning as the leash: there is nothing above this to give up
 			// to, so it has to give up on the clock, or a bed behind a door somebody bricked up is a
@@ -587,6 +594,20 @@ public class WorkerJobGoal extends Goal {
 	 * drifting any further, which is most of what the leash was for.
 	 */
 	private void walkHome(WorkerData data) {
+		// Same again. returnTo stands aside for a panicking villager, so the walk is never attempted,
+		// and the clock below would otherwise count the attempt that never happened as a failure.
+		//
+		// **This one is deliberately belt and braces, and it is worth knowing why it cannot be
+		// tested.** Progress.stalled resets whenever the mob gets closer to the destination, and a
+		// panicking villager thrashes -- so in practice the clock is already being reset faster than
+		// it can expire, and the leash is protected by accident. Reproducing the failure needs a
+		// worker that cannot move at all, which is also a worker that cannot thrash, so no test can
+		// tell this guard from its absence: two were written and both passed with it removed. It
+		// stays because "the clock happens to be reset by the flailing" is not a property anybody
+		// should be relying on, and a slightly better-boxed worker does not have it.
+		if (WalkLocomotion.isPanicking(mob))
+			return;
+
 		signalIfLost(data);
 
 		if (leashRest > 0) {

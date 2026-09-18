@@ -62,7 +62,7 @@ public enum Shift implements StringRepresentable {
 
 	/** When this crew stops, in ticks of the day. */
 	public int clockOff() {
-		return Math.floorMod(CWConfig.CLOCK_OFF.get() + offset(), WorkerShift.DAY_LENGTH);
+		return Math.floorMod(CWConfig.CLOCK_ON.get() + OFFSET + offset(), WorkerShift.DAY_LENGTH);
 	}
 
 	/**

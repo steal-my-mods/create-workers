@@ -53,6 +53,28 @@ public final class WorkerShift {
 	public static final int DAY_LENGTH = 24000;
 
 	/**
+	 * How long a crew is awake before its shift, walking to the post.
+	 *
+	 * <p>A constant rather than a setting. It was one, and what a setting bought was the ability to
+	 * configure a crew out of a night: muster was protected first when the day's parts were shared
+	 * out — rightly, since without it the factory stalls for the length of a walk at every changeover
+	 * — so a long enough shift with a long enough muster left nothing for {@code REST}, and
+	 * {@code workerSchedule} then returned null and the crew quietly fell back to the village's hours.
+	 * A dial whose only safe settings are near its default is a dial that mostly generates bugs.
+	 */
+	public static final int MUSTER = 590;
+
+	/**
+	 * How long a crew has to itself after the shift, before bed.
+	 *
+	 * <p>Also a constant now, and for the same reason: it and {@link #MUSTER} shared out whatever the
+	 * shift left, and between them they could take all of it. What leisure <em>is</em> — the job goal
+	 * standing back and letting vanilla's idle package have the worker — is not really a quantity an
+	 * operator has an opinion about.
+	 */
+	public static final int LEISURE = 4390;
+
+	/**
 	 * How many beds one search will path at. Vanilla's own bed hunt uses five, and the figure is a
 	 * cost bound rather than a taste: {@code findPathToPois} is a single A* over the whole set, but
 	 * every candidate widens the search it has to satisfy.
@@ -77,9 +99,6 @@ public final class WorkerShift {
 	 */
 	private static final Schedule[] cachedSchedules = new Schedule[Shift.VALUES.length];
 	private static int cachedClockOn = -1;
-	private static int cachedLeisure = -1;
-	private static int cachedMuster = -1;
-	private static int cachedClockOff = -1;
 
 	private WorkerShift() {
 	}
@@ -128,18 +147,11 @@ public final class WorkerShift {
 	@Nullable
 	public static Schedule scheduleFor(Shift shift) {
 		int clockOn = CWConfig.CLOCK_ON.get();
-		int clockOff = CWConfig.CLOCK_OFF.get();
-		int leisure = CWConfig.LEISURE_LENGTH.get();
-		int muster = CWConfig.MUSTER_LENGTH.get();
-		// Every setting the schedule is derived from, or a schedule outlives the change that should
-		// have thrown it away -- and the two new ones move REST just as surely as the hours do.
-		if (cachedClockOn != clockOn || cachedClockOff != clockOff || cachedLeisure != leisure
-			|| cachedMuster != muster) {
+		// The only setting the schedule still turns on. The shift's length, the muster and the leisure
+		// are all constants, so there is nothing else that can move under a cached schedule.
+		if (cachedClockOn != clockOn) {
 			java.util.Arrays.fill(cachedSchedules, null);
 			cachedClockOn = clockOn;
-			cachedClockOff = clockOff;
-			cachedLeisure = leisure;
-			cachedMuster = muster;
 		}
 		if (cachedSchedules[shift.ordinal()] == null)
 			cachedSchedules[shift.ordinal()] = workerSchedule(shift.clockOn(), shift.clockOff());
@@ -160,7 +172,7 @@ public final class WorkerShift {
 	 */
 	@Nullable
 	public static Schedule workerSchedule(int clockOn, int clockOff) {
-		return workerSchedule(clockOn, clockOff, CWConfig.LEISURE_LENGTH.get(), CWConfig.MUSTER_LENGTH.get());
+		return workerSchedule(clockOn, clockOff, LEISURE, MUSTER);
 	}
 
 	/**
@@ -202,6 +214,10 @@ public final class WorkerShift {
 	 * what was asked for.
 	 */
 	private static int[] parts(int span, int leisure, int muster) {
+		// Still clamped, because workerSchedule is called directly by tests with hours of their own
+		// and a caller is entitled to ask for something that does not fit. What has gone is the way
+		// to reach it from a config file: a crew's shift is one Shift.OFFSET and MUSTER and LEISURE
+		// are constants, so the shipped mod always has 16000 spare ticks against 4980 asked for.
 		int spare = DAY_LENGTH - span;
 		int keptMuster = Math.max(0, Math.min(muster, spare));
 		int keptLeisure = Math.max(0, Math.min(leisure, spare - keptMuster));
@@ -222,8 +238,7 @@ public final class WorkerShift {
 
 	/** Which stint a crew is in at a given time, on the configured hours. */
 	public static Stint stintAt(long dayTime, Shift shift) {
-		return stintAt(dayTime, shift.clockOn(), shift.clockOff(), CWConfig.LEISURE_LENGTH.get(),
-			CWConfig.MUSTER_LENGTH.get());
+		return stintAt(dayTime, shift.clockOn(), shift.clockOff(), LEISURE, MUSTER);
 	}
 
 	/**

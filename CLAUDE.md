@@ -1392,6 +1392,26 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   discovers a death on its own clock otherwise, and a corpse is in the world for the twenty ticks of
   its death animation against a look every twenty ticks, so whether a dead worker was replaced promptly
   or sat out the absentee timeout came down to which tick it landed on.
+- **`clockOff`, `leisureLength` and `musterLength` are not settings, and were deleted for being
+  dials whose only safe value was the default.** A crew's span has to be exactly `Shift.OFFSET` or
+  the three crews overlap or leave gaps — the old 12000 default put two crews on the clock together
+  for half of every shift — so `Shift.clockOff()` is `clockOn + OFFSET` and there is nothing to set.
+  Muster and leisure went with it because between them they could take the *whole* of what the shift
+  left: muster is protected first when the day is shared out, rightly, so a long shift and a long
+  muster starved `REST`, `workerSchedule` returned null, and the crew silently fell back to the
+  village's hours — the one thing a worker's own schedule exists to prevent. They are constants now
+  and `parts()` cannot be reached with anything that does not fit.
+  What survives is `workingHours` (a real on and off) and `clockOn`, which rotates the whole day and
+  cannot break coverage because the span no longer moves with it.
+- **A panicking villager is already protected from the stall clocks by accident, and the guard is
+  there to make it deliberate.** `WalkLocomotion` stands every walk aside for a fleeing villager, but
+  the clocks that give up on those walks were read first — so a worker that met a zombie had the walk
+  it never attempted counted against it. In practice it does not: `Progress.stalled` resets whenever
+  the mob gets *closer*, and a panicking villager thrashes, so the clock is reset faster than it can
+  expire. **That makes the guard untestable** — the only way to make the leash fail is to immobilise
+  the worker, which is also the only way to stop it thrashing, so two tests were written and both
+  passed with the guard removed. Neither shipped. The guard stays because "the flailing happens to
+  reset the clock" is not a property to rely on, and a slightly better-boxed worker does not have it.
 - **A crew's working day cannot be longer than `Shift.OFFSET`, and the default used to be.** The three
   crews are a third of a day apart, so a `clockOff` 12000 ticks after `clockOn` puts two of them on the
   clock together for 4000 of every 8000 — three villagers buying about one and a half crews of cover,

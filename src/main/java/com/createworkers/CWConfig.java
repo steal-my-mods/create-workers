@@ -52,13 +52,9 @@ public class CWConfig {
 	public static final ModConfigSpec.DoubleValue HUNGRY_PACE;
 	/** How far a canteen hands food out. */
 	public static final ModConfigSpec.IntValue CANTEEN_RANGE;
-	/** The time of day a worker downs tools. */
-	public static final ModConfigSpec.IntValue CLOCK_OFF;
-	/** The time of day it picks them up again. */
+	/** The time of day the day crew starts. Every other crew is one Shift.OFFSET along from it. */
 	public static final ModConfigSpec.IntValue CLOCK_ON;
 	/** How far from the job site a worker may look for a bed nobody gave it. */
-	public static final ModConfigSpec.IntValue LEISURE_LENGTH;
-	public static final ModConfigSpec.IntValue MUSTER_LENGTH;
 	public static final ModConfigSpec.IntValue BED_SEARCH_RADIUS;
 	/** Whether a worker that cannot walk home is put back by hand. */
 	public static final ModConfigSpec.BooleanValue RECALL_STUCK_WORKERS;
@@ -191,21 +187,6 @@ public class CWConfig {
 			.defineInRange("canteenRange", 16, 1, 64);
 
 
-		CLOCK_OFF = builder
-			.comment("The time of day a worker downs tools, in ticks: 0 is dawn, 6000 noon, 12000 dusk,",
-				"18000 midnight.",
-				"",
-				"This is one crew's working day, and the three crews keep the same one -- each started",
-				"8000 ticks after the last. So a day longer than 8000 ticks means crews OVERLAP: at",
-				"12000 the evening crew is still working when the night crew clocks on, and you pay for",
-				"three villagers to get about one and a half crews of cover. 8000 tiles the clock",
-				"exactly, which is what a rota is for, and is still a longer working day than a vanilla",
-				"villager's own 7000.",
-				"",
-				"Raise it if you only ever run one shift -- overlap costs nothing when there is nobody to",
-				"overlap with, and a worker that downs tools at dusk goes straight to bed rather than",
-				"standing beside it waiting for the village's own bedtime.")
-			.defineInRange("clockOff", 8000, 0, 23999);
 
 		CLOCK_ON = builder
 			.comment("The time of day the day crew starts, in ticks. The default is first light.",
@@ -214,26 +195,7 @@ public class CWConfig {
 				"of its own, so a crew whose off hours fall in daylight sleeps through them.")
 			.defineInRange("clockOn", 0, 0, 23999);
 
-		LEISURE_LENGTH = builder
-			.comment("How long a crew has to itself after its shift, in ticks, before it goes to bed.",
-				"This is the window in which Workers do what any other Villager does off the clock --",
-				"stroll, talk to each other, hand food about, and breed. It is also the only time a",
-				"Worker's trades can be looked at, because vanilla only offers them while idling.",
-				"The default is vanilla's own allowance: a Villager gets 4990 ticks awake and not",
-				"working, and 590 of those go to muster below.",
-				"0 sends a crew straight from work to bed, which is what it did before this existed.")
-			.defineInRange("leisureLength", 4390, 0, 12000);
 
-		MUSTER_LENGTH = builder
-			.comment("How long before its shift a crew is woken to walk to its post, in ticks.",
-				"Three crews covering the day exactly still leave a gap at every changeover, because",
-				"the crew coming on is in bed when the crew going off stops. Waking them early moves",
-				"that walk off the clock: they arrive while the last crew is still working and start",
-				"the moment it stops.",
-				"590 rather than 600 because vanilla's own waking keyframe sits ten ticks late -- a",
-				"Villager lies in for ten ticks past the nominal end of its night, and so does a Worker.",
-				"0 turns muster off, and the factory stalls for the length of a walk at each handover.")
-			.defineInRange("musterLength", 590, 0, 6000);
 
 		BED_SEARCH_RADIUS = builder
 			.comment("How far from the job site a worker may look for a bed of its own, for workers whose",

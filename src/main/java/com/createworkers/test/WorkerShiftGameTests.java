@@ -11,6 +11,7 @@ import com.createworkers.program.WorkerProgram;
 import com.createworkers.registry.CWBlocks;
 import com.createworkers.registry.CWItems;
 import com.createworkers.worker.Shift;
+import com.createworkers.worker.WalkLocomotion;
 import com.createworkers.worker.WorkerData;
 import com.createworkers.worker.WorkerJobGoal;
 import com.createworkers.worker.WorkerShift;
@@ -116,7 +117,6 @@ public class WorkerShiftGameTests {
 	private static int wanderRadiusWas = 12;
 	/** ...and the same for the batch that inverts the hours onto a night shift. */
 	private static int clockOnWas = 0;
-	private static int clockOffWas = 12000;
 
 	/** A sealed box in the far corner, for a worker that genuinely cannot walk anywhere. */
 	private static final BlockPos CELL = new BlockPos(9, 1, 1);
@@ -171,9 +171,7 @@ public class WorkerShiftGameTests {
 	@BeforeBatch(batch = "muster")
 	public static void steadyHours(ServerLevel level) {
 		clockOnWas = CWConfig.CLOCK_ON.get();
-		clockOffWas = CWConfig.CLOCK_OFF.get();
 		CWConfig.CLOCK_ON.set(CWConfig.CLOCK_ON.getDefault());
-		CWConfig.CLOCK_OFF.set(CWConfig.CLOCK_OFF.getDefault());
 		// Starting in the crew's night, so a test that wants to watch it get out of bed has one to
 		// get out of. Inheriting whatever the last batch left is how this first failed: the clock
 		// stood at 1000, which is the middle of the day shift, and the worker never slept at all.
@@ -183,23 +181,19 @@ public class WorkerShiftGameTests {
 	@AfterBatch(batch = "muster")
 	public static void hoursBack(ServerLevel level) {
 		CWConfig.CLOCK_ON.set(clockOnWas);
-		CWConfig.CLOCK_OFF.set(clockOffWas);
 		level.setDayTime(WORKING_HOURS_TIME);
 	}
 
 	@BeforeBatch(batch = "night")
 	public static void nightFalls(ServerLevel level) {
 		clockOnWas = CWConfig.CLOCK_ON.get();
-		clockOffWas = CWConfig.CLOCK_OFF.get();
 		CWConfig.CLOCK_ON.set(CWConfig.CLOCK_ON.getDefault());
-		CWConfig.CLOCK_OFF.set(CWConfig.CLOCK_OFF.getDefault());
 		level.setDayTime(NIGHT_TIME);
 	}
 
 	@AfterBatch(batch = "night")
 	public static void morningComes(ServerLevel level) {
 		CWConfig.CLOCK_ON.set(clockOnWas);
-		CWConfig.CLOCK_OFF.set(clockOffWas);
 		level.setDayTime(WORKING_HOURS_TIME);
 	}
 
@@ -256,16 +250,13 @@ public class WorkerShiftGameTests {
 	@BeforeBatch(batch = "night_shift")
 	public static void invertTheHours(ServerLevel level) {
 		clockOnWas = CWConfig.CLOCK_ON.get();
-		clockOffWas = CWConfig.CLOCK_OFF.get();
 		CWConfig.CLOCK_ON.set(NIGHT_SHIFT_ON);
-		CWConfig.CLOCK_OFF.set(NIGHT_SHIFT_OFF);
 		level.setDayTime(MID_MORNING);
 	}
 
 	@AfterBatch(batch = "night_shift")
 	public static void restoreTheHours(ServerLevel level) {
 		CWConfig.CLOCK_ON.set(clockOnWas);
-		CWConfig.CLOCK_OFF.set(clockOffWas);
 		level.setDayTime(WORKING_HOURS_TIME);
 	}
 
@@ -335,7 +326,7 @@ public class WorkerShiftGameTests {
 		// Midnight is asleep, but the boundary is no longer clockOff: leisure sits between the two, so
 		// a day crew on these hours is awake and idle until 12000 + leisureLength.
 		helper.assertTrue(dayShift.getActivityAt(18000) == Activity.REST, "midnight is not");
-		helper.assertTrue(dayShift.getActivityAt(12000 + CWConfig.LEISURE_LENGTH.get() / 2) == Activity.IDLE,
+		helper.assertTrue(dayShift.getActivityAt(12000 + WorkerShift.LEISURE / 2) == Activity.IDLE,
 			"and the hour after a shift is the crew's own, not the night's");
 
 		// The interesting one: on at dusk, off at dawn, so its rest is in broad daylight.
@@ -431,7 +422,7 @@ public class WorkerShiftGameTests {
 	@GameTest(template = "work_site", timeoutTicks = 200)
 	public static void theShippedCrewsDoNotOverlap(GameTestHelper helper) {
 		int on = CWConfig.CLOCK_ON.getDefault();
-		int off = CWConfig.CLOCK_OFF.getDefault();
+		int off = (CWConfig.CLOCK_ON.getDefault() + Shift.OFFSET);
 		int span = Math.floorMod(off - on, WorkerShift.DAY_LENGTH);
 
 		helper.assertTrue(span > 0 && span <= Shift.OFFSET,
@@ -463,7 +454,7 @@ public class WorkerShiftGameTests {
 	@GameTest(template = "work_site", timeoutTicks = 200)
 	public static void theThreeCrewsShareOneWorkingDayAtDifferentHours(GameTestHelper helper) {
 		int on = CWConfig.CLOCK_ON.get();
-		int off = CWConfig.CLOCK_OFF.get();
+		int off = Shift.DAY.clockOff();
 		int span = Math.floorMod(off - on, WorkerShift.DAY_LENGTH);
 
 		helper.assertTrue(Shift.DAY.clockOn() == on, "the day crew keeps the hours as configured");
@@ -773,20 +764,27 @@ public class WorkerShiftGameTests {
 			helper.assertTrue(bed.equals(WorkerShift.findBed(villager, data)),
 				"a bed on the hat should be taken as given, not path-checked out of existence");
 
-			// Someone else is in it. Both of the assertions below now say "and there was nothing else
-			// to fall back to", which is true here because this plate's only bed is the one in the air
-			// -- see aNamedBedThatIsGoneFallsBackToTheHunt for the other half of that rule.
+			// **Named, not asserted absent.** These read "it did not take *this* bed" rather than "it
+			// found no bed at all", which is the shape CLAUDE.md asks for by name: the tests beside
+			// this one lay real beds in the same world well inside a search radius, so "null" is a
+			// claim about the neighbours rather than about the code. It passes either way today --
+			// most likely because the plates are not walkable between, so the path check rejects
+			// theirs -- and would start lying the day anything makes the test floor continuous.
+			// The anchored hunt made that likelier: it now searches around the assigned bed rather
+			// than around the job site, so a neighbour's bed near the anchor is a nearer candidate
+			// than it used to be.
 			helper.getLevel()
 				.setBlock(bed, helper.getLevel()
 					.getBlockState(bed)
 					.setValue(BedBlock.OCCUPIED, true), 3);
-			helper.assertTrue(WorkerShift.findBed(villager, data) == null,
-				"an occupied bed is nobody else's to sleep in");
+			helper.assertTrue(!bed.equals(WorkerShift.findBed(villager, data)),
+				"an occupied bed is nobody else's to sleep in, and this worker is still being offered it");
 
 			// And gone entirely.
 			helper.getLevel()
 				.setBlock(bed, Blocks.AIR.defaultBlockState(), 3);
-			helper.assertTrue(WorkerShift.findBed(villager, data) == null, "a bed that was torn down is no bed");
+			helper.assertTrue(!bed.equals(WorkerShift.findBed(villager, data)),
+				"a bed that was torn down is no bed, and this worker is still being sent to where it was");
 			helper.succeed();
 		});
 	}
@@ -1077,14 +1075,6 @@ public class WorkerShiftGameTests {
 				+ (WorkerShift.isBedtime(villager) ? "" : "not ") + "at rest"));
 	}
 
-	/**
-	 * A worker that genuinely cannot walk home gives up in stages, and is fetched if the server asked
-	 * for that.
-	 *
-	 * <p>Sealed into a box it cannot path out of, so the leash can never succeed. What is asserted is
-	 * the count climbing — which is the signal a stuck worker now carries, and what the growing rest
-	 * and the distress particles are both computed from — and then the recall putting it back.
-	 */
 	@GameTest(template = "work_site", timeoutTicks = 4000, batch = "recall")
 	public static void aStuckWorkerIsCountedAndThenFetched(GameTestHelper helper) {
 		// Deliberately nothing to haul. A worker with work keeps a target selected, and a worker
@@ -1229,7 +1219,7 @@ public class WorkerShiftGameTests {
 		helper.startSequence()
 			.thenWaitUntil(() -> helper.assertTrue(villager.isSleeping(), "the worker should be asleep first"))
 			.thenExecute(() -> helper.getLevel()
-				.setDayTime(WorkerShift.DAY_LENGTH - CWConfig.MUSTER_LENGTH.get() + 20))
+				.setDayTime(WorkerShift.DAY_LENGTH - WorkerShift.MUSTER + 20))
 			.thenWaitUntil(() -> helper.assertTrue(WorkerShift.stintAt(helper.getLevel()
 				.getDayTime(), Shift.DAY) == WorkerShift.Stint.WORKING, "waiting for the shift to start"))
 			.thenExecute(() -> {
@@ -1272,7 +1262,7 @@ public class WorkerShiftGameTests {
 		double[] parked = new double[4];
 		helper.startSequence()
 			.thenExecute(() -> helper.getLevel()
-				.setDayTime(CWConfig.CLOCK_OFF.get() + 50))
+				.setDayTime(Shift.DAY.clockOff() + 50))
 			.thenExecuteAfter(40, () -> {
 				helper.assertTrue(WorkerShift.stintAt(helper.getLevel()
 					.getDayTime(), Shift.DAY) == WorkerShift.Stint.LEISURE,
