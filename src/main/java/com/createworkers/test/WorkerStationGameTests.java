@@ -1753,6 +1753,69 @@ public class WorkerStationGameTests {
 			}
 	}
 
+	/**
+	 * A worker whose targets have all gone is not an absentee, and must not be sacked for it.
+	 *
+	 * <p><b>This is a churn loop, not a one-off.</b> {@code WorkerJobGoal.canUse} ends in
+	 * {@code hasWork()}, which is false when neither list resolved — so the goal never ticks, and
+	 * {@code tick} is the only thing that ever stamps {@code lastAtWork}. The clock therefore freezes
+	 * at the moment of hire and the absentee timeout expires on schedule, every time. The station then
+	 * re-hires, because {@code staffable} reads {@code hasTargets()} off the hat's <em>NBT</em>, which
+	 * still names the blocks that are gone — so the next villager is taken on, frozen and sacked in
+	 * turn, indefinitely, stripping a profession and a name on each pass with nothing in the world to
+	 * say why.
+	 *
+	 * <p>Two ordinary things reach it. A player rebuilding a line breaks the old depots while the hat
+	 * still names them. And a point whose chunk is not loaded is deliberately <em>deferred</em> rather
+	 * than resolved, so a beat that happens to lie outside the loaded area reads exactly the same —
+	 * which is the more likely of the two and is not a player error at all.
+	 *
+	 * <p>The clock measures a worker failing to turn up to work it is supposed to be doing, and this
+	 * worker has none to turn up to. It is the same reasoning that already freezes it for the night
+	 * and across an unloaded chunk.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 1200, batch = "absentee")
+	public static void aWorkerWithNothingLeftToHaulIsNotAnAbsentee(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		// **Broken before anybody is hired, which is the ordering that matters.** A worker hired while
+		// the blocks were still there has already resolved them, and its goal keeps flickering back to
+		// life on the resolve retry, which stamps the clock by accident. A worker taken on after they
+		// are gone -- or loading into a world where they went while it was unloaded -- never starts.
+		helper.setBlock(SOURCE, Blocks.AIR);
+		helper.setBlock(TARGET, Blocks.AIR);
+		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
+
+		int[] transitions = { 0 };
+		boolean[] wasEmployed = { true };
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(Workers.isEmployed(villager), "the villager should be hired"))
+			.thenExecuteFor(ABSENTEE_TICKS * 4, () -> {
+				boolean now = Workers.isEmployed(villager);
+				if (now != wasEmployed[0]) {
+					transitions[0]++;
+					wasEmployed[0] = now;
+				}
+			})
+			.thenExecute(() -> {
+				WorkerData data = Workers.get(villager);
+				helper.assertTrue(data != null && !data.hasWork(),
+					"precondition: with both blocks gone nothing should resolve, or this test is not "
+						+ "exercising the case it was written for");
+				// **Counted, not sampled.** Asserting "it is still employed" at the end sees nothing:
+				// the station sacks and re-hires the same villager within a tick or two, so the
+				// end state looks identical to never having been sacked at all. It was measured at six
+				// transitions -- three full cycles -- in four hundred ticks before this was fixed.
+				helper.assertTrue(transitions[0] == 0,
+					"a worker whose targets have all gone has nothing to turn up to and must not be "
+						+ "sacked as an absentee for it; its employment changed " + transitions[0]
+						+ " times, which is the station churning through villagers on a broken job");
+			})
+			.thenSucceed();
+	}
+
 	private static WorkerProgram programme(GameTestHelper helper) {
 		WorkerTarget in = target(helper, SOURCE);
 		in.cycleMode(); // targets start as DEPOSIT; one cycle makes this the input

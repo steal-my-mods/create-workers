@@ -128,7 +128,30 @@ public class WorkerJobGoal extends Goal {
 		if (data == null || !data.isEmployed())
 			return false;
 		data.resolvePoints(mob);
-		return data.hasWork();
+		if (data.hasWork())
+			return true;
+
+		// **Nothing resolved, so there is nothing to turn up to — and the absentee clock has to be told
+		// so.** This is the only other place that can tell it. `lastAtWork` is stamped from `tick`, and
+		// `tick` never runs while this returns false, so a worker whose whole programme is unresolvable
+		// has a clock frozen at the moment it was hired. Its station sacks it on schedule, re-hires
+		// (because `staffable` reads `hasTargets()` off the hat's NBT, which still names the blocks
+		// that are gone), freezes the next one and sacks that too — measured at three full cycles in
+		// four hundred ticks, indefinitely, stripping a profession and a name each time with nothing in
+		// the world to say why.
+		//
+		// Two ordinary things reach it: a player rebuilding a line while the hat still names the old
+		// depots, and a beat that happens to lie outside the loaded area, since an unreadable chunk is
+		// deliberately *deferred* rather than resolved and reads exactly the same from here.
+		//
+		// This does not soften the real signal. A worker sealed away from targets that still exist
+		// resolves them fine — resolution asks nothing about reachability — so it keeps `hasWork` and
+		// is still sacked for not turning up, which is the case the timeout is for. Same reasoning as
+		// freezing the clock for the night and across an unloaded chunk: the clock measures a worker
+		// failing to do work it is supposed to be doing.
+		data.markAtWork(mob.level()
+			.getGameTime());
+		return false;
 	}
 
 	@Override

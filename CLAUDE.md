@@ -489,6 +489,22 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   has to be off shift **and** patient (`aSleepingWorkerIsNotAnAbsentee`, in a batch of its own because
   it moves both the clock and the config). The same reasoning as the load stamp: the clock measures a
   worker failing to turn up to work it is supposed to be doing, and a villager asleep at 2am is not.
+- **A worker with nothing resolvable is not an absentee, and until it was told so the station churned
+  through villagers for ever.** `WorkerJobGoal.canUse` ends in `hasWork()`, and `tick` — the only
+  thing that ever stamps `lastAtWork` — never runs while that is false. So a worker whose whole
+  programme fails to resolve has a clock frozen at the moment of hire: the station sacks it on
+  schedule and **re-hires immediately**, because `staffable` reads `hasTargets()` off the hat's *NBT*,
+  which still names the blocks that are gone. Measured at **six employment transitions — three full
+  cycles — in four hundred ticks**, indefinitely, stripping a profession and a name each pass with
+  nothing in the world to say why. `canUse` stamps the clock on the way out now.
+  Two ordinary things reach it: rebuilding a line while the hat still names the old depots, and a beat
+  that lies outside the loaded area, since an unreadable chunk is deliberately *deferred* rather than
+  resolved and reads identically from here. It does not soften the real signal — a worker sealed away
+  from targets that still exist resolves them fine, keeps `hasWork`, and is still sacked.
+  **Testing it needs a transition count, not an end-state assertion.** The station sacks and re-hires
+  the *same* villager within a tick or two, so "is it still employed" at the end of the window looks
+  exactly like never having been sacked at all — two drafts of this test passed against the live bug
+  before one counted. (`aWorkerWithNothingLeftToHaulIsNotAnAbsentee`, mutation-checked.)
 - **Sacking an absentee has to release the POI ticket by hand.** Unlike a death or a hat being taken
   out, the villager is alive and still holding the station as its `JOB_SITE`, so the one ticket would
   stay taken and nobody could ever replace it — which is the exact failure the block exists to end.

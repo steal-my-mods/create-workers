@@ -28,6 +28,11 @@ reading the diff.
 
 ### Fixed
 
+- **A Station no longer churns through villagers when a job's blocks are gone.** If you rebuilt a line
+  and left a hat naming depots that no longer exist — or a job's beat simply sat outside the loaded
+  area — the worker had nothing to do, was let go for not turning up, and the Station immediately hired
+  somebody else onto the same broken job and let them go too, around the clock. Workers with nothing
+  left to haul now keep their jobs and wait.
 - **Stations hire back villagers who have worked before, in preference to fresh ones.** Trading with a
   Worker locks it to the job for good, the same way buying from a librarian does — so an out-of-work
   Worker standing about is a villager that can never do anything else. A station now takes one of those
