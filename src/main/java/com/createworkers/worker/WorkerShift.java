@@ -1,7 +1,7 @@
 package com.createworkers.worker;
 
+import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -326,13 +326,25 @@ public final class WorkerShift {
 	 * that it is still a bed nobody is in. If the walk turns out to be impossible the commute's own
 	 * stall clock gives up on it, the same way an unreachable depot is set aside.
 	 *
+	 * <p><b>It is an anchor rather than a claim, and the arithmetic leaves no choice.</b> A Station
+	 * job runs on up to three shifts and each of its workers wears a <em>copy of the one hat</em>, so
+	 * they all carry the same {@code Bed} — while a crew's night is longer than the gap between crews.
+	 * With the shipped defaults REST is 11020 ticks against a {@link Shift#OFFSET} of 8000, so every
+	 * adjacent pair overlaps by 3020 and <b>38% of the day has two of a job's workers wanting the same
+	 * mattress</b>. One bed per hat cannot cover three sleepers at any settings where sleep exceeds the
+	 * offset. So the two who miss out fall through — and the hunt below is centred on the assigned bed
+	 * rather than on the job site, which is what keeps them in the dormitory that was built for them.
+	 * <em>Sleep over there</em> is a promise an assignment can keep; <em>sleep in this exact bed</em>
+	 * never was.
+	 *
 	 * <p><b>The bed the village has already given this worker</b> — its {@code HOME} memory — is the
 	 * best answer when there is one, and costs a memory read. Vanilla's {@code AcquirePoi} put it
 	 * there, which means it came with a path that reached it and with a ticket taken and released by
 	 * the same code that does so for every other villager. A worker sleeping in its own registered
 	 * home is one that is not quietly squatting in somebody else's. It is held to
-	 * {@code bedSearchRadius} like anything else, though, because that setting is what bounds the
-	 * commute, and vanilla acquires a home by its own reckoning of what is near rather than by ours.
+	 * {@code bedSearchRadius} of the anchor, though — the assigned bed where there is one and the job
+	 * site otherwise — because that setting is what bounds the commute, and vanilla acquires a home by
+	 * its own reckoning of what is near rather than by ours.
 	 *
 	 * <p><b>A bed nobody has claimed</b>, last. This one has no provenance of its own, and proximity
 	 * is not a substitute for it — a bed six blocks away across a gap is further, in the only sense
@@ -365,17 +377,56 @@ public final class WorkerShift {
 		if (radius <= 0 || !(level instanceof ServerLevel server))
 			return null;
 
+		// **An assigned bed is an anchor, not a claim, and it has to be** -- a job's shift-workers wear
+		// copies of one hat and so share one Bed, while the night is longer than the gap between crews.
+		// On the shipped defaults REST is 11020 ticks against a Shift.OFFSET of 8000, so each adjacent
+		// pair of crews is asleep together for 3020 ticks and 38% of the day has two of a job's workers
+		// wanting the same mattress. One bed per hat cannot cover that at any settings where sleep
+		// exceeds the offset, so the fallback is what a three-shift job actually runs on rather than an
+		// edge case. Anchoring the hunt at the bed rather than at the job site is what keeps a crew in
+		// the dormitory the player built for it: "sleep over there" is what assigning a bed can mean,
+		// where "sleep in this exact bed" never could.
+		// **Only while the dormitory is still standing.** A bed somebody else is in is a bed: the room
+		// the player built is there and the crewmate will be out of it in a few thousand ticks, so its
+		// neighbours are the right place to look. A bed that has been *mined* is not, and anchoring on
+		// the empty air where it used to be would send a worker hunting in a corner of the world that
+		// no longer has anything to do with it -- so that case falls all the way back to the job site,
+		// which is what a worker who was never given a bed gets.
+		boolean dormitory = designated != null && level.isLoaded(designated) && level.getBlockState(designated)
+			.isBed(level, designated, mob);
+		BlockPos anchor = dormitory ? designated : data.getJobSite();
+
 		BlockPos home = registeredHome(mob, level);
-		if (home != null && home.closerThan(data.getJobSite(), radius) && isUsableBed(level, home, mob))
+		if (home != null && home.closerThan(anchor, radius) && isUsableBed(level, home, mob))
 			return home;
 
-		Set<Pair<Holder<PoiType>, BlockPos>> candidates = server.getPoiManager()
+		List<Pair<Holder<PoiType>, BlockPos>> candidates = server.getPoiManager()
 			.findAllClosestFirstWithType(type -> type.is(PoiTypes.HOME), pos -> isUsableBed(level, pos, mob),
-				data.getJobSite(), radius, PoiManager.Occupancy.HAS_SPACE)
+				anchor, radius, PoiManager.Occupancy.HAS_SPACE)
 			.limit(BED_CANDIDATES)
-			.collect(Collectors.toSet());
+			.toList();
+		if (candidates.isEmpty())
+			return null;
 
-		Path path = AcquirePoi.findPathToPois(mob, candidates);
+		// **Anchoring the query is only half of it, and the half that does nothing on its own.**
+		// AcquirePoi.findPathToPois ends in navigation.createPath(Set, range), which picks whichever
+		// target is nearest *the mob* -- so handing it the whole shortlist throws away the order the
+		// POI manager just sorted them into, and a worker standing at its job site at bedtime would
+		// take the bed nearest the work however the search was centred. With five or fewer beds in
+		// range the anchor would change nothing at all. So where a bed was assigned, the nearest one
+		// to it is offered on its own first, and the shortlist is only fallen back on if that one
+		// cannot be reached: one pathfind in the ordinary case and two at worst.
+		if (dormitory) {
+			Pair<Holder<PoiType>, BlockPos> nearest = candidates.get(0);
+			Path direct = mob.getNavigation()
+				.createPath(nearest.getSecond(), nearest.getFirst()
+					.value()
+					.validRange());
+			if (direct != null && direct.canReach())
+				return direct.getTarget();
+		}
+
+		Path path = AcquirePoi.findPathToPois(mob, Set.copyOf(candidates));
 		return path != null && path.canReach() ? path.getTarget() : null;
 	}
 

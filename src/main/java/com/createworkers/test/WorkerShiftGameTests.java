@@ -84,6 +84,16 @@ public class WorkerShiftGameTests {
 	private static final BlockPos AIRBORNE_FOOT = new BlockPos(5, 5, 2);
 	private static final BlockPos AIRBORNE_HEAD = new BlockPos(5, 5, 1);
 
+	// A dormitory in the far corner, its spare two blocks away, and a decoy beside the job site. The
+	// distances are the test: the spare is nearer the dormitory (2.0 against 7.2) and the decoy is
+	// nearer the job site (2.2 against 3.6), so the two anchors disagree about which bed wins.
+	private static final BlockPos DORM_FOOT = new BlockPos(1, 1, 9);
+	private static final BlockPos DORM_HEAD = new BlockPos(1, 1, 8);
+	private static final BlockPos DORM_SPARE_FOOT = new BlockPos(3, 1, 9);
+	private static final BlockPos DORM_SPARE_HEAD = new BlockPos(3, 1, 8);
+	private static final BlockPos DECOY_FOOT = new BlockPos(7, 1, 5);
+	private static final BlockPos DECOY_HEAD = new BlockPos(7, 1, 4);
+
 	private static final int STOCK = 16;
 	/** Long enough to walk the length of the site, lie down, and be seen doing it. */
 	private static final int COMMUTE_TICKS = 300;
@@ -540,6 +550,76 @@ public class WorkerShiftGameTests {
 			helper.assertTrue(bed != null, "a worker should find the bed laid out beside its job site");
 			helper.assertTrue(helper.absolutePos(BED_HEAD)
 				.equals(bed), "it should sleep at the head of the bed, which is the half a village knows about");
+		});
+	}
+
+	/**
+	 * A worker whose assigned bed is taken sleeps beside it, not beside its work.
+	 *
+	 * <p><b>This is the ordinary case for any job with a night shift, not an edge case.</b> A Station
+	 * job runs on up to three shifts and every one of its workers wears a <em>copy of the same hat</em>,
+	 * so they all carry one {@code Bed} between them — while a crew's night is longer than the gap
+	 * between crews. On the shipped hours {@code REST} is 11020 ticks against a {@link Shift#OFFSET} of
+	 * 8000, so each adjacent pair of crews is asleep together for 3020 ticks and <b>38% of the day has
+	 * two of a job's workers wanting the same mattress</b>. One bed per hat cannot cover three
+	 * sleepers at any settings where sleep exceeds the offset.
+	 *
+	 * <p>So the assignment is an anchor: the ones who miss out look for a bed <em>near the one they
+	 * were given</em> rather than near the job site, which is what keeps a crew in the dormitory a
+	 * player built for it. The plate is laid out so the two readings disagree — a spare bed two blocks
+	 * from the assigned one, a decoy two blocks from the job site the worker is standing at — because
+	 * a test where both anchors give the same answer would pass against either.
+	 *
+	 * <p>It is also why the search cannot simply be re-centred and left there:
+	 * {@code AcquirePoi.findPathToPois} ends in {@code createPath(Set, range)}, which picks whichever
+	 * target is nearest <em>the mob</em>. Handing it the whole shortlist throws the anchor's ordering
+	 * away, and with five or fewer beds in range it would change nothing whatever. The worker here
+	 * spawns next to the decoy for exactly that reason.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void aWorkerWhoseBedIsTakenSleepsBesideItRatherThanBesideItsWork(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		placeBed(helper, DORM_FOOT, DORM_HEAD);
+		placeBed(helper, DORM_SPARE_FOOT, DORM_SPARE_HEAD);
+		placeBed(helper, DECOY_FOOT, DECOY_HEAD);
+
+		// The crewmate on the shift before this one is in it. Set on the block rather than by spawning
+		// a sleeper, because what findBed reads is the OCCUPIED property and nothing else.
+		BlockPos dorm = helper.absolutePos(DORM_HEAD);
+		helper.getLevel()
+			.setBlock(dorm, helper.getLevel()
+				.getBlockState(dorm)
+				.setValue(BedBlock.OCCUPIED, true), 3);
+
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		// **Held still, and asserted once rather than polled.** The first draft did neither and was
+		// cover: succeedWhen retries every tick, and a villager left to stroll eventually wanders near
+		// enough to the dormitory that the mob-nearest fallback returns the right bed by itself. It
+		// passed with the anchor reverted. Pinned beside the decoy, the wrong answer stays wrong.
+		// (setOnGround because nothing applies gravity to a mob with no AI, and createPath refuses an
+		// airborne one outright.)
+		villager.setNoAi(true);
+		villager.setOnGround(true);
+		WorkerData data = employ(helper, villager, dorm);
+
+		// Named rather than asserted-for, because the tests beside this one lay real beds in the same
+		// world well inside a search radius, so "it took exactly this bed" is not a claim this can
+		// make. What it can say is which bed must *not* win, and that whatever did win is nearer the
+		// dormitory than that one -- which is the property, and is what fails the moment the search
+		// goes back to being centred on the job site.
+		BlockPos decoy = helper.absolutePos(DECOY_HEAD);
+		helper.runAfterDelay(20, () -> {
+			forgetTheVillageBed(villager);
+			BlockPos bed = WorkerShift.findBed(villager, data);
+			helper.assertTrue(bed != null, "a worker locked out of its own bed should still find one");
+			helper.assertTrue(!bed.equals(dorm), "and it must not be the one somebody else is in");
+			helper.assertTrue(!bed.equals(decoy),
+				"it must not take the bed beside its job site while a spare stands beside the one it "
+					+ "was assigned -- an assigned bed names the dormitory, not the mattress");
+			helper.assertTrue(bed.distSqr(dorm) < decoy.distSqr(dorm),
+				"and whatever it did take has to be nearer the dormitory than that one is; took " + bed
+					+ ", which is further from " + dorm + " than the decoy at " + decoy);
+			helper.succeed();
 		});
 	}
 

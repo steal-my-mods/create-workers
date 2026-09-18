@@ -1042,6 +1042,27 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   each half steps along it in the opposite direction, which is vanilla's private
   `getNeighbourDirection` restated. `bothHalvesOfABedKnowAboutEachOther` covers it, and was
   mutation-checked by stepping both halves the same way.
+- **A designated bed is an anchor, not a claim, and one bed per hat can never be one.** A Station job
+  runs on up to three shifts and every one of its workers wears a *copy of the same hat*, so they all
+  share one `Bed` — while a crew's night is longer than the gap between crews. On the shipped hours
+  `REST` is 11020 ticks against `Shift.OFFSET` 8000, so each adjacent pair of crews overlaps by 3020
+  and **38% of the day has two of a job's workers wanting the same mattress**. It is arithmetic, not
+  tuning: three crews sleeping 11020 ticks need 33060 tick-slots of bed in a 24000-tick day. So the
+  losers fall through to the hunt, and the hunt is centred on **the assigned bed** rather than on the
+  job site — which is what keeps a crew in the dormitory a player built for it.
+  **Re-centring the POI query does nothing on its own**, which is the trap:
+  `AcquirePoi.findPathToPois` ends in `navigation.createPath(Set, range)`, and that picks whichever
+  target is nearest *the mob*, throwing away the order the POI manager just sorted them into. With
+  `BED_CANDIDATES` (5) or fewer beds in range the anchor would change nothing at all, and a worker
+  standing at its job site at bedtime takes the bed nearest the work. So the nearest candidate *to the
+  anchor* is offered on its own first and the shortlist is only the fallback: one pathfind usually,
+  two at worst. **And only while the dormitory still stands** — a bed somebody is *in* is still a bed,
+  but one that has been mined is not, and anchoring on empty air sends a worker hunting somewhere that
+  no longer concerns it (which is what broke `aNamedBedThatIsGoneFallsBackToTheHunt` first time).
+  (`aWorkerWhoseBedIsTakenSleepsBesideItRatherThanBesideItsWork`, mutation-checked both ways. **Its
+  own first draft was cover**: `succeedWhen` retries every tick and a villager left free to stroll
+  eventually wanders close enough that the mob-nearest fallback returns the right bed by accident, so
+  it passed with the anchor reverted. A bed test that polls has to pin the villager.)
 - **The bed hunt is paced, and it has to be.** It is a point-of-interest query over every section in
   `bedSearchRadius` and then an A* across the candidates, and the worker that wants it most is the one
   that will never find it. Unpaced that is a pathfind per sleepless worker per tick for the length of

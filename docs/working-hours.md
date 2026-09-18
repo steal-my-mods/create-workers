@@ -61,6 +61,43 @@ retired would leave it ticketed to nobody for the rest of the world's life, whic
 still have space is what keeps a worker out of a villager's bedroom, and the bed's own `OCCUPIED`
 flag settles the rest: two workers who pick the same bed do not both get into it.
 
+### Correction: a designated bed is an anchor, not a claim
+
+That last sentence was written before shifts existed, and it turned out to be the whole problem
+rather than the answer to it. A Station job runs on up to three shifts and **every one of its workers
+wears a copy of the same hat**, so they share one `Bed` between them — while a crew's night is longer
+than the gap between crews. On the shipped hours `REST` is 11020 ticks against a `Shift.OFFSET` of
+8000, so each adjacent pair overlaps by 3020 and **38% of the day has two of a job's workers wanting
+the same mattress**. That is not a tuning accident: three crews sleeping 11020 ticks each need 33060
+tick-slots of bed in a 24000-tick day, so one bed per hat cannot cover it at any settings where sleep
+exceeds the offset. `OCCUPIED` did stop them both getting in; what it could not do was give the loser
+anywhere sensible to go.
+
+So the designation now names a **dormitory** rather than a mattress. The worker who gets there first
+has it; the others fall through to the hunt, and the hunt is centred on **the assigned bed** instead
+of on the job site. *Sleep over there* is a promise an assignment can keep. *Sleep in this exact bed*
+never was.
+
+Two things about the implementation are load-bearing and neither is obvious:
+
+- **Re-centring the POI query does nothing on its own.** `AcquirePoi.findPathToPois` ends in
+  `navigation.createPath(Set, range)`, which picks whichever target is nearest **the mob** — so
+  handing it the whole shortlist throws away the ordering the POI manager just applied, and with five
+  or fewer beds in range (`BED_CANDIDATES`) the anchor changes nothing whatever. A worker standing at
+  its job site at bedtime would still take the bed nearest the work. The nearest candidate to the
+  anchor is therefore offered on its own first, and the shortlist is only fallen back on if that one
+  cannot be reached: one pathfind in the ordinary case, two at worst. Mutation-checked by removing it.
+- **Only while the dormitory is still standing.** A bed somebody is *in* is still a bed, and its
+  neighbours are the right place to look. A bed that has been **mined** is not, and anchoring on the
+  empty air where it used to be sends a worker hunting in a corner of the world that no longer has
+  anything to do with it — which is what broke `aNamedBedThatIsGoneFallsBackToTheHunt` on the first
+  attempt. That case falls all the way back to the job site, exactly as for a worker never given a bed.
+
+(`aWorkerWhoseBedIsTakenSleepsBesideItRatherThanBesideItsWork`. Its own first draft was cover:
+`succeedWhen` retries every tick, and a villager left free to stroll eventually wanders near enough
+that the mob-nearest fallback returns the right bed by accident — it passed with the anchor reverted.
+It pins the villager and asserts once.)
+
 The design asked for path verification *at assignment time*, so the player is told immediately rather
 than discovering it at dusk. That is not what was built, for a reason that only appears once you try
 it: assignment happens on the client, where there is no worker to path from, and the villager who

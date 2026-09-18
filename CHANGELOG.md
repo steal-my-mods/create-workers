@@ -28,6 +28,11 @@ reading the diff.
 
 ### Fixed
 
+- **A job's night shift no longer fights the day shift for one bed.** Every worker on a job wears a
+  copy of the same hat, so they all shared the one bed you assigned it — and because a crew sleeps for
+  longer than the gap between crews, two of them wanted it at once for better than a third of every
+  day. The bed you assign now names the **dormitory**: whoever gets there first has it, and the others
+  look for a free bed beside it rather than wandering off to whatever is nearest their work.
 - **Canteens no longer breed your whole village by accident.** A Canteen filled villagers to the exact
   point at which vanilla lets them breed, so any factory with a trough in it bred non-stop — and most
   of that food bought nothing at all, because a pair spends its food *before* checking whether there is
