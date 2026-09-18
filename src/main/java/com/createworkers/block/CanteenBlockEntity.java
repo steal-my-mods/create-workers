@@ -16,6 +16,7 @@ import com.simibubi.create.foundation.utility.CreateLang;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -125,6 +126,31 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	/** @return what {@code stack}'s item is worth to a villager, or zero if it is not food. */
 	public static int foodPoints(ItemStack stack) {
 		return stack.isEmpty() ? 0 : Villager.FOOD_POINTS.getOrDefault(stack.getItem(), 0);
+	}
+
+	/**
+	 * How full a Canteen will fill a villager, in food points, against vanilla's ceiling of twelve.
+	 *
+	 * <p><b>Eight because breeding starts at twelve</b>, and the four points of headroom are the
+	 * residue {@code Villager.digestFood} can leave behind: {@code eatUntilFull} overshoots to as much
+	 * as fifteen before twelve is taken off it, so a villager that has already bred once can be
+	 * carrying three points nothing here can read. Eight plus three is eleven, and eleven does not
+	 * breed. See {@link #serve} for why that matters more than it sounds.
+	 *
+	 * <p>It is also nearly two shifts of fuel — {@code 8 × ticksPerFoodPoint} — so a Worker that
+	 * merely walks past a Canteen still leaves with more than it can spend before it comes back.
+	 */
+	public static final int FILL_POINTS = 8;
+
+	/** @return the food points a villager is carrying, which is what {@code canBreed} adds up. */
+	private static int carried(Villager villager) {
+		SimpleContainer inventory = villager.getInventory();
+		int points = 0;
+		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+			ItemStack held = inventory.getItem(slot);
+			points += foodPoints(held) * held.getCount();
+		}
+		return points;
 	}
 
 	/** @return the stock as an inventory: what a funnel, a chute, a belt or a hopper holds. */
@@ -315,8 +341,27 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	 * roots in the trough starved slowly while walking past a full Canteen twice a day.
 	 *
 	 * <p>Filling in one pass makes a Canteen somewhere a crew goes <em>past</em> rather than somewhere
-	 * they have to live, whatever it is stocked with. The total handed out is identical either way —
-	 * twelve points a villager — it just arrives while they are still in range.
+	 * they have to live, whatever it is stocked with.
+	 *
+	 * <p><b>It stops short of twelve points, and that is the whole of what keeps a factory from
+	 * breeding itself to a standstill.</b> Twelve is not an arbitrary ceiling: {@code canBreed} is
+	 * {@code foodLevel + countFoodPointsInInventory() >= 12}, so a trough that tops every villager in
+	 * range up to vanilla's own limit holds the breeding gate permanently open for all of them. And
+	 * what comes through it is not merely children — {@code VillagerMakeLove.tick} calls
+	 * {@code eatAndDigestFood} on <em>both</em> parents, twelve points apiece, <b>before</b>
+	 * {@code tryToGiveBirth} looks for a vacant bed. With every bed already claimed the twenty-four
+	 * points are spent anyway for nothing, and because {@code breed} never runs, the {@code setAge}
+	 * that would put the pair on a cooldown never runs either, so they start over at once. That is
+	 * roughly twenty-four points per three hundred ticks against the one point per eighteen hundred a
+	 * Worker spends actually working: a pair burning food about a hundred and fifty times faster than
+	 * the mechanic this block exists to supply.
+	 *
+	 * <p>Vanilla's bargain is that <b>feeding villagers to twelve is the player's deliberate act</b>,
+	 * and a Canteen doing it automatically to everything in range quietly turned that act into a
+	 * background process. So it fills to {@link #FILL_POINTS} and no further, leaving the last stretch
+	 * to a player with bread in hand exactly as vanilla does. It is never exceeded rather than merely
+	 * stopped at, because the residue {@code digestFood} leaves in the hidden {@code foodLevel} (up to
+	 * three) is added to the inventory the gate reads.
 	 */
 	private void serve(Level level, BlockPos pos) {
 		if (isEmpty())
@@ -326,12 +371,16 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		List<Villager> nearby = level.getEntitiesOfClass(Villager.class, new AABB(pos).inflate(range),
 			Villager::wantsMoreFood);
 		for (Villager hungry : nearby)
-			// Bounded by vanilla: twelve points is the most a villager will hold, so this is at most
-			// twelve items even on the cheapest food, and it stops on its own.
-			while (hungry.wantsMoreFood()) {
+			// Bounded by FILL_POINTS rather than by vanilla's twelve, so this is at most eight items
+			// even on the cheapest food, and it stops on its own.
+			while (carried(hungry) < FILL_POINTS) {
 				int slot = firstFood();
 				if (slot < 0)
 					return; // emptied partway through the queue
+				// Refused rather than stopped at: a loaf handed to a villager already holding seven
+				// points would leave it on eleven, and eleven plus the foodLevel residue is twelve.
+				if (carried(hungry) + foodPoints(stock.getStackInSlot(slot)) > FILL_POINTS)
+					break;
 				ItemStack meal = stock.extractItem(slot, 1, false);
 				if (meal.isEmpty())
 					return;

@@ -369,6 +369,41 @@ breed, and a factory can grow its own workforce. That is a real answer to "where
 from", and it is left exactly as vanilla does it: no config, no gate. If a factory filling with
 children turns out to be a nuisance in play, that is the point to add a switch, not before.
 
+### It was a nuisance in play, and the switch is the Canteen's fill level
+
+Found in testing: hearts over the whole factory, non-stop, and on the clock. Three things compounded.
+
+**The Canteen was holding the breeding gate open.** `canBreed()` is `foodLevel +
+countFoodPointsInInventory() >= 12`, and the Canteen topped every villager in range to exactly twelve,
+permanently — so a precondition vanilla expects a *player* to satisfy deliberately was being satisfied
+by a block, for everyone, for ever.
+
+**It runs during the shift.** Muster, work and leisure are all `Activity.IDLE`, and both halves live in
+`getIdlePackage`: the `InteractWith` that sets `BREED_TARGET`, and the gate that runs
+`VillagerMakeLove`. Pinning `WALK_TARGET` does not stop it, because pinning only defeats behaviours
+whose entire effect *is* the walk — `VillagerMakeLove.tick` gates on `distanceToSqr(villager) > 5.0`
+and then spends the food where it stands. Two workers on one line are routinely within 2.24 blocks.
+
+**And a failed birth costs exactly as much as a successful one.** `tick` calls `eatAndDigestFood()` on
+both parents — twelve points each — *before* `tryToGiveBirth` looks for a vacant bed. With the beds
+claimed the twenty-four points are burnt for nothing, and since `breed()` never runs, neither does the
+`setAge(6000)` that would put the pair on a cooldown: they start over at once. That is ~24 points per
+~300 ticks against a Worker's 1 point per 1800 of actual work — about 150x the drain of the mechanic
+the block exists to supply. So it is **not** self-limiting by beds, which was the first guess: beds
+limit *babies*, not *food*.
+
+The fix is one number. The Canteen fills to `FILL_POINTS` (8) rather than to vanilla's 12, and refuses
+an item that would overshoot rather than merely stopping at the cap — seven points plus a loaf is
+eleven, and eleven plus the up-to-three `digestFood` leaves behind is twelve. Eight is still nearly two
+shifts of fuel, so nothing about walking past a Canteen changes.
+
+**Breeding is not removed, it is handed back to the player**, which is what vanilla meant by it: feed
+them the last stretch yourself and they breed. Growing a workforce is still the answer to where workers
+come from; it is an act again rather than a background process.
+(`aCanteenStopsShortOfTheBreedingThreshold`, mutation-checked both ways — by filling to twelve, and by
+stopping *at* the cap instead of refusing to exceed it, which needs a villager holding odd change to
+catch at all.)
+
 ## What is deliberately not in this phase
 
 - **Endermen do not eat.** `foodLevel`, the inventory and `wantsToPickUp` are all `Villager`; an

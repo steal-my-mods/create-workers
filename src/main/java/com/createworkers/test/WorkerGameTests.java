@@ -1621,11 +1621,92 @@ public class WorkerGameTests {
 			// crew clipping the edge starved slowly while walking past a full trough twice a day.
 			// Vanilla caps the villager at twelve points either way, so nothing is spent faster; it just
 			// arrives while they are still in range.
-			.thenExecute(() -> helper.assertTrue(!beside.wantsMoreFood(),
+			.thenExecute(() -> helper.assertTrue(carriedPoints(beside) >= CanteenBlockEntity.FILL_POINTS,
 				"one serving should fill a villager rather than top it up by one item, and this one is "
 					+ "still short after a whole pass -- a Worker walking past is only in range for about "
 					+ "three of them"))
 			.thenSucceed();
+	}
+
+	/**
+	 * A Canteen stops short of the point at which villagers start breeding.
+	 *
+	 * <p><b>This is the block's most expensive failure mode, and it cost food rather than performance.</b>
+	 * {@code Villager.canBreed} is {@code foodLevel + countFoodPointsInInventory() >= 12}, so a trough
+	 * that topped everything in range up to vanilla's own ceiling held the breeding gate open for every
+	 * villager near it, permanently. What came through was not mainly children:
+	 * {@code VillagerMakeLove.tick} spends twelve points on <em>each</em> parent <b>before</b>
+	 * {@code tryToGiveBirth} goes looking for a vacant bed, so once the beds are claimed the
+	 * twenty-four points are burnt for nothing — and {@code setAge}, which is what would put the pair
+	 * on a cooldown, lives in {@code breed} and never runs. The pair restarts immediately. Against a
+	 * Worker's one point per {@code ticksPerFoodPoint} of actual work, that is food leaving a base
+	 * about two orders of magnitude faster than the mechanic this block exists to supply, with hearts
+	 * over a factory as the only symptom.
+	 *
+	 * <p>Feeding villagers to twelve is vanilla's idea of a <em>player's</em> deliberate act. A Canteen
+	 * does the part that keeps a crew working and leaves that last stretch alone.
+	 *
+	 * <p>Asserted in points rather than through {@code canBreed} on purpose, because {@code foodLevel}
+	 * is private and starts at zero: a test that only asked {@code canBreed} would pass on a villager
+	 * filled to eleven and say nothing about the three points of digest residue that make eleven
+	 * enough. The margin is what is being pinned, so the margin is what is measured.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 500)
+	public static void aCanteenStopsShortOfTheBreedingThreshold(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
+		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
+			throw new GameTestAssertException("the canteen should have a block entity");
+		// Bread, because four-point food is what can overshoot a cap that merely stops rather than
+		// refuses: seven points plus a loaf is eleven, and eleven plus the residue is twelve.
+		ItemHandlerHelper.insertItem(canteen.stock(), new ItemStack(Items.BREAD, 64), false);
+
+		Villager beside = helper.spawn(EntityType.VILLAGER, SOURCE.offset(1, 0, 0));
+		beside.setNoAi(true);
+		beside.setOnGround(true);
+
+		// **The one that exercises the refusal rather than the stop**, and it has to carry odd change
+		// to do it. On bread alone a villager climbs 0, 4, 8 and halts on the cap exactly, so a serve
+		// loop that merely stopped at eight would pass. Three carrots put it on seven, where the next
+		// loaf is the difference between a villager holding seven and one holding eleven -- and eleven
+		// plus the digest residue is twelve, which breeds.
+		Villager oddChange = helper.spawn(EntityType.VILLAGER, SOURCE.offset(-1, 0, 0));
+		oddChange.setNoAi(true);
+		oddChange.setOnGround(true);
+		oddChange.getInventory()
+			.addItem(new ItemStack(Items.CARROT, 3));
+
+		helper.startSequence()
+			.thenWaitUntil(() -> helper.assertTrue(carriedPoints(beside) > 0,
+				"a canteen should hand food to a villager standing next to it"))
+			// Two whole servings further on, so this is the steady state and not a pass caught halfway.
+			.thenIdle(220)
+			.thenExecute(() -> {
+				for (Villager fed : List.of(beside, oddChange)) {
+					int points = carriedPoints(fed);
+					helper.assertTrue(points <= CanteenBlockEntity.FILL_POINTS,
+						"a canteen must never fill a villager past " + CanteenBlockEntity.FILL_POINTS
+							+ " points, and this one is holding " + points);
+					helper.assertTrue(points + 3 < 12,
+						"and it has to stay clear of the breeding threshold even with the three points "
+							+ "digestFood can leave behind, which nothing here can read; holding " + points);
+					helper.assertTrue(!fed.canBreed(),
+						"so vanilla should agree the villager cannot breed on what a canteen alone gave it");
+				}
+			})
+			.thenSucceed();
+	}
+
+	/** The food points a villager is carrying, which is the half of {@code canBreed} we can see. */
+	private static int carriedPoints(Villager villager) {
+		int points = 0;
+		for (int slot = 0; slot < villager.getInventory()
+			.getContainerSize(); slot++) {
+			ItemStack held = villager.getInventory()
+				.getItem(slot);
+			points += CanteenBlockEntity.foodPoints(held) * held.getCount();
+		}
+		return points;
 	}
 
 	/**

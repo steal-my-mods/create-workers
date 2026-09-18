@@ -852,6 +852,33 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   **carrots on purpose** — on bread, "filled in one pass" and "filled in three" both end with a full
   villager and differ only in how long they took, which a waiting assertion cannot see. It also uses
   `setNoAi`, because what it asserts is that *nobody walked*.)
+- **A Canteen must never fill a villager to twelve points, and the reason is not children.**
+  `Villager.canBreed` is `foodLevel + countFoodPointsInInventory() >= 12`, so a trough that topped
+  everything in range to vanilla's own ceiling held the breeding gate open for every villager near it,
+  permanently — turning a deliberate player act into a background process. What came through it was
+  mostly **waste, not babies**: `VillagerMakeLove.tick` calls `eatAndDigestFood` on *both* parents,
+  twelve points each, **before** `tryToGiveBirth` goes looking for a vacant bed. Once the beds are
+  claimed the twenty-four points are burnt for nothing, and because `breed()` never runs, the
+  `setAge(6000)` that would put the pair on a cooldown never runs either — so they start again at
+  once. ~24 points per ~300 ticks against a worker's 1 per 1800 of actual work: **about 150x the drain
+  of the mechanic the block exists to supply**, with hearts over the factory as the only symptom. It is
+  *not* self-limiting by beds — beds limit babies, not food.
+  `FILL_POINTS` is 8, and the loop **refuses an item that would overshoot** rather than stopping at the
+  cap: seven points plus a loaf is eleven, and eleven plus the up-to-three residue `digestFood` leaves
+  in the hidden `foodLevel` is twelve. Eight is still nearly two shifts of fuel, so walking past a
+  Canteen is unchanged. (`aCanteenStopsShortOfTheBreedingThreshold`, mutation-checked both ways — and
+  the overshoot half needs a villager holding **odd change**, because on bread alone a villager climbs
+  0, 4, 8 and lands on the cap exactly, so a loop that merely stopped there passes.)
+- **Pinning `WALK_TARGET` only defeats a behaviour whose entire effect *is* the walk.** Muster, work
+  and leisure are all `Activity.IDLE`, so vanilla's whole idle package is live during a shift, and the
+  ones that do something besides move still land. Neutralised: `VillageBoundRandomStroll`,
+  `SetWalkTargetFromLookTarget`, and `JumpOnBed` (it has to path to a bed first). **Not neutralised:**
+  the two `InteractWith`s, which set `INTERACTION_TARGET` and `BREED_TARGET` memories regardless;
+  `VillagerMakeLove`, which gates only on `distanceToSqr <= 5.0` and then spends food where it stands;
+  `ShowTradesToPlayer` and `SetLookAndInteract`, which are harmless and in fact wanted; `GiveGiftToHero`;
+  and `TradeWithVillager`, which is inert here only because it needs `hasExcessFood()` and a capped
+  worker never has any. Before assuming the goal suppresses some idle behaviour, check whether that
+  behaviour's effect is the walk or something it does on arrival.
 - **A hungry worker is slowed and never stopped, and `hungryPace` is a floor rather than a slide.** A
   line that halts is a line whose owner has to go and find out why, and food must not be the one
   mechanic here that fails invisibly — but a hard stop turns a supply hiccup into an outage. It is

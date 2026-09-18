@@ -26,6 +26,15 @@ reading the diff.
 - **The Worker's trade list is no longer a config file.** Packs retune villager trades with KubeJS,
   which can already add to, replace or clear this list — a second, bespoke format only got in the way.
 
+### Fixed
+
+- **Canteens no longer breed your whole village by accident.** A Canteen filled villagers to the exact
+  point at which vanilla lets them breed, so any factory with a trough in it bred non-stop — and most
+  of that food bought nothing at all, because a pair spends its food *before* checking whether there is
+  a spare bed, and goes straight round again when there isn't. A breeding pair was burning food around
+  a hundred and fifty times faster than a Worker doing its job. Canteens now stop a little short, and
+  feeding villagers the rest of the way is yours to do, as it is everywhere else in the game.
+
 ### Removed
 
 - **Zinc Ingots are no longer sold.** One zinc ingot becomes nine andesite alloy, and a saw cuts each
