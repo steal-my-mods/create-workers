@@ -610,6 +610,29 @@ CANTEEN_RENDERER = os.path.join(
     'src', 'main', 'java', 'com', 'createworkers', 'client', 'CanteenRenderer.java')
 
 
+def check_quad_layers():
+    """Every quad the Canteen draws over another one has to say where it sits.
+
+    **This has now been got wrong twice**, in the two places it can be. The heap's pieces overlap
+    each other, and the gauge's rows cover its backing; both were stood off the face by a flat
+    STANDOFF, which puts them at one depth. Coplanar quads do not layer, they are undefined --
+    the depth buffer picks between them per fragment and per camera angle, which reads as the
+    block tearing itself apart on the top and as the level bleeding through black on the flanks.
+
+    Nothing about a constant is wrong in either case, so this reads the translate expressions
+    the way check_top_face_quad reads the winding.
+    """
+    import re
+    source = open(CANTEEN_RENDERER).read()
+    for name, following in (('flat', 'private void upright('), ('upright', 'private static void vertex(')):
+        body = source[source.index('private void %s(' % name):source.index(following)]
+        assert 'layer * LAYER' in body, \
+            ('%s() stands its quads off the face without a layer. Anything drawn over something '
+             'else here needs its own depth, or the two are undefined rather than stacked.' % name)
+        assert re.search(r'\bint layer\b', body), \
+            '%s() should take the layer rather than assume one' % name
+
+
 def check_top_face_quad():
     """The heap's quad has to lie on the top face and point upwards, and neither is a constant.
 
@@ -696,6 +719,7 @@ def check_canteen_grid():
          'trim' % (span, x2 - x1 + 1))
 
     check_top_face_quad()
+    check_quad_layers()
 
     # The gauge: a row per slot, standing on the floor of the panel and under its own bezel.
     assert GAUGE_Y2 - GAUGE_Y1 + 1 == CANTEEN_SLOTS, \

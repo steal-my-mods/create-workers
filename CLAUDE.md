@@ -959,11 +959,15 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   the same shape of problem and solves it the same way, with the readout on a sheet of its own.
   Its **dark backing is load-bearing**: a bread swatch is within a few shades of the boards behind it,
   and the first build had an invisible gauge on a Canteen full of bread.
-  **Overlapping quads at one depth are not layered, they are undefined.** The heap's pieces overlap
-  by design, and standing all twenty-seven off the face by the same `STANDOFF` put them at one depth,
-  where the depth buffer picks between them per fragment and per camera angle — which does not look
-  like a heap, it looks like the block tearing itself apart. Each piece gets its own `LAYER` step now.
-  The Station never met this because its lamps do not overlap.
+  **Overlapping quads at one depth are not layered, they are undefined — and this was got wrong
+  twice, in both of the two places it can be.** The heap's pieces overlap each other, and the gauge's
+  rows cover its backing; both were stood off the face by a flat `STANDOFF`, which puts them at one
+  depth, where the depth buffer picks between them per fragment and per camera angle. On the top that
+  reads as the block tearing itself apart; on the flanks it reads as the level bleeding through
+  black. Fixing the first did not fix the second, because they are different methods.
+  Both `flat` and `upright` take a `layer` now and neither has a default, and `check_quad_layers()`
+  reads both translate expressions to make sure they use it. The Station never met any of this
+  because its lamps do not overlap anything, which is why none of its hard-won lessons covered it.
   **And density does not survive a change of cavity size.** The heap was drawn against a twelve-texel
   trough and the trough had to shrink to the ten the shared panel allows; the piece count did not
   follow it down, so four slots covered 84% and a barely-stocked Canteen looked brim full. A piece is

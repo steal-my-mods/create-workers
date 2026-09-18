@@ -122,6 +122,11 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 	 * <p>Small enough that the stack of them is under half a texel, so the heap keeps its thickness
 	 * without any piece visibly floating; large enough to be worth more than the depth buffer's
 	 * precision at the range a block is looked at.
+	 *
+	 * <p><b>Both drawing methods take a layer, and neither has a default.</b> The gauge was missed
+	 * when the heap was fixed — its rows sit on its backing and were left sharing a depth with it, so
+	 * the level came out as streaks bleeding through black. Anything that covers anything else here
+	 * has to say where it sits.
 	 */
 	private static final float LAYER = 0.001F;
 	private static final float PIXEL = 1.0F / 16.0F;
@@ -197,7 +202,7 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 		// it, so a Canteen full of bread showed no bar at all. An empty row is simply this
 		// showing through, which is also why only filled rows are drawn.
 		upright(consumer, poseStack, facing, GAUGE_X1 - 1, GAUGE_Y1 - 1, GAUGE_WIDTH + 2,
-			rows + 1, texel(1), texel(2 * CAVITY_PIECE + 1), light, overlay);
+			rows + 1, 0, texel(1), texel(2 * CAVITY_PIECE + 1), light, overlay);
 
 		for (int slot = 0; slot < rows; slot++) {
 			CanteenBlockEntity.Serving serving = slot < servings.size() ? servings.get(slot)
@@ -205,7 +210,7 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 			if (serving.isEmpty())
 				continue;
 			// Slot zero is the floor of the gauge, so filling the rack fills the bar upwards.
-			upright(consumer, poseStack, facing, GAUGE_X1, GAUGE_Y2 - slot, GAUGE_WIDTH, 1,
+			upright(consumer, poseStack, facing, GAUGE_X1, GAUGE_Y2 - slot, GAUGE_WIDTH, 1, 1,
 				texel(serving.food() * CAVITY_PIECE + 1), texel(CAVITY_PIECE + 1), light, overlay);
 		}
 	}
@@ -237,14 +242,23 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 		poseStack.popPose();
 	}
 
-	/** A quad standing on one of the four flanks, {@code x}/{@code y} its top-left corner in texels. */
+	/**
+	 * A quad standing on one of the four flanks, {@code x}/{@code y} its top-left corner in texels.
+	 *
+	 * <p>{@code layer} is which sheet of the gauge this is — the backing is nought and the rows sit
+	 * on top of it. It is not optional for the same reason it is not optional on {@link #flat}: the
+	 * rows cover the backing, and two quads covering each other at one depth are not layered, they
+	 * are undefined. The gauge shipped exactly that way and the level came out as streaks of colour
+	 * bleeding through black.
+	 */
 	private void upright(VertexConsumer consumer, PoseStack poseStack, Direction facing, int x,
-		int y, int width, int height, float u, float v, int light, int overlay) {
+		int y, int width, int height, int layer, float u, float v, int light, int overlay) {
 
 		poseStack.pushPose();
 		poseStack.translate(0.5F, 0.5F, 0.5F);
 		poseStack.mulPose(Axis.YP.rotationDegrees(-facing.toYRot()));
-		poseStack.translate((x - 8.0F) * PIXEL, (8.0F - y - height) * PIXEL, 0.5F + STANDOFF);
+		poseStack.translate((x - 8.0F) * PIXEL, (8.0F - y - height) * PIXEL,
+			0.5F + STANDOFF + layer * LAYER);
 
 		PoseStack.Pose pose = poseStack.last();
 		float w = width * PIXEL;
