@@ -10,10 +10,13 @@ explicitly accepted before a `v*` tag is pushed.
 ## Blocking
 
 - **The changelog has no section for anything since 0.4.0, and `mod_version` still says `0.4.0`.**
-  Stations, the lamp readout, leisure, muster and the Canteen have no entry. `publishMods` reads the
-  section whose heading names the current `mod_version` and fails when there isn't one, so this stops
-  a release by itself — which is the intended behaviour, not a bug to work around. Write the section
-  for a player reading a download page, not for someone reading the diff.
+  `## [Unreleased]` now covers the trade rework, the Canteen's breeding cap, the bed anchor and the
+  hiring preference, and nothing else: Stations and their screen, the lamp readout, shifts, muster,
+  leisure, the Canteen itself and food all have no player-facing entry at all.
+  `publishMods` reads the section whose heading names the current `mod_version` and fails when there
+  isn't one — so as things stand it would find the **0.4.0** heading and ship the previous release's
+  notes under a new tag, which is worse than failing. Bump the version and write the section, for a
+  player reading a download page rather than for somebody reading the diff.
 
 ## Numbers that were chosen rather than measured
 
@@ -36,40 +39,33 @@ explicitly accepted before a `v*` tag is pushed.
   twelve points, so this number also sets **how far a worker can stray from a canteen** — about three
   shifts at the default. Watch for workers limping in a base that has plenty of bread in the wrong
   place.
-- **The hungry slowdown floor** (`hungryPace` 0.35) — see
-  [phase-4.md](phase-4.md#open-questions). **Now seen in play**, by starving a worker deliberately
-  (`/tick sprint 44000` with the Canteen out of range). It works, and the unhappy-villager particles
-  were confirmed as the thing that makes it legible. Two findings.
-  The slowdown is **not** a double penalty, which is worth knowing before anyone retunes it: the walk
-  is multiplied by `hungryPace` and the transfer cooldown divided by it, so every part of a haul cycle
-  stretches by the same 2.86x and **throughput lands at exactly 0.35**. One number, one meaning.
-  What is unresolved is that the one number does **two jobs**: the walk is what a player *sees* (and
-  0.35 of villager pace is a crawl — "very slow, maybe too slow" was the verdict), while the cooldown
-  is what a factory *measures*. They are coupled only because it was simpler. If the crawl turns out
-  to read as punishing during real production rather than during a deliberate starvation test, split
-  them — walk at ~0.6, cooldown left alone — and the cost is unchanged while the limp is less grim.
-  Left at 0.35 for now: legibility is the point, and a third of output is a long way from an outage.
-- **The trade table is loop-proof and priced against the field, but its income has never been
-  played.** Two things are settled and need no further thought. There is no emerald loop:
+- **The hungry slowdown floor** (`hungryPace` 0.35) — **accepted; ships as it stands.** Seen in play
+  by starving a worker on purpose (`/tick sprint 44000` with the Canteen out of range). It works, and
+  the unhappy-villager particles are what make it legible.
+  Two things were learned and are worth having before anyone retunes it. It is **not** a double
+  penalty: the walk is multiplied by `hungryPace` and the transfer cooldown divided by it, so every
+  part of a haul cycle stretches by the same 2.86x and **throughput lands at exactly 0.35** — one
+  number, one meaning. But that one number does **two jobs**: the walk is what a player *sees* (0.35
+  of villager pace is a crawl, and "very slow, maybe too slow" was the verdict), while the cooldown is
+  what a factory *measures*. They are coupled only because it was simpler.
+  **Revisit only if the crawl reads as punishing during ordinary production** rather than during a
+  deliberate starvation test. The remedy is already worked out: split them, walk at ~0.6 and leave the
+  cooldown alone, and the cost is unchanged while the limp is less grim.
+
+- **The trade table's buy-side income — accepted; ships unplayed.** Two things about the table are
+  settled and need no further thought. There is no emerald loop:
   `theTradeTableHasNoEmeraldLoop` walks the server's own recipes and is mutation-checked, and it is
   what removed the Zinc Ingot sell (a zinc ingot reaches 54 cogwheels through `create:cutting`, which
   returned 4 emeralds on every 1 spent). And the prices sit at roughly the cheapest general-play
   comparator measured — Create: Engineers, A Distant Journey, flesh-and-steel — rather than under all
   of them as they did before: Drill 3e against their 5, Fan 2e against 3, Mixer 3e against 4.
-  What is **unvalidated is the size of the buy side**, which is the new thing. It is metered by
+  What has **not** been played is the size of the buy side, which is the new thing. It is metered by
   `maxUses` rather than by price: a purchase yields at most 16 emeralds before the Worker must
   restock, which it can only do twice a day, and any one Worker shows only two of a level's listings.
-  On paper a full station is a few hundred emeralds a day; nobody has played it. Watch for a factory
-  that makes emeralds faster than it makes anything else, and turn `maxUses` down rather than prices
-  up if so.
-  Also unvalidated, and cheaper to settle: whether four Create foods on the buy side is three too
-  many, since they compete with each other for the two listings a level shows.
-
-- **The CHANGELOG has no entries for most of what is unreleased.** `## [Unreleased]` covers the trade
-  rework and nothing else, while everything since 0.4.0 — the Worker Station and its screen, shifts,
-  muster and leisure, the Canteen, food — has no player-facing note at all. `mod_version` is also
-  still `0.4.0`, so `publishMods` would happily find that heading and ship the previous release's
-  notes under a new tag. Bump the version and write the section before any `v*` tag.
+  On paper a full station is a few hundred emeralds a day.
+  **Revisit if players report a factory minting emeralds faster than it makes anything else**, and
+  turn `maxUses` down rather than prices up. Cheaper to settle at the same time: whether four Create
+  foods on the buy side is three too many, since they compete for the two listings a level shows.
 
 ## Found by review, judged and deferred
 
