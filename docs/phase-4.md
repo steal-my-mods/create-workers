@@ -307,6 +307,8 @@ tedium Create wants you to automate past. What a labourer has to sell is the pro
 - **Sell:** shafts, cogs, andesite alloy.
 - **Buy:** raw materials, food.
 - **Not:** precision mechanisms, brass casings, sturdy sheets — what a factory is the *answer* to.
+  *(Relaxed once in the build: zinc and brass **ingots** are sold at level 5, where 250 experience of
+  trading is more work than a zinc mine. Materials only — nothing brass-tier and finished.)*
 - **Not hard hats.** The hat is this mod's own gate, and the same rule applies to us: a player who can
   buy one has bought past the item the mod is about.
 
