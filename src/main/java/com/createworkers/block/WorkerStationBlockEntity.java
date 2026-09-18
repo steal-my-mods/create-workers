@@ -640,11 +640,23 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		if (slot == null)
 			return false;
 		WorkerProgram programme = HardHatItem.getProgram(slot.hat);
+		// **An unprogrammed hat is not out of range, it is unprogrammed**, and answering the two with
+		// one boolean is how the screen came to tell a player their blank hat was too far away. A
+		// programme with no targets has no centre to measure, so there is nothing here that can be out
+		// of range; whether the job can be staffed at all is isProgrammed's question, and staffable is
+		// where the two are put back together.
 		if (!programme.hasTargets())
-			return false;
+			return true;
 		int range = CWConfig.STATION_RANGE.get();
 		return programme.centre()
 			.distSqr(worldPosition) <= (double) range * range;
+	}
+
+	/** Whether the hat in this place has any inventories on it. The other half of {@link #staffable}. */
+	public boolean isProgrammed(int index) {
+		Slot slot = jobAt(index);
+		return slot != null && HardHatItem.getProgram(slot.hat)
+			.hasTargets();
 	}
 
 	private void recruit(ServerLevel server) {
@@ -782,8 +794,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * for it, which is a villager stuck as a Worker for the rest of the world's life.
 	 */
 	private boolean staffable(int index) {
-		return slots[index] != null && HardHatItem.getProgram(slots[index].hat)
-			.hasTargets() && workIsInRange(index);
+		return isProgrammed(index) && workIsInRange(index);
 	}
 
 	/** The last place on the roster that has somebody in it, reading the fill order backwards. */

@@ -143,6 +143,12 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 		// A job whose work is too far from this block is never staffed, and the reason is not
 		// something a player can see from the rack or from the block. Saying so in the row is the
 		// difference between a station that is short and a station that is broken.
+		//
+		// Out of range only. A blank hat cannot be staffed either, but it is not *stranded* -- it is
+		// waiting to be programmed, which the player is about to do and which the hat's own tooltip
+		// already says. Colouring it with the same red and counting it in the same warning told
+		// somebody who had just racked a fresh hat that their work was too far away, which sends them
+		// to measure distances that are fine.
 		boolean reachable = menu.contentHolder == null || menu.contentHolder.workIsInRange(index);
 
 		graphics.drawString(font, font.plainSubstrByWidth(job.hat()
@@ -206,14 +212,28 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 			y + WorkerStationMenu.READOUT_Y, LABEL, false);
 
 		int stranded = 0;
-		for (int i = 0; i < WorkerStationBlockEntity.MAX_SLOTS; i++)
-			if (station.jobAt(i) != null && !station.workIsInRange(i))
+		int blank = 0;
+		for (int i = 0; i < WorkerStationBlockEntity.MAX_SLOTS; i++) {
+			if (station.jobAt(i) == null)
+				continue;
+			if (!station.workIsInRange(i))
 				stranded++;
+			else if (!station.isProgrammed(i))
+				blank++;
+		}
+		// One line, because the panel reserves one -- a second would change PANEL_HEIGHT, and a Slot's
+		// position is final. Work nobody can reach is the more alarming of the two and wins the line;
+		// a blank hat is a thing the player is halfway through doing.
 		if (stranded > 0)
 			graphics.drawString(font,
 				Component.translatable(stranded == 1 ? "createworkers.station.out_of_range.one"
 					: "createworkers.station.out_of_range", stranded),
 				x + WorkerStationMenu.FIRST_COLUMN_X, y + WorkerStationMenu.WARNING_Y, UNREACHABLE, false);
+		else if (blank > 0)
+			graphics.drawString(font,
+				Component.translatable(blank == 1 ? "createworkers.station.unprogrammed.one"
+					: "createworkers.station.unprogrammed", blank),
+				x + WorkerStationMenu.FIRST_COLUMN_X, y + WorkerStationMenu.WARNING_Y, WANTED, false);
 	}
 
 	private void renderInventoryWells(GuiGraphics graphics, int x, int y) {

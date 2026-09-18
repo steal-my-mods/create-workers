@@ -54,5 +54,7 @@
   "createworkers.ponder.working_hours.text_7": "Right-Click an Enderman with a Hat to put it to work. They keep no hours, so a line staffed with them runs through the night",
   "createworkers.ponder.working_hours.text_8": "A crew is woken before its shift and walks to its post, so the work is covered the moment the last crew stops",
   "createworkers.station.out_of_range": "%s jobs are too far from this Station to staff",
-  "createworkers.station.out_of_range.one": "1 job is too far from this Station to staff"
+  "createworkers.station.out_of_range.one": "1 job is too far from this Station to staff",
+  "createworkers.station.unprogrammed": "%s hats have no inventories assigned yet",
+  "createworkers.station.unprogrammed.one": "1 hat has no inventories assigned yet"
 }

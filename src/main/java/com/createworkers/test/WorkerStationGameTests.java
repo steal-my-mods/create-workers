@@ -431,7 +431,6 @@ public class WorkerStationGameTests {
 		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
 		putHatIn(helper, STATION);
 		Villager villager = helper.spawn(EntityType.VILLAGER, BESIDE_STATION);
-		BlockPos station = helper.absolutePos(STATION);
 
 		helper.startSequence()
 			.thenWaitUntil(() -> helper.assertTrue(Workers.isEmployed(villager), "the villager should be hired"))
@@ -442,14 +441,14 @@ public class WorkerStationGameTests {
 					"a worker standing at its own post should keep its job however long it stands there");
 				sealIn(helper, villager, CELL);
 			})
-			.thenWaitUntil(() -> {
-				helper.assertTrue(!Workers.isEmployed(villager),
-					"a worker walled away from its work should have been let go by now");
-				helper.assertTrue(helper.getLevel()
-					.getPoiManager()
-					.getFreeTickets(station) > 0,
-					"and its ticket should be back, or nobody could ever replace it");
-			})
+			.thenWaitUntil(() -> helper.assertTrue(!Workers.isEmployed(villager),
+				"a worker walled away from its work should have been let go by now"))
+			// This used to check the station's free POI tickets here too -- "its ticket should be back,
+			// or nobody could ever replace it". That assertion could not fail: nothing claims a station
+			// ticket any more, because the block recruits for itself and CWProfessions.WORKER matches
+			// nothing with either predicate. It was cover over a mechanism the mod stopped having when
+			// YieldJobSite forced the station to do its own hiring. What actually needed proving is the
+			// step below, which was always doing the work: somebody else can be taken on afterwards.
 			.thenExecute(() -> helper.spawn(EntityType.VILLAGER, BESIDE_STATION))
 			.thenWaitUntil(() -> helper.assertTrue(someoneIsEmployed(helper),
 				"so that somebody else can take the job on"))
@@ -617,6 +616,47 @@ public class WorkerStationGameTests {
 	}
 
 	// --- helpers ---
+
+
+	/**
+	 * A blank hat is reported as blank, not as work too far away.
+	 *
+	 * <p>{@code workIsInRange} answered two questions with one boolean — it returned false both for a
+	 * programme whose centre is outside {@code stationRange} and for one with no targets at all — and
+	 * the screen read it as the first. So racking a fresh hat, which is what a player does a moment
+	 * before programming it, painted the row red and printed <i>"1 job is too far from this Station to
+	 * staff"</i>. The one diagnostic the screen exists to give, naming the wrong cause and sending
+	 * somebody off to measure distances that were never the problem.
+	 *
+	 * <p>The block entity had always kept the two apart in {@code staffable}; it is the predicate
+	 * underneath that conflated them. A programme with no targets has no centre, so there is nothing
+	 * about it that can be out of range.
+	 */
+	@GameTest(template = "work_site", batch = "station_range", timeoutTicks = 400)
+	public static void aBlankHatIsNotReportedAsWorkTooFarAway(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+
+		// A hat with nothing on it at all, which is what a player racks a moment before programming it.
+		station(helper).putHat(0, new ItemStack(CWItems.HARD_HAT.get()));
+
+		ItemStack good = new ItemStack(CWItems.HARD_HAT.get());
+		HardHatItem.setProgram(good, programme(helper));
+		station(helper).putHat(1, good);
+
+		WorkerStationBlockEntity station = station(helper);
+		helper.assertTrue(!station.isProgrammed(0), "a hat with no inventories on it is not programmed");
+		// The point of the split. A programme with no targets has no centre, so there is nothing about
+		// it that can be out of range -- and answering both questions with one boolean is how the
+		// screen came to paint a fresh hat red and tell the player "1 job is too far from this Station
+		// to staff", sending them off to measure distances that were never the problem.
+		helper.assertTrue(station.workIsInRange(0),
+			"and it is not *out of range*, which is a different complaint with a different remedy");
+		helper.assertTrue(station.isProgrammed(1) && station.workIsInRange(1),
+			"precondition: the ordinary programme is both, so the two are being told apart rather than "
+				+ "both answering the same way");
+		helper.succeed();
+	}
 
 	/**
 	 * Walls a worker into a cell it cannot path out of, far enough from its work to count as away.
