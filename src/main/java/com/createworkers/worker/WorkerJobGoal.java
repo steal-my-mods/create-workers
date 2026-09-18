@@ -186,6 +186,12 @@ public class WorkerJobGoal extends Goal {
 			}
 		} else {
 			clockOn();
+			// **Being on the clock is what costs a worker its dinner**, not what it manages to move.
+			// Charging per delivery made a compact line eat three times what a spread-out one did while
+			// walking less far, so the food bill rewarded building badly. Time is neutral to layout, and
+			// it is what makes "how much bread does a crew need" arithmetic instead of an estimate.
+			// Only here: the branches above are leisure, muster and the night, and none of them is work.
+			data.chargeForWork(mob);
 		}
 
 		keepNearPost(data, now);
@@ -838,11 +844,6 @@ public class WorkerJobGoal extends Goal {
 				.copy();
 
 			boolean acted = collecting ? data.collectFrom(point, gameTime) : data.depositTo(point);
-
-			// The delivery is what costs a worker its dinner, so it is charged for here and nowhere
-			// else -- a pickup is half a trip and a scan that finds nothing is no trip at all.
-			if (acted && !collecting)
-				data.chargeForDelivery(mob);
 
 			locomotion.stop(mob);
 			travel.reset();

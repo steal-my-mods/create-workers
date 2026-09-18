@@ -1,8 +1,8 @@
 # Phase 4 — leisure, food, and trades
 
-**Status: built.** Leisure, muster, the canteen, food and trades. A worker eats as
-it hauls, out of its own inventory, and slows to `hungryPace` when it runs out; a Canteen hands food
-to anybody short of it within `canteenRange`. This was the
+**Status: built.** Leisure, muster, the canteen, food and trades. A worker eats for its time on the
+clock, out of its own inventory, and slows to `hungryPace` when it runs out; a Canteen hands food to
+anybody short of it within `canteenRange`. This was the
 plan agreed before any code, so that the shape was argued once rather than discovered three times.
 [shift-rotation.md](shift-rotation.md) holds the original thinking; where this document disagrees
 with it, this one is right and says why.
@@ -34,13 +34,19 @@ What the build changed, so far:
   bread, potato, carrot and beetroot; a villager eats nothing else. The canteen filtered on the `FOOD`
   component at first, so a trough of cooked beef read as stocked on every readout and would have fed
   nobody.
-- **The drain is per delivery, not per item**, which reverses a line above. The intent there is
-  unchanged — a worker that moved two hundred items should cost more than one that stood at a dry
-  depot — but carrying one item and carrying a full stack are the same walk, and pricing them apart
-  taxes a line for filling its stacks.
+- **The drain is per tick on the clock**, which reverses this document twice over — it said per item,
+  the build made it per delivery, and both were wrong in the same direction. Pricing *transactions*
+  means a compact line pays more per unit time than a spread-out one **while walking less far**: 8
+  points a shift on a four-block beat against 2.4 on a sixteen-block one. The food bill rewarded
+  building badly. Time is neutral to layout, makes the bill a function of headcount, and dissolves the
+  measurement problem that hung over every number here — deliveries-per-shift stops being an input, so
+  "how much bread does a crew need" is arithmetic rather than an estimate.
+  What it gives up is this document's line that an idle worker can never starve for having had nothing
+  to do. It can now, and that reads as right: somebody on shift eats whether or not the belt is
+  running, and a worker idle because nothing supplied it is a build problem.
 - **A new hire arrives having eaten.** Not in the design, and needed: starting empty makes a worker
-  hungry on its first delivery, which is food as a punishment for hiring rather than as a supply line
-  to build.
+  hungry within a tick of being hired, which is food as a punishment for hiring rather than as a
+  supply line to build.
 - **The hungry slowdown is a flat floor rather than a slide.** The design said "down to a floor",
   implying a ramp. One multiplier is simpler, satisfies "never worse than", and there is nothing a
   ramp would tell a player that the particles and the screen do not.

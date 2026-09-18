@@ -131,7 +131,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	 */
 	private long noticeUntil;
 	/**
-	 * How much work this worker has eaten for, counted in deliveries.
+	 * How much work this worker has eaten for, counted in ticks on the clock.
 	 *
 	 * <p>The mod's own gauge rather than the villager's, and it has to be: {@code Villager.foodLevel}
 	 * is <b>private</b>, unreadable from outside, and the only public thing that moves it is
@@ -255,24 +255,33 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	// --- food ----------------------------------------------------------------------------
 
 	/**
-	 * Charges this worker for one delivery, eating if it has to.
+	 * Charges this worker for one tick on the clock, eating if it has to.
 	 *
-	 * <p><b>Per delivery, not per item</b>, which is a small departure from what the design said. The
-	 * intent there is right and unchanged — a worker that moved two hundred items should cost more
-	 * than one that stood at a dry depot all shift — but the unit that matches the work is the
-	 * <em>trip</em>: carrying one item and carrying a full stack are the same walk, and pricing them
-	 * differently would tax a well-built line for filling its stacks, which is the opposite of what
-	 * Create asks you to do.
+	 * <p><b>Time, not deliveries — and the version this replaced was backwards.</b> Charging per
+	 * delivery prices <em>transactions</em>, and a compact line does more of them per unit time, so a
+	 * worker on a four-block beat ate three times what one on a sixteen-block beat did while walking
+	 * <em>less far</em>. The food bill rewarded spreading your depots out, which is the opposite of
+	 * what Create asks you to build, and it is a distortion a player would feel long before they could
+	 * name it.
+	 *
+	 * <p>Time is neutral to all of that. A shift costs what a shift costs, so the bill is a function
+	 * of <b>headcount</b> — the thing the player actually decides — and every downstream number
+	 * (how long a canteen lasts, how big a wheat farm has to be) becomes arithmetic rather than an
+	 * estimate that depends on how somebody laid out their depots.
+	 *
+	 * <p>The cost is one line of the design reversed: an idle worker now eats too. That reads as right
+	 * — somebody on shift eats whether or not the belt is running — and a worker standing idle because
+	 * nothing supplied it is a build problem rather than a reason to be fed for free.
 	 *
 	 * @return whether the worker is hungry afterwards — out of fuel with nothing left to eat.
 	 */
-	public boolean chargeForDelivery(Mob mob) {
+	public boolean chargeForWork(Mob mob) {
 		if (!CWConfig.REQUIRE_FOOD.get())
 			return false;
 		if (fuel <= 0 && !eat(mob))
 			return true; // nothing in the gauge and nothing in its pockets
-		// The delivery that emptied the gauge is still a delivery, so it is charged for after the meal
-		// rather than covered by it -- otherwise every loaf quietly buys one trip more than it is worth.
+		// The tick that emptied the gauge is still a tick worked, so it is charged for after the meal
+		// rather than covered by it -- otherwise every loaf quietly buys one tick more than it is worth.
 		fuel--;
 		return false;
 	}
@@ -297,7 +306,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 			if (points <= 0)
 				continue;
 			inventory.removeItem(slot, 1);
-			fuel += points * CWConfig.DELIVERIES_PER_FOOD_POINT.get();
+			fuel += points * CWConfig.TICKS_PER_FOOD_POINT.get();
 			return true;
 		}
 		return false;
@@ -319,7 +328,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		return false;
 	}
 
-	/** How many deliveries this worker has eaten for. Diagnostics and tests; nothing reads it to decide. */
+	/** How many ticks of work this worker has eaten for. Diagnostics and tests; nothing decides on it. */
 	public int fuel() {
 		return fuel;
 	}
@@ -335,7 +344,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		// Only on a fresh hire. employ() is also how a station promotes a worker into the job above,
 		// and a rations top-up there would make toggling a shift a way to feed a crew for nothing.
 		if (!isEmployed())
-			fuel = STARTING_RATIONS * CWConfig.DELIVERIES_PER_FOOD_POINT.get();
+			fuel = STARTING_RATIONS * CWConfig.TICKS_PER_FOOD_POINT.get();
 		this.hat = hatStack.copyWithCount(1);
 		this.program = program.copy();
 		this.jobSite = this.program.centre();

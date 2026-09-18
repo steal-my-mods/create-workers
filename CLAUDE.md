@@ -778,15 +778,28 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   inventory: the half a player can see and count. **`Villager.FOOD_POINTS` is public and is the whole
   list** — bread 4, potato, carrot and beetroot 1 apiece — which is also what the Canteen filters on,
   because a trough of cooked beef reads as stocked and feeds nobody.
-  Three decisions worth keeping: it is charged **per delivery, not per item** (carrying one item and
-  carrying a stack are the same walk, and pricing them apart would tax a line for filling its stacks);
-  the delivery that empties the gauge is charged for **after** the meal, or every loaf quietly buys a
-  trip more than it is worth; and a new hire arrives with `STARTING_RATIONS` already eaten, **on a
-  fresh hire only**, since `employ` is also how a station promotes and a top-up there would make
-  toggling a shift a way to feed a crew for nothing. Starting empty makes a worker hungry on its first
-  delivery, which is food as a punishment for hiring rather than a supply line to build — and it
-  failed `workFoundOnTheRoundsIsWalkedAtWorkingPace`, because every test villager has empty pockets.
-  (`aWorkerEatsWhatItHaulsFor`, `aHungryWorkerIsSlowedAndNeverStopped`, both mutation-checked.)
+  **It is charged by time on the clock, and per-delivery was backwards.** Pricing deliveries counts
+  *transactions*, and a compact line makes more of them per unit time — so a worker on a four-block
+  beat ate 8 points a shift against 2.4 for one on a sixteen-block beat, **while walking less far**.
+  The food bill rewarded spreading your depots out, which is the opposite of what Create asks you to
+  build, and it is a distortion a player would feel long before they could name it. Time is neutral to
+  layout: the bill becomes a function of *headcount*, and every downstream figure (how long a canteen
+  lasts, how big a wheat farm must be) turns into arithmetic instead of an estimate that depends on
+  somebody's floor plan. The cost is one line of the design reversed — an idle worker eats too, which
+  reads as right and makes an unsupplied worker a build problem rather than a free ride.
+  Two decisions beside it: the tick that empties the gauge is charged for **after** the meal, or every
+  loaf quietly buys one more than it is worth; and a new hire arrives with `STARTING_RATIONS` already
+  eaten, **on a fresh hire only**, since `employ` is also how a station promotes and a top-up there
+  would make toggling a shift a way to feed a crew for nothing. Starting empty makes a worker hungry
+  within a tick of being hired — food as a punishment for hiring rather than a supply line to build —
+  and it failed `workFoundOnTheRoundsIsWalkedAtWorkingPace`, because every test villager has empty
+  pockets.
+  **And the charge has to be tested as wired, not just as arithmetic.** Deleting the call from
+  `WorkerJobGoal.tick` left the whole suite green: `aWorkerEatsForItsTimeOnTheClock` drives it by
+  hand, so it says what a charge does and nothing about whether anything calls it. Workers would never
+  eat, never go hungry, and the feature would be dead with all its unit tests passing.
+  (`timeOnTheClockIsWhatActuallyCharges` is the one that catches that, plus
+  `aHungryWorkerIsSlowedAndNeverStopped`; all mutation-checked.)
 - **A Canteen pushes; nobody walks to one, and that is what makes the block work.** Vanilla's route
   for a villager to pick food up needs `WALK_TARGET` **absent**, and a working worker has it pinned
   every tick — which is the whole reason `docs/shift-rotation.md` treats food and leisure as one

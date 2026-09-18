@@ -44,8 +44,8 @@ public class CWConfig {
 	public static final ModConfigSpec.BooleanValue WORKING_HOURS;
 	/** Whether villager workers eat, and slow down when they cannot. */
 	public static final ModConfigSpec.BooleanValue REQUIRE_FOOD;
-	/** How many deliveries one point of villager food is worth. */
-	public static final ModConfigSpec.IntValue DELIVERIES_PER_FOOD_POINT;
+	/** How many ticks on the clock one point of villager food is worth. */
+	public static final ModConfigSpec.IntValue TICKS_PER_FOOD_POINT;
 	/** The fraction of normal pace a hungry worker manages. Also the floor: it never gets worse. */
 	public static final ModConfigSpec.DoubleValue HUNGRY_PACE;
 	/** How far a canteen hands food out. */
@@ -156,16 +156,20 @@ public class CWConfig {
 				"Endermen are exempt whatever this says. They eat nothing.")
 			.define("requireFood", true);
 
-		DELIVERIES_PER_FOOD_POINT = builder
-			.comment("How far one point of food goes, counted in deliveries. Vanilla values a loaf of",
-				"bread at four points and a carrot, potato or beetroot at one, so at the default a loaf",
-				"carries a Worker through forty deliveries -- about one shift on an ordinary beat.",
+		TICKS_PER_FOOD_POINT = builder
+			.comment("How far one point of food goes, counted in ticks on the clock. Vanilla values a loaf",
+				"of bread at four points and a carrot, potato or beetroot at one, so at the default a loaf",
+				"carries a Worker through 7200 ticks -- near enough a whole shift.",
+				"",
+				"Charged by time rather than by items moved, so the bill is a matter of how many Workers",
+				"you employ and not of how you laid your factory out. A Worker off the clock -- at",
+				"leisure or asleep -- eats nothing.",
 				"",
 				"It also decides how far a Worker can stray from a Canteen, because a villager will only",
 				"ever hold twelve points of food: at the default that is about three shifts away from a",
 				"trough before it starts to limp. Lower numbers make feeding a crew the thing your",
 				"factory is mostly doing; higher ones make it something you set up once and forget.")
-			.defineInRange("deliveriesPerFoodPoint", 10, 1, 10000);
+			.defineInRange("ticksPerFoodPoint", 1800, 1, 100000);
 
 		HUNGRY_PACE = builder
 			.comment("How fast a hungry Worker works, as a fraction of its normal pace: it walks this",

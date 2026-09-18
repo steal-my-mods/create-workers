@@ -1227,12 +1227,15 @@ public class WorkerGameTests {
 	 * this mod's own, and the thing that refills it is a loaf leaving the villager's inventory, which
 	 * is the half a player can see and count.
 	 *
-	 * <p>Charged per <em>delivery</em> rather than per item, which the design doc said the other way.
-	 * Carrying one item and carrying a full stack are the same walk, and pricing them differently
-	 * would tax a line for filling its stacks — the opposite of what Create asks of you.
+	 * <p><b>Charged by time on the clock, and the version this replaced was backwards.</b> Per-delivery
+	 * pricing counts <em>transactions</em>, and a compact line makes more of them per unit time — so a
+	 * worker on a four-block beat ate three times what one on a sixteen-block beat did while walking
+	 * less far. The food bill rewarded spreading your depots out, which is the opposite of what Create
+	 * asks you to build. Time is neutral to layout, and it makes the bill a function of headcount,
+	 * which is the thing a player actually decides.
 	 */
 	@GameTest(template = "work_site", timeoutTicks = 100)
-	public static void aWorkerEatsWhatItHaulsFor(GameTestHelper helper) {
+	public static void aWorkerEatsForItsTimeOnTheClock(GameTestHelper helper) {
 		layFloor(helper);
 		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
 		WorkerData data = Workers.getOrCreate(villager);
@@ -1240,27 +1243,62 @@ public class WorkerGameTests {
 
 		int rations = data.fuel();
 		helper.assertTrue(rations > 0,
-			"a new hire should turn up having eaten -- starting empty makes it hungry on its first "
-				+ "delivery, which is a punishment for hiring rather than a supply line to build");
+			"a new hire should turn up having eaten -- starting empty makes it hungry within a tick of "
+				+ "being hired, which is a punishment for hiring rather than a supply line to build");
 
-		helper.assertTrue(!data.chargeForDelivery(villager), "a fed worker is not hungry");
-		helper.assertTrue(data.fuel() == rations - 1, "and a delivery costs it one");
+		helper.assertTrue(!data.chargeForWork(villager), "a fed worker is not hungry");
+		helper.assertTrue(data.fuel() == rations - 1, "and a tick on the clock costs it one");
 
 		// Run it dry with nothing in its pockets.
-		for (int delivery = 0; delivery < rations + 4; delivery++)
-			data.chargeForDelivery(villager);
+		for (int tick = 0; tick < rations + 4; tick++)
+			data.chargeForWork(villager);
 		helper.assertTrue(data.isHungry(villager), "a worker out of food and out of fuel is hungry");
 
-		// A loaf is worth four points, and one point is worth deliveriesPerFoodPoint deliveries.
+		// A loaf is worth four points, and one point is worth ticksPerFoodPoint ticks of work.
 		villager.getInventory()
 			.addItem(new ItemStack(Items.BREAD, 1));
-		helper.assertTrue(!data.chargeForDelivery(villager), "with bread in its pocket it should eat rather than starve");
+		helper.assertTrue(!data.chargeForWork(villager), "with bread in its pocket it should eat rather than starve");
 		helper.assertTrue(villager.getInventory()
 			.countItem(Items.BREAD) == 0, "and the loaf should be gone -- eaten, not merely counted");
-		helper.assertTrue(data.fuel() == 4 * CWConfig.DELIVERIES_PER_FOOD_POINT.get() - 1,
-			"a loaf should be worth four points of deliveries, and left " + data.fuel());
+		helper.assertTrue(data.fuel() == 4 * CWConfig.TICKS_PER_FOOD_POINT.get() - 1,
+			"a loaf should be worth four points of working time, and left " + data.fuel());
 		helper.assertTrue(!data.isHungry(villager), "and it should not be hungry any more");
 		helper.succeed();
+	}
+
+	/**
+	 * And the appetite is actually wired into the working day.
+	 *
+	 * <p>The test above drives {@code chargeForWork} by hand, which says what a charge <em>does</em>
+	 * and nothing about whether anything calls it. Deleting the call from {@code WorkerJobGoal.tick}
+	 * left the whole suite green: workers would never eat, never go hungry, and the entire feature
+	 * would be dead with every one of its unit tests passing.
+	 *
+	 * <p>So this one hires a worker, lets it work, and watches the gauge fall. It also pins the other
+	 * half of the rule — that the charge is on the <b>working</b> branch — because a worker charged
+	 * during leisure or sleep would eat around the clock and no unit test would see that either.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 300)
+	public static void timeOnTheClockIsWhatActuallyCharges(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		hire(helper, villager);
+
+		int[] before = new int[1];
+		helper.startSequence()
+			.thenExecute(() -> before[0] = resolved(villager).fuel())
+			.thenIdle(100)
+			.thenExecute(() -> {
+				int spent = before[0] - resolved(villager).fuel();
+				helper.assertTrue(spent > 0,
+					"a worker on the clock should be eating into its rations, and spent nothing in a "
+						+ "hundred ticks -- which is what a charge nothing calls looks like");
+				// Loose on purpose: the goal does not run on every one of those ticks (canUse has to
+				// resolve first), so this is "most of them", not an exact count.
+				helper.assertTrue(spent >= 50,
+					"and it should be charged about once a tick, not occasionally; spent " + spent + " in 100");
+			})
+			.thenSucceed();
 	}
 
 	/**
@@ -1423,7 +1461,7 @@ public class WorkerGameTests {
 		WorkerData hungry = Workers.getOrCreate(starving);
 		hungry.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.EMPTY);
 		while (!hungry.isHungry(starving))
-			hungry.chargeForDelivery(starving);
+			hungry.chargeForWork(starving);
 
 		float fedPace = WalkLocomotion.workingSpeed(fed);
 		float hungryPace = WalkLocomotion.workingSpeed(starving);

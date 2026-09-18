@@ -28,16 +28,24 @@ explicitly accepted before a `v*` tag is pushed.
   restocking a canteen feels like a chore or like something you never think about.
   For comparison: a Create Item Vault is 20 slots per block, a vanilla chest 27, a dispenser 9.
   It is one constant (`CanteenBlockEntity.SLOTS`) and the comparator scales off it automatically.
-- **`deliveriesPerFoodPoint` is 10, derived rather than measured.** It was picked as the value where
-  a full canteen feeds a full station for a fortnight and a topped-up worker keeps going for about
-  three shifts away from one — but a villager will only ever hold twelve points of food, so this
-  number also silently sets **how far a worker can stray from a canteen**, and that half has never
-  been seen in play. Watch for workers limping in a base that has plenty of bread in the wrong place.
+- **`ticksPerFoodPoint` is 1800, and it is now exact rather than estimated.** Charging by time
+  removed the guesswork: a worker eats 8000/1800 = 4.4 points a shift, always, whatever its beat looks
+  like. 1800 was chosen so that an ordinary eight-block beat consumes exactly what it did under the
+  old per-delivery scheme, so nothing rebalanced when the unit changed.
+  What is still unvalidated is whether that *rate* is the right one to want. A villager holds at most
+  twelve points, so this number also sets **how far a worker can stray from a canteen** — about three
+  shifts at the default. Watch for workers limping in a base that has plenty of bread in the wrong
+  place.
 - **The hungry slowdown floor** (`hungryPace` 0.35) — see
   [phase-4.md](phase-4.md#open-questions). Neither it nor the particles have been seen in ordinary
   play, because until the drain moved, hunger essentially never happened.
-- **The trade prices are a first pass.** Nothing in the list skips a gate, which was the rule, but the
-  quantities and emerald costs were chosen rather than weighed against what a villager hall pays.
+- **The trade prices have been checked against vanilla's tables and hold.** 20 wheat for an emerald is
+  the Farmer's own rate; 24 andesite is 50% stingier than the Mason's 16, so nobody uses a Worker to
+  dump stone; and there is no arbitrage loop in either direction, every rate being equal to or worse
+  than the vanilla profession that specialises in it. Two notes rather than faults: a Worker buying
+  wheat at the Farmer's rate is a second emerald source competing with farmers, and the listings carry
+  2-5 XP where vanilla ramps 2/10/20/30, so **a Worker levels noticeably slower** and its upper trades
+  are further away than they look.
 
 ## Found by review, judged and deferred
 
