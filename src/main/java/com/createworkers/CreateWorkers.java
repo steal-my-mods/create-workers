@@ -52,6 +52,9 @@ public class CreateWorkers {
 			com.createworkers.client.CWClient.init(modBus);
 
 		container.registerConfig(ModConfig.Type.SERVER, CWConfig.SPEC);
+		// COMMON, because VillagerTradesEvent fires during world load and a SERVER config is not
+		// there yet -- see CWConfig.TRADE_SPEC.
+		container.registerConfig(ModConfig.Type.COMMON, CWConfig.TRADE_SPEC, "createworkers-trades.toml");
 	}
 
 	public static ResourceLocation asResource(String path) {

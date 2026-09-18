@@ -18,6 +18,7 @@ import com.createworkers.worker.TeleportLocomotion;
 import com.createworkers.worker.WalkLocomotion;
 import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
+import com.createworkers.worker.WorkerTrades;
 import com.createworkers.worker.Workers;
 import com.createworkers.worker.target.WorkerTarget;
 import com.simibubi.create.AllBlocks;
@@ -1331,6 +1332,43 @@ public class WorkerGameTests {
 			helper.assertTrue(!offer.getCostA()
 				.is(CWItems.HARD_HAT.get()), "and must never ask for one either");
 		}
+		helper.succeed();
+	}
+
+	/**
+	 * Every trade this mod ships parses, and names items that exist.
+	 *
+	 * <p>The list is configuration, so it is <b>text</b> — and a typo in a shipped default is a trade
+	 * that silently never appears, with one line in a log nobody reads. Nothing else can catch that:
+	 * the compiler sees a string, and the trade only fails at world load. So the defaults are parsed
+	 * here exactly as the config parses them, and every item id is resolved against the registry.
+	 *
+	 * <p>It also pins the mod's own rule, which the config deliberately does <em>not</em> enforce on a
+	 * server owner: nothing we ship may sell a Hard Hat, because that is this mod's gate.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void everyShippedTradeParsesAndNamesRealItems(GameTestHelper helper) {
+		List<String> shipped = WorkerTrades.defaults();
+		helper.assertTrue(!shipped.isEmpty(), "the shipped trade list should not be empty");
+
+		for (String line : shipped) {
+			helper.assertTrue(WorkerTrades.parse(line) != null,
+				"a shipped trade does not parse, so it would be dropped with a log warning: " + line);
+
+			String[] parts = line.split(";");
+			for (String field : new String[] { parts[1], parts[3] })
+				helper.assertTrue(!field.trim()
+					.equals("createworkers:hard_hat"),
+					"nothing this mod ships may trade a Hard Hat -- it is our own gate: " + line);
+		}
+
+		// And a line naming an item nobody has installed is skipped, not fatal. That is the expected
+		// case for a config whose obvious use is naming items from other mods.
+		helper.assertTrue(WorkerTrades.parse("1;minecraft:emerald;1;somemod:widget;1;12;2") == null,
+			"an unknown item should be refused rather than crashing a world load");
+		helper.assertTrue(WorkerTrades.parse("nonsense") == null, "and so should a malformed line");
+		helper.assertTrue(WorkerTrades.parse("9;minecraft:emerald;1;minecraft:stick;1;12;2") == null,
+			"and a level outside 1-5, which has nowhere to go");
 		helper.succeed();
 	}
 

@@ -1,5 +1,9 @@
 package com.createworkers;
 
+import java.util.List;
+
+import com.createworkers.worker.WorkerTrades;
+
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /** Server-side tunables for how workers behave. */
@@ -16,6 +20,8 @@ public class CWConfig {
 	}
 
 	public static final ModConfigSpec SPEC;
+	/** The trade list, apart from the rest: it is needed before a server config exists. */
+	public static final ModConfigSpec TRADE_SPEC;
 
 	/** How far apart two of a hat's programmed targets may be. */
 	public static final ModConfigSpec.IntValue MAX_TARGET_SPREAD;
@@ -50,6 +56,8 @@ public class CWConfig {
 	public static final ModConfigSpec.DoubleValue HUNGRY_PACE;
 	/** How far a canteen hands food out. */
 	public static final ModConfigSpec.IntValue CANTEEN_RANGE;
+	/** What a Worker sells and buys, one trade per line. */
+	public static final ModConfigSpec.ConfigValue<List<? extends String>> TRADES;
 	/** The time of day a worker downs tools. */
 	public static final ModConfigSpec.IntValue CLOCK_OFF;
 	/** The time of day it picks them up again. */
@@ -187,6 +195,7 @@ public class CWConfig {
 				"feeding a factory is a question of where you put the troughs.")
 			.defineInRange("canteenRange", 16, 1, 64);
 
+
 		CLOCK_OFF = builder
 			.comment("The time of day a worker downs tools, in ticks: 0 is dawn, 6000 noon, 12000 dusk,",
 				"18000 midnight.",
@@ -265,5 +274,39 @@ public class CWConfig {
 
 		builder.pop();
 		SPEC = builder.build();
+
+		// A spec of its own, and not fussiness. VillagerTradesEvent fires while a world is
+		// loading -- before a SERVER config exists -- so reading the trade list from one threw
+		// "Cannot get config value before config is loaded" and took the server down with it.
+		// A trade list is a content definition rather than per-world tuning anyway, so it belongs
+		// in a COMMON spec, which is loaded when the mod is.
+		ModConfigSpec.Builder trades = new ModConfigSpec.Builder();
+		TRADES = trades
+			.comment("What a Worker sells and buys. One trade per line, seven fields:",
+				"",
+				"    level ; costItem ; costCount ; resultItem ; resultCount ; maxUses ; xp",
+				"",
+				"The player hands over costItem and receives resultItem, so one format covers both",
+				"directions -- an emerald is just an item. Naming it as the cost means the player is",
+				"buying; naming it as the result means they are selling.",
+				"",
+				"    1;minecraft:emerald;1;create:shaft;16;12;2      buy 16 Shafts for an Emerald",
+				"    1;minecraft:wheat;20;minecraft:emerald;1;16;2   sell 20 Wheat for an Emerald",
+				"",
+				"level is 1 to 5. A Villager is shown TWO randomly chosen trades from each level it",
+				"has reached, so a long list gives variety between Workers rather than more trades per",
+				"Worker. maxUses is how many times one Worker will do the trade before restocking, and",
+				"xp is what the Worker earns for it -- vanilla ramps 2/10/20/30 by level.",
+				"",
+				"Any registered item id works, including items from other mods. A line naming an item",
+				"that is not installed is skipped with a warning in the log rather than breaking the",
+				"world, so a list can safely mention optional mods.",
+				"",
+				"The shipped list follows one rule: nothing that skips a gate. Everything on it is",
+				"andesite age -- things a player could already make, in the quantities that make making",
+				"them by hand a chore -- and nothing needs brass, electron tubes or precision",
+				"mechanisms. That rule is what this mod holds itself to. Your server, your list.")
+			.defineListAllowEmpty("trades", WorkerTrades.defaults(), () -> "", entry -> entry instanceof String);
+		TRADE_SPEC = trades.build();
 	}
 }

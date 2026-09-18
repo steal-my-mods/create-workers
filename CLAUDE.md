@@ -125,7 +125,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `worker/Shift` | Which crew a worker is on. **An offset into the configured working day, not a pair of times** — one third of a day per crew, so the span stays the operator's single choice |
 | `worker/WalkLocomotion` | Villagers. Also owns `returnTo`, the wander leash |
 | `worker/TeleportLocomotion` | Endermen. Holds the teleport cooldown, so locomotion instances are **per-worker**, not shared |
-| `worker/WorkerTrades` | What a Worker sells and buys. One rule: **nothing that skips a gate** — shafts, cogs, andesite alloy; never a hard hat |
+| `worker/WorkerTrades` | What a Worker sells and buys — **read from config**, one trade per line, so a server can add items from any mod. Holds the shipped default and the parser |
 | `worker/WorkerEvents` | Hiring, retiring, drops, conversion, client sync, cleanup, and the vetoes that stop vanilla's own enderman AI from undoing the job |
 | `client/HatSelectionHandler` | Client-side programming UX (mirrors `ArmInteractionPointHandler`) |
 | `client/WorkerGearLayer` | Hard hat + hi-vis vest render layer |
