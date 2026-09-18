@@ -190,9 +190,12 @@ public class CWConfig {
 
 		CLOCK_ON = builder
 			.comment("The time of day the day crew starts, in ticks. The default is first light.",
-				"Setting this later than clockOff inverts the two, which is how a night shift is made --",
-				"and it moves every worker on the server, not one of them. Each crew gets working hours",
-				"of its own, so a crew whose off hours fall in daylight sleeps through them.")
+				"This moves the whole working day, for every Worker on the server. A crew works a third",
+				"of a day and the three crews tile the clock between them, so moving the start moves all",
+				"three -- there is no way to make one of them longer or shorter than the others, which is",
+				"what keeps a job on three shifts covered around the clock with no gap and no overlap.",
+				"Each crew gets working hours of its own, so a crew whose off hours fall in daylight",
+				"sleeps through them.")
 			.defineInRange("clockOn", 0, 0, 23999);
 
 

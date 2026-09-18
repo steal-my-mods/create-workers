@@ -206,18 +206,16 @@ endermen stop being hostile — they are on the clock.
 
 At the end of the day a villager worker downs tools, walks to a bed and sleeps until morning. It
 clocks back on at first light and carries on where it left off. `workingHours` turns the whole thing
-off, and `clockOff` / `clockOn` move the working day — including past each other, which inverts it.
+off, and `clockOn` moves the working day.
 
-Those two set **one** working day, and the three crews each start a third of a day later than the last:
-a job set to run all three shifts is staffed round the clock by three villagers keeping the same hours
-at different times.
+It sets **one** working day, and the three crews each start a third of a day later than the last: a job
+set to run all three shifts is staffed round the clock by three villagers keeping the same hours at
+different times.
 
-A third of a day is 8000 ticks, so **that is the longest a crew can work without running into the
-next one.** The default is exactly that, and the three crews tile the clock. Set `clockOff` longer and
-they overlap — at 12000 the evening crew is still going when the night crew clocks on, and three
-villagers buy about one and a half crews of cover. That costs nothing if you only ever run one shift,
-and a worker that downs tools at dusk goes straight to bed rather than standing beside it waiting for
-the village's own bedtime — so lengthen it freely if shifts are not something you use.
+**A crew works exactly a third of a day, and that is not adjustable.** A third of a day is 8000 ticks,
+which is the longest a crew can work without running into the next one — so the length is fixed at
+that rather than offered as a number to get wrong. It used to be a setting, and every value but the
+default either overlapped the crews or left gaps between them.
 
 **Endermen are exempt.** They have no bed and no schedule, and they are creatures of the night
 everywhere else in the game, so a line staffed by endermen runs around the clock. That is the reason
@@ -238,19 +236,21 @@ Where a worker sleeps, in order of preference:
 A worker with nowhere to sleep — no bed given, none it can get to — just stands where it is until
 morning. Nothing wanders off in the dark.
 
-Two details you might otherwise read as bugs:
+Some details you might otherwise read as bugs:
 
 - **A worker caught mid-haul finishes the delivery first.** It will not start a new one, but the
   stack already in its hands goes where it was going before the worker turns in — so items are never
   parked in a pocket overnight for no visible reason.
-- **A worker that clocked off early stands beside its bed rather than getting in.** Lying down is the
-  village's business, not the factory's: villagers get up when their own schedule says morning, so a
-  worker that lay down before the village's bedtime would simply be stood up again. Set `clockOff`
-  before 12000 and you get a worker waiting to turn in, which is what it looks like anyway.
-- **A night shift rests standing rather than sleeping.** Its off-shift hours are daylight, and a
-  villager may only lie down during the village's own resting hours — so a worker on inverted hours
-  walks to its bed each morning and waits beside it. The bed is still worth assigning: it is where the
-  worker spends the day, rather than standing in the middle of the factory floor.
+- **A night crew really does sleep, in daylight.** Every crew carries working hours of its own, so
+  the hours it rests in are its own rather than the village's — a night worker walks to bed at dawn
+  and sleeps through the morning while the rest of the village is up.
+- **A crew is awake for a while after its shift, and before it.** Between clocking off and bed there
+  is time to itself, when vanilla has the worker and it behaves like any other villager; and it is up
+  and walking to its post shortly before the shift starts, so the next crew is in place before the
+  last one stops. A worker milling about near its work is off duty, not lost.
+- **A bed names a dormitory rather than a mattress.** Every Worker on a job wears a copy of the one
+  hat, so they all share the bed it names; whoever gets there first takes it and the others find a
+  free bed beside it.
 
 ## Configuration
 
@@ -270,8 +270,7 @@ Two details you might otherwise read as bugs:
 | `wanderRadius` | 12 | How far a worker may stray from its post or targets before being sent back |
 | `idleBehaviour` | `PATROL` | What a worker does between jobs: `PATROL`, `HOLD_STATION` or `WANDER` |
 | `workingHours` | `true` | Whether workers knock off at the end of the day and sleep. Endermen are exempt whatever this says |
-| `clockOff` | 8000 | Time of day the tools go down: 0 is dawn, 6000 noon, 12000 dusk. One crew's day — 8000 is a third of the clock, so the three crews tile it exactly. Longer and they overlap, which only matters if you run more than one shift |
-| `clockOn` | 0 | Time of day the day crew starts. Later than `clockOff` inverts the two, which is how you get a night shift |
+| `clockOn` | 0 | Time of day the day crew starts, which moves the whole working day. A crew works a third of a day and the three tile the clock between them; that length is fixed rather than configurable |
 | `bedSearchRadius` | 16 | How far from the job site a worker may look for a bed of its own. 0 means it sleeps only in a bed assigned on its hat |
 | `recallStuckWorkers` | `false` | Whether a worker that has repeatedly failed to walk back to its work is teleported there. Workers that can walk home always walk; this is only for the one at the bottom of a hole |
 | `stationSlots` | 12 | How many jobs one Worker Station may hold. Each may run three shifts, so this is really a cap on villagers — twelve jobs is up to thirty-six of them. 12 is the ceiling and cannot be raised |
