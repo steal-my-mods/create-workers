@@ -18,6 +18,24 @@ explicitly accepted before a `v*` tag is pushed.
   notes under a new tag, which is worse than failing. Bump the version and write the section, for a
   player reading a download page rather than for somebody reading the diff.
 
+- **The project page and its art are behind the mod.** `docs/curseforge-page.md` and the images
+  `tools/generate_page_art.py` draws are the only part of this mod most people will ever see, and both
+  describe a slightly different mod from the one that would ship today. Known gaps:
+  - **Trades are missing entirely.** The page mentions neither trading nor emeralds, and a Worker now
+    has 86 listings across five levels, buys a line's output and sells assembled machines. It is one
+    of the two or three things somebody deciding whether to install this would most want to know.
+  - **The bed is described as "where that worker sleeps".** It is a *dormitory anchor* now: a job's
+    shift-workers share one hat and therefore one bed, so the ones who miss out take a free bed beside
+    it. The page's wording promises something the block deliberately no longer does.
+  - **Canteens no longer fill villagers to the breeding threshold.** Worth a line, because feeding
+    villagers the last stretch by hand is now the player's job and somebody will notice their
+    factory stopped producing children.
+  - **21 screenshot placeholders are unfilled** — every `> **📷 Screenshot wanted**` block, including
+    the hero shot the page is built around. Those are the one thing here that cannot be generated.
+  - **The card art follows whatever the block models say**, so any Canteen redesign means re-running
+    `python3 tools/generate_page_art.py`. That part is self-updating; the prose is not.
+  Re-run the generator and read the page end to end against the mod before tagging.
+
 ## Numbers that were chosen rather than measured
 
 - **The Canteen's nine slots are still a guess, and the arithmetic now says they are generous.**
