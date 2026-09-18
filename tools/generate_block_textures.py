@@ -331,43 +331,28 @@ def front():
     return casing()
 
 
-def canteen_side():
-    """The Canteen's sides: the same casing the Station wears.
-
-    Shared construction on purpose. Create's own blocks are a family before they are
-    individuals -- a dozen of them carry andesite casing on their flanks and are told
-    apart by the face that does something -- and two blocks from one addon that read as
-    the same kit is the intended effect, not a missed opportunity to differentiate.
-    What says "canteen" is the top, which is the face a player looks down at.
-    """
-    return casing()
-
-
 def canteen_bottom():
     return casing_bottom()
 
 
 def canteen_top():
-    """The trough: the same frame, with a hole in it and food in the hole.
+    """The empty trough. What is *in* it is drawn by CanteenRenderer, not baked here.
 
-    The one face that has to say what the block *is*, and the first version did not say
-    it. Drawn as boards a couple of steps down the timber ramp it read as a lid -- which
-    is what a panel always reads as, however dark, because a panel is a surface and this
-    has to be an absence of one. Two things fix that and neither is subtle:
+    The one face that has to say what the block is, and the first version did not say it.
+    Drawn as boards a couple of steps down the timber ramp it read as a lid -- which is what
+    a panel always reads as, however dark, because a panel is a surface and this has to be an
+    absence of one. The cavity is therefore far darker than anything else in the family: the
+    rule that nothing in a Create casing goes below a luma of 57 is a rule about *casings*,
+    and the inside of a box is not one.
 
-    **The cavity is far darker than anything else here.** The rule that nothing in a
-    Create casing goes below a luma of 57 is a rule about *casings*, and this is not one:
-    it is the inside of a box, where the light does not reach. Keeping it inside the
-    casing range is exactly what made it a lid.
+    Depth comes from the far wall catching the light -- the same trick the lamp bezels use,
+    and the opposite of how a raised face is shaded. A recess lit like a bump reads as a bump.
 
-    **And there is food in it.** A dark rectangle is a hole; a dark rectangle with three
-    loaves in it is a canteen, and no amount of shading gets there on its own. It is also
-    the only place on either block where the timber ramp goes light, which is what makes
-    the loaves the first thing the eye lands on.
-
-    Depth comes from the far wall catching the light -- the same trick the lamp bezels
-    use, and the opposite of how a raised face is shaded. A recess lit like a bump reads
-    as a bump.
+    **The food used to be painted on here and is not any more.** Three loaves in fixed places
+    said "this is a canteen" and nothing else: a full one and a nearly empty one were the same
+    picture, which is the same mistake the Station's board made when it drew a hat instead of
+    counting one. The stock is a thing the block knows, so it is drawn from what the block
+    knows -- see CanteenRenderer, and CAVITY_* below for the grid the two share.
     """
     pixels = blank(TIMBER[0])
     x1, y1, x2, y2 = PANEL_BOX
@@ -377,29 +362,112 @@ def canteen_top():
             far = min(x2 - x, y2 - y)
             pixels[y][x] = CAVITY_LIT if far < near else CAVITY
 
-    # Three loaves, none of them aligned with another, because two things at the same
-    # height in a ten-pixel square read as a pattern rather than as objects.
-    for ox, oy in ((0, 1), (5, 0), (2, 5)):
-        loaf(pixels, x1 + ox, y1 + oy)
-
     inner_shadow(pixels)
     andesite_trim(pixels)
     return pixels
 
 
-def loaf(pixels, x, y):
-    """One loaf: three by two, with its corners off and its top row catching the light."""
-    for dy in range(2):
-        for dx in range(3):
-            if dy == 0 and dx == 1:
-                continue  # the crown, drawn below
-            pixels[y + dy][x + dx] = BREAD_LIT if dy == 0 else BREAD
-    pixels[y][x + 1] = BREAD_LIT
-    # A pixel of shadow under it, so it sits *in* the trough rather than on a flat colour.
-    for dx in range(3):
-        if y + 2 < SIZE:
-            pixels[y + 2][x + dx] = CAVITY
+# --- where the food goes -------------------------------------------------------------
+# In texels, and restated in CanteenRenderer, which draws into them. check_canteen_grid()
+# holds the two together and checks every piece lands inside the cavity the texture draws --
+# the Station shipped its lamps a fiftieth of a block *inside* an opaque board for want of
+# exactly this check.
+# The Canteen's slots, restated from CanteenBlockEntity.SLOTS.
+CANTEEN_SLOTS = 9
+CAVITY_CELLS = 3
+CAVITY_PITCH = 2
+CAVITY_PIECE = 4
+CAVITY_SPOTS = 3
+# The furthest a spot offset plus its nudge can push a piece off its cell, on either axis.
+CAVITY_REACH = 2
 
+# The gauge on the flank: two texels wide, which on a sixteen-texel face straddles the centre
+# exactly where three cannot, and nine tall because the block has nine slots and a row is one.
+GAUGE_X1, GAUGE_X2 = 7, 8
+GAUGE_Y1, GAUGE_Y2 = 4, PANEL_BOX[3]
+
+
+def canteen_side():
+    """The Canteen's sides: the same casing the Station wears, untouched.
+
+    Shared construction on purpose. Create's own blocks are a family before they are
+    individuals -- a dozen of them carry andesite casing on their flanks and are told apart by
+    the face that does something -- and two blocks from one addon that read as the same kit is
+    the intended effect, not a missed opportunity to differentiate.
+
+    **The stock gauge is not cut into this sheet**, for the reason the Station's lamps are not
+    cut into its front: a panel is checked as boards, and a slot of dark pixels in the middle
+    of one is not boards. Both blocks draw their readout over an unbroken casing from a sheet
+    of its own, which also means the readout can move without the panel being redrawn.
+    """
+    return casing()
+
+
+# One silhouette per food, because a hue is not a shape: four lumps of the same seven pixels
+# in four colours is a palette, not a larder. Read them as pictures -- bread lies down, a
+# carrot stands up and comes to a point under its tuft, a potato is a round lump, a beetroot
+# is a bulb with a tail. L lit, B base, S shade, G leaf, . nothing.
+FOOD_SHAPES = (
+    ('bread', ['LLL',
+               'BBB',
+               '.S.']),
+    ('carrot', ['.G.',
+                'LLL',
+                'BBB',
+                '.S.']),
+    ('potato', ['.L.',
+                'LBB',
+                '.S.']),
+    ('beetroot', ['LLL',
+                  'BBB',
+                  '.B.',
+                  '.S.']),
+)
+
+FOOD_COLOURS = {
+    'bread': ((0xAE, 0x80, 0x49), (0xC8, 0x9A, 0x60), (0x8C, 0x64, 0x39)),
+    'carrot': ((0xD9, 0x6B, 0x1B), (0xF0, 0x8C, 0x33), (0xA8, 0x50, 0x14)),
+    'potato': ((0xC2, 0x9C, 0x5E), (0xDA, 0xB8, 0x7C), (0x9A, 0x79, 0x45)),
+    'beetroot': ((0x8C, 0x2B, 0x3A), (0xA8, 0x3C, 0x4C), (0x66, 0x1C, 0x28)),
+}
+LEAF = (0x4E, 0x7A, 0x2E)
+CLEAR = (0, 0, 0, 0)
+
+
+def canteen_food():
+    """Everything the renderer draws the stock with, on one sheet: shapes, swatches, a slot.
+
+    One sheet rather than six, because a piece is one quad and a quad wants one texture. Three
+    bands of four-texel cells, so every UV in the renderer is a quarter and there is no
+    arithmetic to get wrong:
+
+      row 0  the four silhouettes, each in a four-texel cell with its own transparent margin
+      row 1  a flat swatch per food, which is what the gauge's filled rows sample
+      row 2  the empty gauge -- dark, and the only thing on this sheet that is not food
+
+    The order is CanteenBlockEntity.DRAWN_FOODS, and that is the order this file, the renderer
+    and the block all count in.
+    """
+    pixels = blank(CLEAR)
+    for index, (name, rows) in enumerate(FOOD_SHAPES):
+        base, lit, shade = (colour + (255,) for colour in FOOD_COLOURS[name])
+        ink = {'L': lit, 'B': base, 'S': shade, 'G': LEAF + (255,)}
+        left = index * CAVITY_PIECE
+        for dy, row in enumerate(rows):
+            for dx, symbol in enumerate(row):
+                if symbol != '.':
+                    pixels[dy][left + dx] = ink[symbol]
+        for dy in range(CAVITY_PIECE):
+            for dx in range(CAVITY_PIECE):
+                # Lit along the top of a row, so a stacked gauge has a line between its slots.
+                pixels[CAVITY_PIECE + dy][left + dx] = lit if dy == 0 else base
+    # The gauge's backing: flat and dark, drawn under every row. It is what separates the bar
+    # from the timber -- a bread swatch alone is within a few shades of the boards behind it,
+    # and the first build of this had an invisible gauge on a full Canteen for exactly that.
+    for dy in range(CAVITY_PIECE):
+        for dx in range(CAVITY_PIECE):
+            pixels[2 * CAVITY_PIECE + dy][dx] = BEZEL + (255,)
+    return pixels
 
 def lamp(colour):
     """One lamp in its bezel, as a 16x16 cell.
@@ -536,6 +604,57 @@ def java_constants(path, pattern):
         values[name] = eval(  # noqa: S307 -- our own source, no builtins reach it
             re.sub(r'(?<=[\d.])[FfDdLl]\b', '', expression), {'__builtins__': {}}, dict(values))
     return values
+
+
+CANTEEN_RENDERER = os.path.join(
+    'src', 'main', 'java', 'com', 'createworkers', 'client', 'CanteenRenderer.java')
+
+
+def check_canteen_grid():
+    """Hold the Canteen's texture and its renderer to one another.
+
+    The stock is drawn by CanteenRenderer and the trough it is drawn *into* is drawn here, so
+    the two restate the same grid and nothing else would notice them drifting. That is the
+    Station's lesson paid for once already: its renderer shipped hanging every lamp a
+    fiftieth of a block inside an opaque board, which is not drawn badly but not drawn.
+
+    The containment assertion is the one that matters. A piece that overhung the cavity would
+    land on the andesite trim -- the frame that holds this block to the Station's -- and a
+    heap spilling onto the frame reads as a broken texture rather than as a full trough.
+    """
+    renderer = java_constants(
+        CANTEEN_RENDERER, r'private static final (?:int|float|double) (\w+) = ([^;]+);')
+
+    for name, ours in (('CAVITY_CELLS', CAVITY_CELLS), ('CAVITY_PITCH', CAVITY_PITCH),
+                       ('CAVITY_PIECE', CAVITY_PIECE), ('CAVITY_SPOTS', CAVITY_SPOTS),
+                       ('CAVITY_REACH', CAVITY_REACH), ('GAUGE_X1', GAUGE_X1), ('GAUGE_Y1', GAUGE_Y1), ('GAUGE_Y2', GAUGE_Y2)):
+        assert name in renderer, '%s is not declared in CanteenRenderer' % name
+        assert renderer[name] == ours, \
+            '%s: renderer has %s, textures have %s' % (name, renderer[name], ours)
+
+    x1, y1, x2, y2 = PANEL_BOX
+    assert renderer['CAVITY_X1'] == x1 and renderer['CAVITY_X2'] == x2, \
+        ('the renderer draws into %s..%s but the trough is %s..%s'
+         % (renderer['CAVITY_X1'], renderer['CAVITY_X2'], x1, x2))
+
+    # Nine cells for nine slots, or a slot has nowhere to put its food.
+    assert CAVITY_CELLS ** 2 == CANTEEN_SLOTS, \
+        ('%d cells for %d slots: every slot owns one, which is what makes the top the block\'s '
+         'own inventory rather than a gauge' % (CAVITY_CELLS ** 2, CANTEEN_SLOTS))
+
+    # Every piece, in every cell, at every spot, with the nudge at its worst -- inside the trough.
+    span = (CAVITY_CELLS - 1) * CAVITY_PITCH + CAVITY_REACH + CAVITY_PIECE
+    assert span <= (x2 - x1 + 1), \
+        ('a piece can reach %d texels into a %d-texel trough, so the heap would spill onto the '
+         'trim' % (span, x2 - x1 + 1))
+
+    # The gauge: a row per slot, standing on the floor of the panel and under its own bezel.
+    assert GAUGE_Y2 - GAUGE_Y1 + 1 == CANTEEN_SLOTS, \
+        ('the gauge has %d rows for %d slots; a row is a slot, so nothing has to be scaled'
+         % (GAUGE_Y2 - GAUGE_Y1 + 1, CANTEEN_SLOTS))
+    assert GAUGE_Y2 == y2, 'the gauge should stand on the floor of the panel, not on a shelf'
+    assert x1 <= GAUGE_X1 - 1 and GAUGE_X2 + 1 <= x2, \
+        'the gauge and its bezel have to sit inside the panel, clear of the frame'
 
 
 def check_against_model():
@@ -980,6 +1099,7 @@ SHEETS = {
     'worker_station_front': front,
     'worker_station_lamps': lamps,
     'canteen_side': canteen_side,
+    'canteen_food': canteen_food,
     'canteen_bottom': canteen_bottom,
     'canteen_top': canteen_top,
 }
@@ -1004,6 +1124,7 @@ def main():
     if directory == OUTPUT_DIR:
         check_faces()
         check_against_model()
+        check_canteen_grid()
         check_house_style()
     os.makedirs(directory, exist_ok=True)
 

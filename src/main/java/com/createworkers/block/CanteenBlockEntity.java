@@ -22,6 +22,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -126,6 +127,49 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 	/** @return what {@code stack}'s item is worth to a villager, or zero if it is not food. */
 	public static int foodPoints(ItemStack stack) {
 		return stack.isEmpty() ? 0 : Villager.FOOD_POINTS.getOrDefault(stack.getItem(), 0);
+	}
+
+	/**
+	 * The four foods, in the order anything drawing them uses.
+	 *
+	 * <p>Here rather than in the renderer because it is the same list {@link #isFood} filters on —
+	 * {@code Villager.FOOD_POINTS}, which is public and is the whole of what a villager eats. A second
+	 * copy kept client-side would be a second thing to forget when vanilla adds a fifth.
+	 */
+	public static final List<Item> DRAWN_FOODS =
+		List.of(Items.BREAD, Items.CARROT, Items.POTATO, Items.BEETROOT);
+
+	/** @return where {@code stack} sits in {@link #DRAWN_FOODS}, or -1 for anything not drawn. */
+	public static int foodIndex(ItemStack stack) {
+		return stack.isEmpty() ? -1 : DRAWN_FOODS.indexOf(stack.getItem());
+	}
+
+	/**
+	 * What one slot is holding, for anything that has to draw the stock.
+	 *
+	 * @param food     an index into {@link #DRAWN_FOODS}, or -1 when the slot is empty
+	 * @param fraction how full the slot is, 0..1 — which is what decides how many pieces of it
+	 *                 are drawn, so a slot dribbling one carrot cannot look like a full stack
+	 */
+	public record Serving(int food, float fraction) {
+
+		public static final Serving NOTHING = new Serving(-1, 0.0F);
+
+		public boolean isEmpty() {
+			return food < 0 || fraction <= 0.0F;
+		}
+	}
+
+	/** What each slot is holding, in slot order. Always {@link #SLOTS} long. */
+	public List<Serving> servings() {
+		List<Serving> servings = new ArrayList<>(SLOTS);
+		for (int slot = 0; slot < SLOTS; slot++) {
+			ItemStack held = stock.getStackInSlot(slot);
+			int food = foodIndex(held);
+			servings.add(food < 0 ? Serving.NOTHING
+				: new Serving(food, held.getCount() / (float) held.getMaxStackSize()));
+		}
+		return servings;
 	}
 
 	/**

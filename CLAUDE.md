@@ -141,7 +141,8 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `client/ponder/WalkInstruction` | Moves an entity across a scene, which Ponder itself has no instruction for |
 | `registry/CWProfessions` | The `createworkers:worker` villager profession a hired villager holds instead of its own. Its job-site predicates match the worker station **and nothing else** |
 | `block/CanteenBlock` | A trough of food, and the only way a night crew is ever fed — vanilla has no container a villager will take food out of. Vault-shaped: nothing goes in or out by hand, a comparator says how full it is and goggles say what of |
-| `block/CanteenBlockEntity` | Its stock. Nine slots that accept food and nothing else, filtered at the `IItemHandler` because that is the way in nothing supervises |
+| `block/CanteenBlockEntity` | Its stock. Nine slots that accept food and nothing else, filtered at the `IItemHandler` because that is the way in nothing supervises. `servings()` is what the block is drawn from |
+| `client/CanteenRenderer` | Draws the stock: a heap on the top, one cell per slot, and a level on each flank. Shapes and cells shared with the texture generator |
 | `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over; `FACING` turns the board at whoever placed it |
 | `block/WorkerStationBlockEntity` | A line's roster: an ordered rack of hats, the shifts each runs on, who is wearing them, and the point-of-interest tickets it holds back |
 | `block/WorkerStationMenu` | The rack as real slots, over Create's `MenuBase`. Its geometry constants are shared with the screen, because slots are placed before any screen exists |
@@ -938,6 +939,31 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   early, because it has now arrived twice wearing different clothes.
   (`aCanteenIsAnOrdinaryInventoryToMachines` pins both halves, since the decision has been made in
   both directions.)
+- **A Canteen draws its own inventory, and one slot owns one cell.** The food used to be painted into
+  `canteen_top` — three loaves in fixed places — so a full trough and a nearly empty one were the same
+  picture, which is the Station's hats-on-a-board mistake in a different block. `CanteenRenderer` draws
+  it from `servings()` instead: nine slots, a three-by-three grid, a cell each. Three things make it
+  read as food rather than as a chart, and each replaced something that did not work:
+  **a silhouette per food** (bread lies down, a carrot stands under a tuft, a potato is a lump, a
+  beetroot a bulb — four lumps of one shape in four colours is a palette, not a larder);
+  **cells claimed centre-first**, because reading order put a half-full Canteen's food in one corner
+  with bare trough beneath it; and **three spots per slot filled as the stack fills**, because one
+  piece per slot is nine pieces on a ten-texel trough, which is a scattering — eight slots never
+  looked nearly full, and nine dribbles looked like nine full stacks.
+  **The trough is the shared 10×10 panel and cannot grow.** `check_trim` requires ring 2 to stay warm
+  timber — it is the shadow the frame casts on the boards, and it is what holds this block to the
+  Station's casing — so widening the cavity by a texel turns the family's frame into something else.
+  The grid was sized to the panel rather than the other way round.
+  **The gauge is drawn over an unbroken casing, not cut into one.** `canteen_side` is checked as a
+  boards panel and a slot of dark texels in the middle of one is not boards; the Station's front has
+  the same shape of problem and solves it the same way, with the readout on a sheet of its own.
+  Its **dark backing is load-bearing**: a bread swatch is within a few shades of the boards behind it,
+  and the first build had an invisible gauge on a Canteen full of bread.
+  `check_canteen_grid()` holds the renderer and the generator together and asserts every piece lands
+  inside the trough — which caught the first layout reaching *thirteen* texels into a ten-texel one,
+  saved only by a `Math.min` that silently piled the overflow against one edge. Mutation-checked.
+  (`aCanteenReportsWhatIsInEachSlot` pins the half a server can see: a slot's **fraction**, not just
+  its count, since nine slots holding one carrot each must not draw like nine full ones.)
 - **A goggle overlay is the readout for a block with no screen, and `forGoggles` cannot run on a
   server.** `IHaveGoggleInformation` is a plain `instanceof` check in Create's overlay renderer, so
   any `BlockEntity` can implement it — Create's own Item Vault does not, but a Canteen holds only food

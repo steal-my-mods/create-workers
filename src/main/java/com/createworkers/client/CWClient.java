@@ -40,6 +40,8 @@ public class CWClient {
 	private static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
 		event.registerBlockEntityRenderer(com.createworkers.registry.CWBlockEntities.WORKER_STATION.get(),
 			WorkerStationRenderer::new);
+		event.registerBlockEntityRenderer(com.createworkers.registry.CWBlockEntities.CANTEEN.get(),
+			CanteenRenderer::new);
 	}
 
 	private static void registerScreens(net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {

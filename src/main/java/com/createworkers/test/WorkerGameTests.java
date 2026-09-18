@@ -1629,6 +1629,56 @@ public class WorkerGameTests {
 	}
 
 	/**
+	 * What a Canteen reports about its own stock is what is in its slots, and it is per slot.
+	 *
+	 * <p>The top of the block draws one heap per slot and the gauge on its flanks one row per slot,
+	 * both from {@link CanteenBlockEntity#servings()} — so the thing worth pinning on a server, where
+	 * no renderer exists, is that the report itself is right. The renderer is arithmetic over this;
+	 * if this is wrong it is wrong nine times.
+	 *
+	 * <p><b>A slot's fraction is what decides how much of it is drawn</b>, which is the half that a
+	 * count alone cannot carry: a rack of nine slots holding one carrot each has the same number of
+	 * occupied slots as a rack of nine full ones, and drawing them alike would be the block lying
+	 * about how much feeding is left in it.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aCanteenReportsWhatIsInEachSlot(GameTestHelper helper) {
+		layFloor(helper);
+		helper.setBlock(SOURCE, CWBlocks.CANTEEN.get());
+		if (!(helper.getBlockEntity(SOURCE) instanceof CanteenBlockEntity canteen))
+			throw new GameTestAssertException("the canteen should have a block entity");
+
+		canteen.stock()
+			.setStackInSlot(0, new ItemStack(Items.BREAD, 64));
+		canteen.stock()
+			.setStackInSlot(1, new ItemStack(Items.CARROT, 16));
+
+		List<CanteenBlockEntity.Serving> servings = canteen.servings();
+		helper.assertTrue(servings.size() == CanteenBlockEntity.SLOTS,
+			"a canteen should report every slot, full or not, so a slot always owns its own place");
+
+		helper.assertTrue(servings.get(0)
+			.food() == CanteenBlockEntity.DRAWN_FOODS.indexOf(Items.BREAD), "slot 0 is holding bread");
+		helper.assertTrue(servings.get(0)
+			.fraction() == 1.0F, "and a full stack is a full slot");
+
+		helper.assertTrue(servings.get(1)
+			.food() == CanteenBlockEntity.DRAWN_FOODS.indexOf(Items.CARROT), "slot 1 is holding carrots");
+		helper.assertTrue(Math.abs(servings.get(1)
+			.fraction() - 0.25F) < 1.0e-4F,
+			"and a quarter stack is a quarter of a slot -- sixteen carrots must not draw like "
+				+ "sixty-four, or the block says it is stocked when it is nearly out");
+
+		helper.assertTrue(servings.get(2)
+			.isEmpty(), "an untouched slot is empty and draws nothing");
+		for (CanteenBlockEntity.Serving serving : servings)
+			helper.assertTrue(serving.isEmpty()
+				|| (serving.food() >= 0 && serving.food() < CanteenBlockEntity.DRAWN_FOODS.size()),
+				"every reported food has to index DRAWN_FOODS, which is what the sheet is drawn in");
+		helper.succeed();
+	}
+
+	/**
 	 * A Canteen stops short of the point at which villagers start breeding.
 	 *
 	 * <p><b>This is the block's most expensive failure mode, and it cost food rather than performance.</b>

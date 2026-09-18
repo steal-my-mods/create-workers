@@ -26,6 +26,14 @@ reading the diff.
 - **The Worker's trade list is no longer a config file.** Packs retune villager trades with KubeJS,
   which can already add to, replace or clear this list — a second, bespoke format only got in the way.
 
+### Changed
+
+- **A Canteen shows you what is in it.** The top is its nine slots laid out one to one, so a stocked
+  trough is a heap of food and an empty one is an empty trough — and bread, carrots, potatoes and
+  beetroot each look like themselves rather than like four colours of the same lump. A slot part-full
+  draws less than a slot brimming, so a nearly-empty Canteen reads as nearly empty. There is a level
+  on each of the four sides too, one row per slot, for when the block is built into a wall.
+
 ### Fixed
 
 - **A Station no longer churns through villagers when a job's blocks are gone.** If you rebuilt a line
