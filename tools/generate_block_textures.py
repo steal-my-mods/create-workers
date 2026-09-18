@@ -610,6 +610,53 @@ CANTEEN_RENDERER = os.path.join(
     'src', 'main', 'java', 'com', 'createworkers', 'client', 'CanteenRenderer.java')
 
 
+def check_top_face_quad():
+    """The heap's quad has to lie on the top face and point upwards, and neither is a constant.
+
+    Both of these shipped wrong and both were invisible to everything else here. The grid was
+    right -- check_canteen_grid passed, and the preview that replays these same constants drew
+    the heap correctly -- because the mistake was in the transform the quad is drawn *through*,
+    which no amount of checking the numbers reaches. Exactly the shape of the bug that put the
+    Station's lamps inside its own board, so it is caught the same way: by reading the source
+    rather than the fields beside it.
+
+    Two things are asserted.
+
+    **The offset along the texture's y is positive.** After the rotation, local +Y is world +Z,
+    so the texture's own y runs north to south; a negated offset puts the whole heap a block to
+    the north, inside whatever is standing there -- which is why it looked like nothing was
+    drawn at all rather than like something drawn wrongly.
+
+    **The winding gives a normal of local -Z**, which is world up. entityCutout culls, unlike
+    entityCutoutNoCull, so the obvious order faces the quad at the floor and it is never drawn.
+    """
+    import re
+    source = open(CANTEEN_RENDERER).read()
+    body = source[source.index('private void flat('):source.index('private void upright(')]
+
+    move = re.search(r'poseStack\.translate\(([^;]+)\);\s*\n\s*PoseStack\.Pose', body)
+    assert move, 'flat() should end its transform with a translate onto the face'
+    across, along, _ = [part.strip() for part in move.group(1).split(',')]
+    assert across.startswith('x') and along.startswith('y'), \
+        ('flat() offsets by (%s, %s); the texture\'s x and y map straight onto the face, and a '
+         'negated y puts the heap a block north of the block it belongs to' % (across, along))
+
+    corners = re.findall(r'vertex\(consumer, pose, ([^,]+), ([^,]+),', body)
+    assert len(corners) == 4, 'a quad has four corners; found %d' % len(corners)
+
+    def axis(text):
+        text = text.strip()
+        return 0.0 if text.startswith('0.0') else 1.0
+
+    points = [(axis(x), axis(y)) for x, y in corners]
+    (x0, y0), (x1, y1), (x2, y2) = points[0], points[1], points[2]
+    # The z of (v1 - v0) x (v2 - v1). Local -Z is world up, so this has to come out negative.
+    winding = (x1 - x0) * (y2 - y1) - (y1 - y0) * (x2 - x1)
+    assert winding < 0, \
+        ('the heap\'s quad winds to a normal of local +Z, which is world *down*. entityCutout '
+         'culls, so it is drawn at the floor and never seen. Wind it the other way round.')
+
+
 def check_canteen_grid():
     """Hold the Canteen's texture and its renderer to one another.
 
@@ -647,6 +694,8 @@ def check_canteen_grid():
     assert span <= (x2 - x1 + 1), \
         ('a piece can reach %d texels into a %d-texel trough, so the heap would spill onto the '
          'trim' % (span, x2 - x1 + 1))
+
+    check_top_face_quad()
 
     # The gauge: a row per slot, standing on the floor of the panel and under its own bezel.
     assert GAUGE_Y2 - GAUGE_Y1 + 1 == CANTEEN_SLOTS, \

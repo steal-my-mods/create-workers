@@ -96,8 +96,6 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 	/** Clear of the face, so a flat quad does not z-fight with the block it is drawn on. */
 	private static final float STANDOFF = 0.002F;
 	private static final float PIXEL = 1.0F / 16.0F;
-	/** The sheet is four cells across and four down, so every UV is a quarter. */
-	private static final float CELL_UV = 0.25F;
 
 	public CanteenRenderer(BlockEntityRendererProvider.Context context) {
 	}
@@ -143,8 +141,9 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 				int nudge = hash(slot * 31 + piece);
 				int x = CAVITY_X1 + CELLS[slot][0] * CAVITY_PITCH + SPOTS[piece][0] + (nudge & 1);
 				int y = CAVITY_X1 + CELLS[slot][1] * CAVITY_PITCH + SPOTS[piece][1] + ((nudge >> 1) & 1);
-				flat(consumer, poseStack, x, y, CAVITY_PIECE, CAVITY_PIECE,
-					serving.food() * CELL_UV, 0.0F, light, overlay);
+				float u1 = serving.food() * CAVITY_PIECE / 16.0F;
+				flat(consumer, poseStack, x, y, CAVITY_PIECE,
+					u1, 0.0F, u1 + CAVITY_PIECE / 16.0F, CAVITY_PIECE / 16.0F, light, overlay);
 			}
 		}
 	}
@@ -168,7 +167,7 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 		// it, so a Canteen full of bread showed no bar at all. An empty row is simply this
 		// showing through, which is also why only filled rows are drawn.
 		upright(consumer, poseStack, facing, GAUGE_X1 - 1, GAUGE_Y1 - 1, GAUGE_WIDTH + 2,
-			rows + 1, 0.0F, 2 * CELL_UV, light, overlay);
+			rows + 1, texel(1), texel(2 * CAVITY_PIECE + 1), light, overlay);
 
 		for (int slot = 0; slot < rows; slot++) {
 			CanteenBlockEntity.Serving serving = slot < servings.size() ? servings.get(slot)
@@ -177,31 +176,38 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 				continue;
 			// Slot zero is the floor of the gauge, so filling the rack fills the bar upwards.
 			upright(consumer, poseStack, facing, GAUGE_X1, GAUGE_Y2 - slot, GAUGE_WIDTH, 1,
-				serving.food() * CELL_UV, CELL_UV, light, overlay);
+				texel(serving.food() * CAVITY_PIECE + 1), texel(CAVITY_PIECE + 1), light, overlay);
 		}
 	}
 
-	/** A quad lying on the top face, {@code x}/{@code y} its near corner in texels. */
-	private void flat(VertexConsumer consumer, PoseStack poseStack, int x, int y, int width,
-		int height, float u, float v, int light, int overlay) {
+	/**
+	 * A quad lying on the top face, {@code x}/{@code y} its north-west corner in texels.
+	 *
+	 * <p>Two things here are easy to get wrong and both were, invisibly. The rotation maps local
+	 * {@code +Y} onto world {@code +Z}, so the texture's own y runs north to south and the offset is
+	 * {@code +y} — a negative one puts the whole heap a block to the north, inside whatever happens to
+	 * be standing there. And the face has to wind so its normal comes out local {@code -Z}, which is
+	 * world up: {@code entityCutout} culls, unlike {@code entityCutoutNoCull}, so the obvious winding
+	 * points the quad at the floor and it is simply never drawn.
+	 */
+	private void flat(VertexConsumer consumer, PoseStack poseStack, int x, int y, int size,
+		float u1, float v1, float u2, float v2, int light, int overlay) {
 
 		poseStack.pushPose();
 		poseStack.translate(0.0F, 1.0F + STANDOFF, 0.0F);
-		// Onto the horizontal: the top face's own plane, with texture y running north to south.
 		poseStack.mulPose(Axis.XP.rotationDegrees(90.0F));
-		poseStack.translate(x * PIXEL, -(y + height) * PIXEL, 0.0F);
+		poseStack.translate(x * PIXEL, y * PIXEL, 0.0F);
 
 		PoseStack.Pose pose = poseStack.last();
-		float w = width * PIXEL;
-		float h = height * PIXEL;
-		vertex(consumer, pose, 0.0F, 0.0F, u, v + CELL_UV, light, overlay);
-		vertex(consumer, pose, w, 0.0F, u + CELL_UV, v + CELL_UV, light, overlay);
-		vertex(consumer, pose, w, h, u + CELL_UV, v, light, overlay);
-		vertex(consumer, pose, 0.0F, h, u, v, light, overlay);
+		float span = size * PIXEL;
+		vertex(consumer, pose, 0.0F, 0.0F, u1, v1, light, overlay);
+		vertex(consumer, pose, 0.0F, span, u1, v2, light, overlay);
+		vertex(consumer, pose, span, span, u2, v2, light, overlay);
+		vertex(consumer, pose, span, 0.0F, u2, v1, light, overlay);
 		poseStack.popPose();
 	}
 
-	/** A quad standing on one of the four flanks. */
+	/** A quad standing on one of the four flanks, {@code x}/{@code y} its top-left corner in texels. */
 	private void upright(VertexConsumer consumer, PoseStack poseStack, Direction facing, int x,
 		int y, int width, int height, float u, float v, int light, int overlay) {
 
@@ -213,14 +219,20 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 		PoseStack.Pose pose = poseStack.last();
 		float w = width * PIXEL;
 		float h = height * PIXEL;
-		// A row samples the middle of its cell rather than the whole of it: the cell is four texels
-		// square and a row is one tall, so taking the lot would squash a swatch into a stripe.
-		float vMid = v + CELL_UV / 2.0F;
-		vertex(consumer, pose, 0.0F, 0.0F, u, vMid, light, overlay);
-		vertex(consumer, pose, w, 0.0F, u + CELL_UV, vMid, light, overlay);
-		vertex(consumer, pose, w, h, u + CELL_UV, v, light, overlay);
+		// One texel, sampled at its centre and stretched over the quad. The gauge's rows and its
+		// backing are flat colour, so there is nothing here to map: an area sample of a four-texel
+		// cell squashed into a one-texel row is a blend of whatever the mipmap picks, which is how a
+		// swatch came out looking like torn slivers of the wrong food.
+		vertex(consumer, pose, 0.0F, 0.0F, u, v, light, overlay);
+		vertex(consumer, pose, w, 0.0F, u, v, light, overlay);
+		vertex(consumer, pose, w, h, u, v, light, overlay);
 		vertex(consumer, pose, 0.0F, h, u, v, light, overlay);
 		poseStack.popPose();
+	}
+
+	/** The middle of one texel of the sheet, which is how a flat colour is sampled exactly. */
+	private static float texel(int at) {
+		return (at + 0.5F) / 16.0F;
 	}
 
 	private static void vertex(VertexConsumer consumer, PoseStack.Pose pose, float x, float y,

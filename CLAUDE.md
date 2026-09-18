@@ -959,6 +959,16 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   the same shape of problem and solves it the same way, with the readout on a sheet of its own.
   Its **dark backing is load-bearing**: a bread swatch is within a few shades of the boards behind it,
   and the first build had an invisible gauge on a Canteen full of bread.
+  **A block entity renderer's quad transform is not reachable by any check that reads constants,
+  and both halves of the Canteen's shipped wrong.** The grid was right, `check_canteen_grid` passed,
+  and a preview replaying the same constants drew the heap correctly — because the mistakes were in
+  the transform the quad goes *through*. The offset along the texture's y was negated, which puts the
+  whole heap a block north (inside whatever is standing there, so it reads as *nothing drawn* rather
+  than as something drawn wrongly); and the winding gave a normal of local `+Z`, which is world
+  **down** — and `entityCutout` culls, unlike `entityCutoutNoCull`, so the quad faced the floor and
+  was never seen. `check_top_face_quad()` reads both **out of the source**, the way the Station's
+  standoff sign is read, because the thing that is wrong is not a constant. Mutation-checked against
+  both bugs exactly as they shipped.
   `check_canteen_grid()` holds the renderer and the generator together and asserts every piece lands
   inside the trough — which caught the first layout reaching *thirteen* texels into a ten-texel one,
   saved only by a `Math.min` that silently piled the overflow against one edge. Mutation-checked.
