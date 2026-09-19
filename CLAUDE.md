@@ -16,7 +16,7 @@ python3 tools/generate_logo.py         # the in-jar badge at 256
 python3 tools/generate_logo.py branding/icon-512.png --size 512   # ...and the 512 CurseForge wants
 python3 tools/generate_ponder_structure.py   # all three Ponder scenes' structure NBT
 python3 tools/generate_ponder_lang.py        # ...and their lang entries, read out of the storyboards
-python3 tools/generate_block_textures.py      # the Station's and Canteen's textures, and the checks that hold their files together
+python3 tools/generate_block_textures.py      # the Canteen's trough and food, the Station's lamps, both item models, and the checks that hold their files together
 python3 tools/render_block_model.py <model.json> --hats N --lit N --dim N   # draw a block model without a client
 python3 tools/generate_page_art.py           # the CurseForge page's banner, cards and recipe grids, into branding/
 python3 tools/generate_gear_shifts.py        # the evening and night vests, off the day one
@@ -95,8 +95,10 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 - **`LICENSE` and `NOTICE.md` ship in the jar under `META-INF/`.** `WorkerData`'s transfer
   algorithm is a port of Create's `ArmBlockEntity`, Create's code is MIT, and MIT wants its notice
   carried with "copies or substantial portions" — a jar handed to a player is a copy. Create's
-  `assets/` are separately All Rights Reserved, which is why no Create art is used and the badge
-  icon is generated from this mod's own sprite instead.
+  `assets/` are separately All Rights Reserved, which is why **nothing of Create's is copied into
+  this jar** and the badge icon is generated from this mod's own sprite instead. Both blocks do
+  *reference* one Create sprite — see the connected-texture entry below — which is use of a file
+  that ships with a hard dependency, not redistribution of it.
 - **The logo script is size-parameterised** (`--size`, a multiple of 256): 256 for the in-jar
   `logoFile`, 512 in `branding/` for the project pages. Multiples only, or `SPRITE_SCALE` goes
   fractional and the sprite's pixels stop being square.
@@ -144,6 +146,7 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
 | `block/CanteenBlock` | A trough of food, and the only way a night crew is ever fed — vanilla has no container a villager will take food out of. Vault-shaped: nothing goes in or out by hand, a comparator says how full it is and goggles say what of |
 | `block/CanteenBlockEntity` | Its stock. Nine slots that accept food and nothing else, filtered at the `IItemHandler` because that is the way in nothing supervises. `servings()` is what the block is drawn from |
 | `client/CanteenRenderer` | Draws the stock: a heap on the top, one cell per slot, and a level on each flank. Shapes and cells shared with the texture generator |
+| `client/CWConnectedTextures` | Puts both blocks on Create's andesite casing and into Create's casing registry, which is what makes the connection mutual |
 | `block/WorkerStationBlock` | The block that hires. `HAS_JOB` is what the point of interest is registered over; `FACING` turns the board at whoever placed it |
 | `block/WorkerStationBlockEntity` | A line's roster: an ordered rack of hats, the shifts each runs on, who is wearing them, and the point-of-interest tickets it holds back |
 | `block/WorkerStationMenu` | The rack as real slots, over Create's `MenuBase`. Its geometry constants are shared with the screen, because slots are placed before any screen exists |
@@ -699,6 +702,20 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   them runs off the sunk panel, and none overlaps its neighbour. Mutation-checked seven ways. It is
   not ceremony: the renderer before this one shipped drawing every hat a fiftieth of a block *inside*
   an opaque board, which is not drawn badly but not drawn, with nothing anywhere to say so.
+- **A model knows nothing about a readout, so the project page has to be handed one.**
+  `tools/generate_page_art.py` renders block *models*, and every state this mod draws — the Station's
+  lamps, the Canteen's heap and its gauges — is drawn by a block entity renderer instead. So a card
+  shows the block with its readout blank: a Station that looks unstaffed and a Canteen that looks
+  empty, which is the exact picture the food was taken off the texture to stop it being. The Station
+  supplies its lamps through `marks`; the Canteen's `stock(servings, casing)` composites the heap onto
+  the trough sheet and the gauge onto Create's casing, out of the renderer's own `CELLS`/`SPOTS`/nudge,
+  and `check_canteen_grid()` reads all three back out of the Java. **Anything that grows a block entity
+  renderer needs the same treatment** or its card is a picture of a block nobody has — and that is
+  quieter than a broken block, because nothing in the game is wrong.
+  **A `sheets` key may name a face**, `(reference, 'north')`, and the gauge is why: both blocks wear one
+  casing sheet on all six faces, so a gauge painted into it bare would appear on the top and the bottom
+  too. Mutation-checked nine ways, including a heap shifted onto the frame and a bezel a row out.
+
 - **The bezel belongs to the lamp sprite, never to the block's sheet.** A socket painted on a texture
   has to sit on a whole texel, so four of them across a fourteen-pixel panel cannot be evenly spaced —
   the attempt left the middle pair a whole pixel closer than the outer two, which is visible instantly.
@@ -707,40 +724,21 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   at the top left, lighter at the bottom right, because a hole's *far* wall catches the light) and from
   putting the bulb's catch-light up and to the left. A flat ring around a flat disc is flat however
   dark you make it.
-- **Create's conventions are measurable, and every aggregate over a whole sheet is a trap.** This
-  block's art was corrected four times and *each* version passed the check written for the one before,
-  because a mean hides structure. Counting which colours a casing uses says andesite is **not grey** —
-  a neutral ramp and a warm tan one in near-equal measure — that Create carries **15–19 shades** in a
-  16×16 sheet, and that **nothing in it is darker than luma 57**. That is enough to pick ramps and
-  nothing else. The four things it cannot tell you, all found only by measuring *by position*:
-  1. **Which way round the frame goes.** Andesite casing is **0% warm on its border, 100% warm
-     inside**: a two-pixel andesite trim around a wood panel. (Copper and railway invert it — the trim
-     names the tier.) The wood is also what keeps this reading as a vanilla profession block, which
-     matters because it is a villager job site.
-  2. **That there are *two* grey trims, and the inner is far brighter** — ring 0 at **89**, ring 1 at
-     **140**. Their mean is 113, which is a colour appearing nowhere in the texture and exactly what a
-     border-wide average had this generator matching. Collapsing them also makes ring 2 look like the
-     inner trim when **ring 2 is the first row of wood**, the shadow the frame throws on the boards.
-     That shadow ring is *uniform* in all of Create's (varying 3–5 luma); a bevel there swings 69.
-  3. **Which way the grain runs.** On panels alone Create matches its vertical neighbour ~half the time
-     and its horizontal neighbour almost never (andesite 48%/11%). Shade counts, isolated-pixel
-     fractions (27% ours against 25% theirs) and mean neighbour deltas all called the two sheets
-     identical while one was built from rows and the other from columns — and **including the trim edge
-     hides even this**, because a material boundary is not noise.
-  4. **That boards need room, must differ from each other, and must be staggered.** Andesite's column
-     means read `86 98 67 93 89 90 101 67 99 84` — separators every 3–5 columns, boards spanning 84–101.
-     An even alternation is corduroy; identical board tones (`93 93 61 93 …`) are corduroy with extra
-     steps; and an *unstaggered* tone drift makes every board change at the same point along the grain,
-     drawing a stripe across the panel at right angles to it. Stagger by **board index**, not by column:
-     separators make raw columns land unevenly across the drift period and the stripe comes back.
-  `check_house_style()` pins all of it ring by ring on every build, bounds taken from Create's own
-  casings. Mutation-checked eight ways.
-  **Two bounds were wrong first, instructively.** The outer-trim bevel's lower end is 16, not 8: corner
-  bolts alone put ~12 luma of swing on a flat trim, so anything under that can never fire. And the
-  board-spread bound is 14, not 20: andesite's own boards span 17, and a bound above what the reference
-  measures fails good work. **Check what a bound can actually distinguish before trusting it.**
-  All shipped values are our own, chosen inside the measured ranges; what was taken is statistics about
-  where warmth, light and grain sit, not pixels. The badge icon's licence argument is the same line.
+- **(Historic) Our casing was measured against Create's, and then deleted in favour of Create's.**
+  Both blocks used to wear a casing this repo drew: a wood panel in an andesite frame, corrected four
+  times, each version passing the check written for the one before. The reasoning is in
+  `docs/worker-station.md` and the code is gone — `planks`, `SEPARATORS`, `BOARD_TONES`,
+  `check_house_style` and most of `check_trim` went with it when the blocks moved onto
+  `create:block/andesite_casing`, which is the thing they had been imitating. Two findings are worth
+  keeping because they are about checking, not about casings:
+  **every aggregate over a whole sheet is a trap** — a mean hides structure, and four separate faults
+  (the frame worn inside out, two grey trims collapsed into one, a bevelled shadow ring, boards with
+  no room between them) each moved no aggregate outside its range and were found only by measuring
+  *by position*; and **check what a bound can actually distinguish before trusting it** — the
+  outer-trim bevel bound was set at 8 when corner bolts alone put ~12 luma of swing on a flat trim, so
+  it could never have fired, and the board-spread bound was set at 20 when Create's own boards span
+  17, so it would have failed good work.
+
 - **A blockstate file has to grow when a property does, and nothing but a test will say so.** Adding
   `FACING` took the Station from two states to eight, and a state with no variant renders as the
   black-and-magenta cube — silently, because resources are the client's business and the tests run on
@@ -976,13 +974,15 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   with bare trough beneath it; and **three spots per slot filled as the stack fills**, because one
   piece per slot is nine pieces on a ten-texel trough, which is a scattering — eight slots never
   looked nearly full, and nine dribbles looked like nine full stacks.
-  **The trough is the shared 10×10 panel and cannot grow.** `check_trim` requires ring 2 to stay warm
-  timber — it is the shadow the frame casts on the boards, and it is what holds this block to the
-  Station's casing — so widening the cavity by a texel turns the family's frame into something else.
-  The grid was sized to the panel rather than the other way round.
-  **The gauge is drawn over an unbroken casing, not cut into one.** `canteen_side` is checked as a
-  boards panel and a slot of dark texels in the middle of one is not boards; the Station's front has
-  the same shape of problem and solves it the same way, with the readout on a sheet of its own.
+  **The trough is the casing's 10×10 panel and cannot grow.** Create's andesite casing carries two
+  texels of trim and then a shadow ring, exactly as ours did, so the clear panel is rings 3..12 either
+  way — which is why moving onto Create's sheet needed no refitting at all. Widen the cavity by a texel
+  and it lands on the frame.
+  **The trough is a *plate in the model*, not part of a sheet**, and that is what lets the block
+  connect: a face with a trough baked into it can never lose its border to a neighbour. It stands
+  `PLATE` proud of the top face and the heap is drawn at `STANDOFF`, which has to be the larger of the
+  two; `check_canteen_grid` reads the model's own element back and compares. The gauge is drawn over
+  the casing for the same reason, which it always was.
   Its **dark backing is load-bearing**: a bread swatch is within a few shades of the boards behind it,
   and the first build had an invisible gauge on a Canteen full of bread.
   **Overlapping quads at one depth are not layered, they are undefined — and this was got wrong
@@ -1014,6 +1014,48 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   saved only by a `Math.min` that silently piled the overflow against one edge. Mutation-checked.
   (`aCanteenReportsWhatIsInEachSlot` pins the half a server can see: a slot's **fraction**, not just
   its count, since nine slots holding one carrot each must not draw like nine full ones.)
+- **Both blocks wear Create's andesite casing, by reference, and `CasingConnectivity` is the only
+  thing that makes the connection mutual.** The models name `create:block/andesite_casing`; Minecraft
+  resolves it out of Create's jar at runtime and **nothing of Create's art is in ours**, which is the
+  whole difference between using a file that ships with a hard dependency and redistributing it. The
+  machinery is Create's code and MIT, like the `ArmBlockEntity` port.
+  **The obvious wiring is wrong in a way that looks like a texture fault.** `SimpleCTBehaviour`
+  inherits `ConnectedTextureBehaviour.connectsTo`, which is **block identity** —
+  `state.getBlock() == other.getBlock()` — so our Canteen would connect to Canteens and to nothing
+  else. Against a real Andesite Casing we would drop our trim while *it kept its own*, because their
+  block asks the same identity question about us and gets no. A seam with a border down one side of
+  it reads as broken, and measurably worse than not connecting at all. `EncasedCTBehaviour` instead
+  asks `CreateClient.CASING_CONNECTIVITY` about **both** blocks, and Create's own casings and encased
+  blocks ask that same registry — so `CASING_CONNECTIVITY.make(block, AllSpriteShifts.ANDESITE_CASING,
+  …)` is what lets *their* blocks drop their trim for ours. It is Create's own extension point, not a
+  hack around one.
+  Three smaller things. **Wrap every variant**: the Station has eight, and one left unwrapped is a
+  block that stops connecting when it is turned round. **Reference `AllSpriteShifts.ANDESITE_CASING`
+  rather than a texture id string**, so Create restructuring that asset is a compile error instead of
+  a magenta cube in somebody else's world. And **the model's texture string is still a string**, which
+  is why `everyBlockStateHasAModelAndEveryModelItsTextures` now follows `create:` references too —
+  through a class *from Create's jar*, because FML gives every mod its own module layer and asking our
+  own class for one of Create's resources returns null whether or not the file is there, which reads
+  exactly like the failure being checked for. Mutation-checked by misspelling the sprite.
+
+- **A block entity renderer does not exist in an inventory, so a readout has to be baked for the
+  item.** Not in a chest, not in JEI, not on a dropped item, not in a recipe book — the only place
+  `WorkerStationRenderer` and `CanteenRenderer` run is in the world. That was survivable while the
+  blocks wore a casing of their own; once both moved onto Create's, what was left in an inventory was
+  a cube a player already has stacks of under a different name. So `models/item/*.json` are
+  **generated**: the block model's own elements, read rather than restated, plus a plate per lamp and
+  a plate per gauge carrying the *unlit* state. They go in the item model **alone** — the block in the
+  world is untouched, so there is nothing for the renderer to fight with and no way for the two to
+  draw the same lamp a fraction of a block apart.
+  The positions come from `lamp_spots()` and `gauge_backing()`, which are the same functions the
+  renderers are already held to, so the item cannot drift from the block; `check_canteen_grid`
+  asserts one lamp per place in the rack and a gauge on each of the four flanks, and
+  `everyBlockStateHasAModelAndEveryModelItsTextures` walks the item models too, since nothing
+  reaches them from a blockstate and they name a sheet the block model never mentions.
+  **A lamp plate leans on an explicit `uv`** — 2.6 units across sampling one third of a sheet three
+  cells wide, which no rectangle derived from an element's own coordinates could be — so
+  `render_block_model.py` honours `uv` now, as the game always has.
+
 - **A goggle overlay is the readout for a block with no screen, and `forGoggles` cannot run on a
   server.** `IHaveGoggleInformation` is a plain `instanceof` check in Create's overlay renderer, so
   any `BlockEntity` can implement it — Create's own Item Vault does not, but a Canteen holds only food

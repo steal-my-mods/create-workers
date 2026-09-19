@@ -373,8 +373,9 @@ roles times shifts. Simpler to cap, simpler to order — which matters, because 
 player's priority lever — and more flexible: a role can run three shifts while another runs one,
 which a grid would forbid for no reason.
 
-Twelve is the cap, as `WorkerStationBlockEntity.MAX_SLOTS`, with `stationSlots` able to lower it but
-never raise it — the ceiling is baked into the point of interest at registration. Twelve jobs on three
+Twelve is the cap, as `WorkerStationBlockEntity.MAX_SLOTS`, and it is fixed — the ceiling is baked
+into the point of interest at registration, and the setting that once lowered it is gone (see
+`docs/before-release.md` for why). Twelve jobs on three
 shifts is thirty-six villagers, which is a serious village; four roles on three shifts is already a
 serious line.
 
@@ -491,6 +492,18 @@ The lit ones draw full-bright, so a working station reads across a dark factory.
 
 **The art follows Create's conventions, measured rather than guessed — and getting there took
 four corrections, every one of which an aggregate had already signed off.**
+
+> **Superseded, and the ending is the point.** Both blocks wear
+> `create:block/andesite_casing` now — referenced out of Create's jar, never copied — with
+> `CWConnectedTextures` shifting it to Create's connected sheet so they lose their seams against each
+> other and against a real Andesite Casing block. Everything below was an *emulation* of the sheet
+> they are now simply using, and it is left here because the four corrections are a good record of how
+> a check can pass a picture that is visibly wrong. `planks`, `SEPARATORS`, `BOARD_TONES`,
+> `check_house_style` and most of `check_trim` are deleted. What the exercise bought, in the end, was
+> the knowledge that the two sheets were nearly identical — which is what made the switch obviously
+> right rather than a loss of identity. The blocks are still told apart by the face that does
+> something, which was always the design.
+
 
 Counting *which* colours a Create casing uses said: andesite casing is not grey but a neutral ramp and
 a warm tan one in nearly equal measure (copper does the same with orange); Create carries fifteen to

@@ -107,7 +107,23 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 	/** Where a slot's three pieces sit within its cell, before the nudge. */
 	private static final int[][] SPOTS = { { 0, 0 }, { 1, 1 } };
 
-	/** Clear of the face, so a flat quad does not z-fight with the block it is drawn on. */
+	/**
+	 * How far the model stands the trough plate off the top face, in blocks.
+	 *
+	 * <p>The trough is a plate in {@code models/block/canteen.json} rather than part of a sheet,
+	 * because a face with a trough baked into it can never connect to a neighbour — which is the
+	 * whole reason both blocks now wear Create's casing. Restated here because the heap has to be
+	 * drawn <em>above</em> it, and check_canteen_grid() reads the model's own element back to make
+	 * sure the two still agree. In the model it is in sixteenths, so 0.001 of a block is 16.016.
+	 */
+	private static final float PLATE = 0.001F;
+
+	/**
+	 * Clear of the face, so a flat quad does not z-fight with the block it is drawn on.
+	 *
+	 * <p>Larger than {@link #PLATE}: the heap sits on the trough, not in it, and two quads at one
+	 * depth are not layered but undefined — which this block has already shipped twice.
+	 */
 	private static final float STANDOFF = 0.002F;
 
 	/**
@@ -229,7 +245,7 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 		int layer, float u1, float v1, float u2, float v2, int light, int overlay) {
 
 		poseStack.pushPose();
-		poseStack.translate(0.0F, 1.0F + STANDOFF + layer * LAYER, 0.0F);
+		poseStack.translate(0.0F, 1.0F + PLATE + STANDOFF + layer * LAYER, 0.0F);
 		poseStack.mulPose(Axis.XP.rotationDegrees(90.0F));
 		poseStack.translate(x * PIXEL, y * PIXEL, 0.0F);
 

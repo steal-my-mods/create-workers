@@ -60,8 +60,9 @@ that block between **take from** (blue) and **deposit to** (yellow); left-click 
 - A programmed hat can be picked back up and edited — unlike an arm, the selection comes back.
 - Crafting it on its own blanks it, the way a Create filter clears. Same hat, same damage, same
   enchantments.
-- Sneak + right-click a **bed** to say where that worker sleeps. Optional; a worker with no bed finds
-  one.
+- Sneak + right-click a **bed** to say where that job sleeps. Optional; a worker with no bed finds
+  one. A job running more than one shift shares it — whoever gets there first takes it, and the rest
+  find a free bed beside it.
 - One worker walks the whole hat, so the targets are capped: no two further apart than
   `maxTargetSpread`, and at most `maxTargets` of them. Both refuse you as you click rather than
   dropping a target later.
@@ -120,9 +121,39 @@ how you say which jobs matter most.
 
 Workers eat on the clock and slow to a crawl when they run out. A **Canteen** feeds every worker in
 range, through walls, out of its own stock — so a running line is a matter of keeping one block
-stocked, not chasing villagers with bread.
+stocked, not chasing villagers with bread. Nobody walks to one: the food goes to them, so a Canteen
+belongs where the work is.
 
-## 5. Wear it yourself
+It takes **bread, carrots, potatoes and beetroot** — what a villager will actually eat — through a
+funnel, a chute, a belt or a hopper, like any other container. Its top is its stock: you can see what
+is in it and roughly how much from across the room, and there is a level on each side for when it is
+built into a wall.
+
+It feeds villagers without quite filling them, so breeding still takes a player with food in hand.
+A Canteen near a farm feeds the farmers too.
+
+> **📷 Screenshot wanted — `canteen.png`**
+> Two Canteens side by side, one nearly full of bread and one part-stocked with carrots, so the top
+> reads as both a level and a kind of food. A worker mid-stride between them earns its place.
+
+## 5. Trade with them
+
+A Worker is still a villager, and off the clock it will trade. It **buys what a factory makes** —
+andesite alloy, shafts, cogs, casings, pressed sheets, and higher up the components that are a real
+chore to automate — and **sells assembled machines** back: water wheels and gearboxes early, then
+funnels and chutes and vaults, then presses, mixers and drills, then pistons, pulleys and fluid gear,
+and the package network last.
+
+What it offers follows what you are building rather than what you can afford, and hauling counts
+towards its trading level, so a Worker that has been working is a Worker with more to sell.
+
+It will never sell you a Hard Hat.
+
+> **📷 Screenshot wanted — `trading.png`**
+> The trade screen open on a hatted villager, showing a buy and a sell side by side. Emeralds for
+> cogs on one line and a machine on the other is the whole idea in one picture.
+
+## 6. Wear it yourself
 
 Two points of armor, same as iron, and rather more durable. It renders as the same 3D hat the workers
 wear, not a texture painted on your head.
@@ -147,7 +178,8 @@ it isn't for an arm. Put a funnel on it, same as you always would.
 ## Or let the game explain it
 
 Hold **W** over a Hard Hat and Create's own Ponder screen walks through it: programming a hat; a
-Worker Station taking on a villager and carrying an ingot across the yard; then shifts and sleep.
+Worker Station taking on a villager and carrying an ingot across the yard; shifts and sleep; then
+feeding a crew and trading with it. The last one is also on the Canteen.
 
 > **📷 Screenshot wanted — `ponder.png`**
 > A frame of the scene mid-play with its caption showing. Ponder signals an addon built to Create's

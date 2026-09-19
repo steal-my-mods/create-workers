@@ -25,6 +25,7 @@ public class CWClient {
 		modBus.addListener(CWClient::registerPonderScenes);
 		modBus.addListener(CWClient::registerScreens);
 		modBus.addListener(CWClient::registerRenderers);
+		CWConnectedTextures.init(modBus);
 	}
 
 	/**

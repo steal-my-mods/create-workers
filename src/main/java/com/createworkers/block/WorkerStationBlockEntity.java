@@ -77,7 +77,8 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 *
 	 * <p>A hard constant rather than a config value, because it has to agree with the point of
 	 * interest's {@code maxTickets}, which is fixed when the type is registered and cannot vary per
-	 * block. The config caps slots <em>below</em> this; nothing can raise it.
+	 * block. It is also the single bound every way into the rack is measured against, so there is no
+	 * second number for them to disagree over.
 	 */
 	public static final int MAX_SLOTS = 12;
 
@@ -239,7 +240,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 
 		@Override
 		public boolean isItemValid(int index, ItemStack stack) {
-			return index >= 0 && index < capacity() && slots[index] == null
+			return index >= 0 && index < MAX_SLOTS && slots[index] == null
 				&& stack.getItem() instanceof HardHatItem;
 		}
 
@@ -306,18 +307,13 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 		return false;
 	}
 
-	/** How many slots this station will accept, which the config may hold below {@link #MAX_SLOTS}. */
-	public static int capacity() {
-		return Math.min(MAX_SLOTS, CWConfig.STATION_SLOTS.get());
-	}
-
 	/**
 	 * Racks a hat at the end of the list, on the day shift.
 	 *
 	 * @return whether there was room for it.
 	 */
 	public boolean addHat(ItemStack stack) {
-		for (int i = 0; i < capacity(); i++)
+		for (int i = 0; i < MAX_SLOTS; i++)
 			if (slots[i] == null)
 				return putHat(i, stack);
 		return false;
@@ -329,7 +325,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * @return whether that place was free.
 	 */
 	public boolean putHat(int index, ItemStack stack) {
-		if (index < 0 || index >= capacity() || slots[index] != null)
+		if (index < 0 || index >= MAX_SLOTS || slots[index] != null)
 			return false;
 
 		slots[index] = new Slot(stack.copyWithCount(1));
@@ -427,12 +423,11 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * thing than the one it prevents.
 	 */
 	public boolean moveSlot(int from, int to) {
-		// Bounded by the configured capacity, not by MAX_SLOTS. Every other way a hat gets into the
-		// rack -- putHat, addHat, isItemValid -- stops at capacity(), so bounding the arrows at the
-		// hard maximum let a player walk a job down past it into a place nothing could have put it,
-		// freeing the slot above for another hat. Repeat and stationSlots means nothing, since
-		// positions, staffed and nextVacancy all count the whole rack.
-		int limit = capacity();
+		// Bounded by the same number every other way into the rack is bounded by -- putHat, addHat
+		// and isItemValid all stop at MAX_SLOTS. They have to agree: a bound here that was looser
+		// let a player walk a job down into a place nothing could have put it, freeing the slot
+		// above for another hat, and positions, staffed and nextVacancy all count the whole rack.
+		int limit = MAX_SLOTS;
 		if (from < 0 || from >= limit || to < 0 || to >= limit || from == to)
 			return false;
 		if (slots[from] == null)

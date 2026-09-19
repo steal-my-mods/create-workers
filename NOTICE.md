@@ -6,7 +6,16 @@ code it is built from, and the notices that code's licence requires be carried a
 ## Create
 
 Create is split-licensed: its **code is MIT**, and everything under its `assets/` is **All
-Rights Reserved**. Only the MIT half is relevant here.
+Rights Reserved**. Only the MIT half is carried here.
+
+**Nothing under Create's `assets/` is copied into this mod.** The Worker Station and the
+Canteen do *reference* one of Create's sprites — their models name
+`create:block/andesite_casing`, and `CWConnectedTextures` names
+`AllSpriteShifts.ANDESITE_CASING` so the casing connects — but the files stay in Create's jar
+and are resolved at runtime on a machine that already has Create installed, since Create is a
+hard dependency. Displaying a file that ships with a dependency is not redistributing it, and
+no notice obligation follows from All Rights Reserved for that. Everything under this mod's
+own `assets/` is original.
 
 `WorkerData`'s item transfer algorithm — the round-robin walk over inputs and outputs, and the
 "only take what you can put down" rule — is a port of Create's `ArmBlockEntity`. That is a

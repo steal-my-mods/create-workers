@@ -217,6 +217,33 @@ def render(model_path, size, textures_dir, camera=CAMERA, lit=0, dim=0, marks=No
     return render_model(model, size, textures_dir, camera, lit, dim, marks, sheets)
 
 
+_BORROWED = None
+
+
+def borrowed(reference):
+    """A texture this mod references but does not ship, read out of the jar that owns it.
+
+    Both blocks wear Create's andesite casing. The sprite stays in Create's jar -- it is
+    referenced at runtime and never copied in here, which is the whole of why this is use
+    rather than redistribution -- so there is no file on disk to read and the jar has to be
+    opened instead. generate_page_art already knows how to find it; the import is late
+    because that module imports this one.
+    """
+    global _BORROWED
+    from generate_page_art import Sprites
+
+    namespace, _, path = reference.partition(':')
+    kind, _, name = path.partition('/')
+    if not name:
+        raise FileNotFoundError(reference)
+    if _BORROWED is None:
+        _BORROWED = Sprites()
+    pixels = _BORROWED._read(namespace, kind, name)
+    if pixels is None:
+        raise FileNotFoundError(reference)
+    return pixels
+
+
 def render_model(model, size, textures_dir=None, camera=CAMERA, lit=0, dim=0,
                  marks=None, sheets=None):
     """The same, over a model already in hand rather than a file on disk.
@@ -225,6 +252,11 @@ def render_model(model, size, textures_dir=None, camera=CAMERA, lit=0, dim=0,
     generate_page_art draws a vanilla block whose texture lives inside the Minecraft
     jar: there is no file to point `textures_dir` at, and unpacking somebody else's
     art into this repo to get one is the thing worth avoiding.
+
+    A key may also be a `(reference, face)` pair, which wins over the bare reference for
+    that one face. Both of this mod's blocks wear one casing sheet on all six faces, so a
+    readout drawn into it -- the Canteen's gauge -- would otherwise appear on the top and
+    the bottom as well as on the flanks it belongs to.
     """
     internal = size * OVERSAMPLE
     view = View(internal, camera)
@@ -233,20 +265,27 @@ def render_model(model, size, textures_dir=None, camera=CAMERA, lit=0, dim=0,
     supplied = sheets or {}
     loaded = {}
 
-    def sheet_for(reference):
+    def sheet_for(reference, face_name):
         while reference.startswith('#'):
             reference = model.get('textures', {})[reference[1:]]
+        if (reference, face_name) in supplied:
+            return supplied[(reference, face_name)]
         if reference in supplied:
             return supplied[reference]
         path = resolve(reference, {}, textures_dir)
         if path not in loaded:
-            loaded[path] = read_png(path)
+            loaded[path] = read_png(path) if os.path.exists(path) else borrowed(reference)
         return loaded[path]
 
     for box in model['elements']:
         for name, face in box['faces'].items():
             corner, uv = face_geometry(box, name)
-            draw_face(canvas, view, corner, uv, sheet_for(face['texture']), SHADE[name])
+            # An explicit uv wins, exactly as it does in the game. The item models lean on this:
+            # a lamp plate is 2.6 units across and samples one third of a sheet three cells wide,
+            # which no rectangle derived from the element's own coordinates could ever be.
+            if 'uv' in face:
+                uv = tuple(face['uv'])
+            draw_face(canvas, view, corner, uv, sheet_for(face['texture'], name), SHADE[name])
 
     # A caller may supply the marks instead of the model carrying them, which is how
     # generate_page_art lights a Station's lamps without preview data going into a

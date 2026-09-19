@@ -1,12 +1,9 @@
 {
-  "_comment": "A full cube, authored facing north; blockstates/worker_station.json turns it. The top uses the casing sheet, so its boards run the way the sides do rather than crosswise. One model for both has_job states, and one element on purpose: a block that fills its space occludes, lights and culls like any other solid block, which is what retires the holes and see-through edges the bench-and-board shape produced twice. What is in the rack is drawn by WorkerStationRenderer as lamps on the front face -- see generate_block_textures.py, which checks that this model, that renderer and the sheets still describe one block.",
+  "_comment": "A full cube of Create's own andesite casing, authored facing north; blockstates/worker_station.json turns it. The casing is referenced, never copied -- the sprite lives in Create's jar and is resolved at runtime, which is also what lets CWConnectedTextures shift it to the connected sheet so a wall of these has no seams. The front carries no sunk panel: the lamps WorkerStationRenderer draws are mounted straight on the boards, which is where Create puts a fitting. One model for both has_job states, and one element on purpose: a block that fills its space occludes, lights and culls like any other solid block, which is what retires the holes and see-through edges the bench-and-board shape produced twice.",
   "parent": "block/block",
   "textures": {
-    "particle": "createworkers:block/worker_station_casing",
-    "side": "createworkers:block/worker_station_casing",
-    "top": "createworkers:block/worker_station_casing",
-    "bottom": "createworkers:block/worker_station_bottom",
-    "front": "createworkers:block/worker_station_front"
+    "particle": "create:block/andesite_casing",
+    "casing": "create:block/andesite_casing"
   },
   "elements": [
     {
@@ -23,27 +20,27 @@
       ],
       "faces": {
         "down": {
-          "texture": "#bottom",
+          "texture": "#casing",
           "cullface": "down"
         },
         "up": {
-          "texture": "#top",
+          "texture": "#casing",
           "cullface": "up"
         },
         "north": {
-          "texture": "#front",
+          "texture": "#casing",
           "cullface": "north"
         },
         "south": {
-          "texture": "#side",
+          "texture": "#casing",
           "cullface": "south"
         },
         "west": {
-          "texture": "#side",
+          "texture": "#casing",
           "cullface": "west"
         },
         "east": {
-          "texture": "#side",
+          "texture": "#casing",
           "cullface": "east"
         }
       }

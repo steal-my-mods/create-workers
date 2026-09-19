@@ -1364,6 +1364,13 @@ public class WorkerStationGameTests {
 	public static void everyBlockStateHasAModelAndEveryModelItsTextures(GameTestHelper helper) {
 		checkStates(helper, CWBlocks.WORKER_STATION.get(), "worker_station");
 		checkStates(helper, CWBlocks.CANTEEN.get(), "canteen");
+
+		// The item models too. They are not reachable from any blockstate — they carry the readout
+		// an inventory has no block entity renderer to draw, so they name a sheet the block model
+		// never mentions, and a missing one is the same magenta failure nothing else would see.
+		for (String item : new String[] { "worker_station", "canteen", "hard_hat" })
+			checkModel(helper, CreateWorkers.ID + ":item/" + item);
+
 		helper.succeed();
 	}
 
@@ -1411,11 +1418,23 @@ public class WorkerStationGameTests {
 				.entrySet()) {
 				String reference = texture.getValue()
 					.getAsString();
-				if (reference.startsWith("#") || !reference.startsWith(CreateWorkers.ID + ":"))
+				if (reference.startsWith("#"))
 					continue;
-				String file = "/assets/createworkers/textures/" + reference.substring(reference.indexOf(':') + 1)
+				int colon = reference.indexOf(':');
+				String namespace = colon < 0 ? "minecraft" : reference.substring(0, colon);
+				// Vanilla's own textures are in the client jar and a dedicated server has none of
+				// them, so there is nothing here to look at. Create's are in Create's mod jar, which
+				// is on this classpath -- and **they have to be checked**, because both blocks wear
+				// Create's andesite casing by reference rather than shipping a copy of it. Nothing
+				// else in the build would notice Create moving that file: the sprite shift is a
+				// compile-time field and would fail loudly, but the string in a model is a string,
+				// and the symptom is a magenta cube in somebody else's world.
+				if (namespace.equals("minecraft"))
+					continue;
+				String file = "/assets/" + namespace + "/textures/" + reference.substring(colon + 1)
 					+ ".png";
-				helper.assertTrue(exists(file), model + " names a texture that is not in the jar: " + file);
+				helper.assertTrue(exists(jarOf(namespace), file),
+					model + " names a texture that is not in " + namespace + "'s jar: " + file);
 			}
 
 		if (json.has("parent"))
@@ -1424,11 +1443,30 @@ public class WorkerStationGameTests {
 	}
 
 	private static boolean exists(String resource) {
-		try (InputStream source = WorkerStationGameTests.class.getResourceAsStream(resource)) {
+		return exists(WorkerStationGameTests.class, resource);
+	}
+
+	/**
+	 * Whether a resource is in a jar, asked of a class that jar contains.
+	 *
+	 * <p><b>Which class is load-bearing.</b> FML gives every mod its own module layer, so
+	 * {@code WorkerStationGameTests.class.getResourceAsStream} can see our jar and nothing else —
+	 * asking it for one of Create's textures returns null whether or not the file is there, which
+	 * reads exactly like the failure this is meant to catch. The lookup has to go through a class
+	 * from the jar being asked about.
+	 */
+	private static boolean exists(Class<?> within, String resource) {
+		try (InputStream source = within.getResourceAsStream(resource)) {
 			return source != null;
 		} catch (IOException failure) {
 			return false;
 		}
+	}
+
+	/** A class out of the jar that owns a namespace, for {@link #exists(Class, String)} to ask. */
+	private static Class<?> jarOf(String namespace) {
+		return namespace.equals(CreateWorkers.ID) ? WorkerStationGameTests.class
+			: com.simibubi.create.Create.class;
 	}
 
 	private static JsonObject readJson(GameTestHelper helper, String resource) {

@@ -273,7 +273,6 @@ Some details you might otherwise read as bugs:
 | `clockOn` | 0 | Time of day the day crew starts, which moves the whole working day. A crew works a third of a day and the three tile the clock between them; that length is fixed rather than configurable |
 | `bedSearchRadius` | 16 | How far from the job site a worker may look for a bed of its own. 0 means it sleeps only in a bed assigned on its hat |
 | `recallStuckWorkers` | `false` | Whether a worker that has repeatedly failed to walk back to its work is teleported there. Workers that can walk home always walk; this is only for the one at the bottom of a hole |
-| `stationSlots` | 12 | How many jobs one Worker Station may hold. Each may run three shifts, so this is really a cap on villagers — twelve jobs is up to thirty-six of them. 12 is the ceiling and cannot be raised |
 | `absenteeTimeout` | 6000 | How long a worker may go without being anywhere near its own work before its station gives the job to somebody else. 0 never gives up on anyone |
 
 ## Development
@@ -347,9 +346,13 @@ including briefs for the screenshots that have to be taken rather than generated
 
 Nothing in them is typed twice. The block pictures are `render_block_model.py` drawing the shipped
 models; the names come out of `lang/en_us.json`, so renaming a block renames it on the page; and the
-Station's lamps are placed from the constants in `generate_block_textures.py`, which is what lets the
-page show a staffed rack — the lamps are drawn by `WorkerStationRenderer`, not by the block model, so
-a plain model render shows an empty one. Change a texture and re-run this, and the page catches up.
+readouts are supplied from the constants in `generate_block_textures.py`, which is what lets the page
+show a staffed rack and a stocked trough — the lamps, the food and the gauges are drawn by the block
+entity renderers, not by the block model, so a plain model render shows empty ones. Change a texture
+and re-run this, and the page catches up.
+
+Both blocks wear Create's andesite casing, so the block pictures now need Create's jar as well —
+which the recipe sheets already did, and which a single `./gradlew build` provides.
 The headings are set in `tools/pixel_font.py`, a bitmap font written out here rather than loaded from
 the system, so that the output is byte-identical on any machine.
 
@@ -590,5 +593,13 @@ MIT — see [LICENSE](LICENSE).
 
 `WorkerData`'s transfer algorithm is a port of Create's `ArmBlockEntity`, and Create's code is
 MIT as well, so its notice travels along in [NOTICE.md](NOTICE.md) and inside the jar under
-`META-INF/`. No Create asset is used or redistributed — Create's `assets/` are All Rights
-Reserved, and every texture, model and icon here is original.
+`META-INF/`.
+
+**No Create asset is redistributed.** Create's `assets/` are All Rights Reserved, and every
+texture, model and icon *in this jar* is original. The Worker Station and the Canteen do
+**reference** one of Create's sprites — their models name `create:block/andesite_casing`, which
+Minecraft resolves out of Create's own jar at runtime, and `CWConnectedTextures` shifts it to
+Create's connected sheet so the blocks lose their seams against each other and against a real
+Andesite Casing. Nothing of it is copied here; displaying a file that ships with a hard
+dependency is use rather than redistribution, and the machinery doing the shifting is Create's
+code, which is MIT.

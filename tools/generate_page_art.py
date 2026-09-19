@@ -65,7 +65,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pixel_font  # noqa: E402
 import render_block_model  # noqa: E402
-from generate_block_textures import LAMP_SIZE, lamp_spots  # noqa: E402
+from generate_block_textures import LAMP_SIZE, lamp_spots, stock  # noqa: E402
 from generate_logo import (FIELD, FIELD_DEEP, FIELD_LIGHT, GRID, GRID_ALPHA,  # noqa: E402
                            SHADOW, WHITE, decode_png, lerp, read_png, write_png)
 
@@ -85,6 +85,19 @@ STATION_MARKS = {
     'size': LAMP_SIZE,
     'plane': 0,          # the front face, which the model authors facing north
 }
+
+# The Canteen's stock is drawn by CanteenRenderer for the same reason the Station's lamps
+# are -- a readout is a thing the block knows, not a thing its texture can say -- so a plain
+# model render is an empty trough, which is the block at its least appealing and the exact
+# picture the food was taken off the texture to stop it being. `stock` composites both drawn
+# faces, top and flank, the way the game draws them.
+#
+# Eight of the nine slots, in four foods with one part-stack among them. Eight is the
+# interesting number: it is what "nearly full" was tuned to look like, and it leaves the top
+# corner of the heap and the top row of the gauge empty, so the card shows a level rather than
+# a solid colour with nothing to read it against.
+CANTEEN_STOCK = [(0, 1.0), (0, 1.0), (1, 1.0), (0, 1.0), (2, 1.0),
+                 (1, 0.5), (3, 1.0), (0, 1.0), (-1, 0.0)]
 
 # What the page is about. One entry per thing the mod adds; the card and the banner
 # column both fall out of it.
@@ -118,8 +131,16 @@ SUBJECTS = [
         'blurb': 'Workers eat on the clock and slow to a crawl when they run out. '
                  'The Canteen feeds every worker in range, through walls.',
         'model': MODELS + '/canteen.json',
+        # Deferred: it needs Create's casing, which means opening a jar, and that
+        # should not happen just because this module was imported.
+        'sheets': lambda: stock(CANTEEN_STOCK, casing()),
     },
 ]
+
+def casing():
+    """Create's andesite casing, out of Create's own jar. Referenced, never copied."""
+    return Sprites()._read('create', 'block', 'andesite_casing')
+
 
 def property_of(key, path='gradle.properties'):
     """One value out of gradle.properties, which is where the mod's name already lives."""
@@ -143,6 +164,10 @@ TAG_STAND_INS = {
 
 # Blocks of ours whose face is drawn by a renderer rather than by the model, and so
 # need their indicators supplied before they look like the block a player sees.
+#
+# The Canteen is deliberately not here, although its faces are drawn the same way: the only
+# place a block icon appears is as a crafting recipe's result, and a Canteen that has just
+# been crafted really is empty. Its card gets a stocked one because a card is a portrait.
 LOCAL_MARKS = {
     'worker_station': STATION_MARKS,
 }
@@ -283,9 +308,11 @@ def subject_art(subject, mass, box):
     span_width, span_height = model_extent(subject['model'], camera)
     size = min(mass / math.sqrt(span_width * span_height),
                limit_width / span_width, limit_height / span_height)
+    sheets = subject.get('sheets')
     return render_block_model.render(
         subject['model'], int(round(size)), None, camera,
-        subject.get('lit', 0), subject.get('dim', 0), subject.get('marks'))
+        subject.get('lit', 0), subject.get('dim', 0), subject.get('marks'),
+        sheets() if callable(sheets) else sheets)
 
 
 def trim(tile):

@@ -1,15 +1,14 @@
 {
-  "_comment": "A full cube with a distinct top, which is the face that says what the block is -- a trough you look down into. No facing property: a trough has no front, and a block with nothing to aim would only give a player a rotation to get wrong. Sides and bottom share their construction with the Station's casing; tools/generate_block_textures.py draws all of them and holds their frames to one another. The element is written out rather than inherited from block/cube_bottom_top so that every face states its own cullface and so that tools/render_block_model.py can draw it -- a model whose geometry lives in a vanilla parent is a model nothing in this repo can look at.",
+  "_comment": "A full cube of Create's own andesite casing, plus a plate carrying the trough. The casing is referenced, never copied -- the sprite lives in Create's jar and is resolved at runtime, which is also what lets CWConnectedTextures shift it to the connected sheet so a bank of these has no seams. What is ours is the trough on top and the food and gauges CanteenRenderer draws over it. The trough is a plate a whisker proud of the top face rather than part of the sheet, because a face baked with a trough in it cannot connect; PLATE in CanteenRenderer is the same number and check_canteen_grid holds the two together. Every face of the cube spans the block boundary, so every face culls; the plate does not cull, because a Canteen under glass should still show what is in it.",
   "parent": "block/block",
   "textures": {
-    "particle": "createworkers:block/canteen_side",
-    "side": "createworkers:block/canteen_side",
-    "top": "createworkers:block/canteen_top",
-    "bottom": "createworkers:block/canteen_bottom"
+    "particle": "create:block/andesite_casing",
+    "casing": "create:block/andesite_casing",
+    "trough": "createworkers:block/canteen_trough"
   },
   "elements": [
     {
-      "__comment": "Every face spans the block boundary, so every face culls.",
+      "__comment": "The block itself. One texture on all six faces, the way a casing is.",
       "from": [
         0,
         0,
@@ -22,28 +21,52 @@
       ],
       "faces": {
         "down": {
-          "texture": "#bottom",
+          "texture": "#casing",
           "cullface": "down"
         },
         "up": {
-          "texture": "#top",
+          "texture": "#casing",
           "cullface": "up"
         },
         "north": {
-          "texture": "#side",
+          "texture": "#casing",
           "cullface": "north"
         },
         "south": {
-          "texture": "#side",
+          "texture": "#casing",
           "cullface": "south"
         },
         "west": {
-          "texture": "#side",
+          "texture": "#casing",
           "cullface": "west"
         },
         "east": {
-          "texture": "#side",
+          "texture": "#casing",
           "cullface": "east"
+        }
+      }
+    },
+    {
+      "__comment": "The trough, over the panel and clear of the face by PLATE.",
+      "from": [
+        3,
+        16.016,
+        3
+      ],
+      "to": [
+        13,
+        16.016,
+        13
+      ],
+      "faces": {
+        "up": {
+          "texture": "#trough",
+          "uv": [
+            3,
+            3,
+            13,
+            13
+          ]
         }
       }
     }
