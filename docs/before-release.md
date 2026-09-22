@@ -9,42 +9,30 @@ explicitly accepted before a `v*` tag is pushed.
 
 ## Blocking
 
-- **The project page needs its screenshots, and nothing else.** `docs/curseforge-page.md` and the
-  images `tools/generate_page_art.py` draws are the only part of this mod most people will ever see.
-  The prose has been brought up to date — trading has a section of its own, the bed is described as
-  the dormitory anchor it is, and the Canteen's section covers its stock readout, what it accepts and
-  its stopping short of the breeding threshold — and every image has been regenerated. What is left:
-  - **Nine screenshot placeholders are unfilled** — every `> **📷 Screenshot wanted**` block,
-    including the hero shot the page is built around. They are the one thing here that cannot be
-    generated, and the only reason this item is still open.
-  - **The card art is not simply "whatever the models say", which cost a round.** A model knows
-    nothing about a readout, so both of the Canteen's drawn faces came out blank the way the
-    Station's lamps once did — `generate_block_textures.stock()` composites them now, out of the
-    renderer's own tables, and `check_canteen_grid()` reads those tables back. **Anything else that
-    grows a block entity renderer needs the same treatment**, or its card quietly shows a block
-    nobody has.
-  Re-run the generator and read the page end to end against the mod before tagging.
+**Nothing, as of 0.5.0.** The project page went up with its screenshots taken by hand, which was the
+only item here no generator could draw, and `docs/curseforge-page.md` was read end to end against the
+mod first.
 
-- **The Ponder scenes are behind the mod — mostly settled.** `CanteenScene` now covers hunger, the
-  Canteen and trades, and `WorkingHoursScene`'s bed line says a job's bed rather than a worker's. What
-  is left is nothing: **the Station's screen and lamps get no scene**, decided rather than deferred.
-  Create does not generally Ponder a UI, and the lamp readout is useful decoration rather than
-  something a player has to understand to use the block. Original note follows.
-- **(Settled above.) The Ponder scenes are behind the mod, which is the failure this project has
-  already had once.**
-  They are the only documentation shipped inside the jar and nothing in the game contradicts them, so
-  a stale page is worse than a missing one — the hiring scene taught "right-click a villager with a
-  hat" for several versions after Stations took that away. Three gaps now:
-  - **`WorkingHoursScene` still says a bed is where *that* Worker sleeps.** It is a dormitory anchor:
-    a job's shift-workers share one hat and therefore one bed, and the ones who miss out take a free
-    bed beside it. Same wording problem as the project page, and the same fix.
-  - **No scene mentions the Canteen, food or hunger.** A Worker that slows to a crawl and throws angry
-    particles has no in-game explanation at all, and the block that feeds it is undocumented.
-  - **No scene mentions trades.** 86 listings across five levels, invisible to anyone who does not
-    right-click a Worker on spec.
-  CLAUDE.md's rule is that when a mechanic changes the scene is part of the change; this session
-  changed four and wrote none. `tools/generate_ponder_lang.py` regenerates the text and checks the
-  beat timing, so the cost is the storyboards rather than the bookkeeping.
+Three standing rules the page left behind, each of which cost a round to learn:
+
+- **The card art is not simply "whatever the models say".** A model knows nothing about a readout, so
+  both of the Canteen's drawn faces came out blank the way the Station's lamps once did —
+  `generate_block_textures.stock()` composites them now, out of the renderer's own tables, and
+  `check_canteen_grid()` reads those tables back. **Anything else that grows a block entity renderer
+  needs the same treatment**, or its card quietly shows a block nobody has.
+- **A screenshot is only as current as the client that took it.** Resources are baked at load, so a
+  shot taken before a reload puts whatever was wrong with the assets that session into a gallery
+  neither site lets you replace an image in. Reload (F3+T) before shooting, after any change to a
+  model, blockstate or texture.
+- **Re-run `tools/generate_page_art.py` and read the page against the mod before tagging.** The page
+  is the only part of this mod most people will ever see.
+
+- **The Ponder scenes are level with the mod, and the one gap is a decision rather than a deferral.**
+  `CanteenScene` covers hunger, the Canteen and trades; `WorkingHoursScene`'s bed line says a job's
+  bed rather than a worker's. **The Station's screen and lamps get no scene**: Create does not
+  generally Ponder a UI, and the lamp readout is useful decoration rather than something a player
+  must understand to use the block. The standing rule — when a mechanic changes, the scene is part of
+  the change — lives in CLAUDE.md.
 
 ## Found by the high-effort review, plausible but not chased
 
