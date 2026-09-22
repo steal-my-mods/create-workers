@@ -1046,6 +1046,21 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   through a class *from Create's jar*, because FML gives every mod its own module layer and asking our
   own class for one of Create's resources returns null whether or not the file is there, which reads
   exactly like the failure being checked for. Mutation-checked by misspelling the sprite.
+  **And a turned variant has to lock its UVs, or the top and the bottom connect to the wrong
+  neighbours.** Which tile of the casing a face draws is decided in *world* directions —
+  `buildContext` asks what is north, south, east and west and returns the tile whose trim is on the
+  edges with nothing beside them — but a blockstate `y` rotation turns the model's UVs along with
+  its geometry, and on the two faces the axis runs *through* that lands the tile a quarter turn out.
+  It shipped: a Station facing east between two Andesite Casings kept its trim on the north and the
+  south, which is exactly where its neighbours were, while both of them correctly dropped theirs.
+  A seam with a border down one side of it is the failure this whole entry exists to avoid, and it
+  came back through the one door nothing here was watching. The side faces were always right,
+  because a `y` rotation maps a side face onto a side face without turning the texture inside it,
+  which is why the front of the block looked perfect while the top did not. `uvlock: true` on every
+  variant, which is what Create's own `andesite_encased_shaft` does.
+  (`aTurnedBlockKeepsItsCasingSquareToTheWorld`, mutation-checked. It reads the blockstate file
+  rather than the render, because a model is baked on a client and the seam is a picture — and it
+  covers the Canteen too, which has nothing to turn yet.)
 
 - **A block entity renderer does not exist in an inventory, so a readout has to be baked for the
   item.** Not in a chest, not in JEI, not on a dropped item, not in a recipe book — the only place

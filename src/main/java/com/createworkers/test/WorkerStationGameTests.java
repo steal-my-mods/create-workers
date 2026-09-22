@@ -1485,6 +1485,57 @@ public class WorkerStationGameTests {
 		helper.succeed();
 	}
 
+	/**
+	 * A variant that turns the model locks its UVs, because the casing is a connected texture.
+	 *
+	 * <p>Both blocks wear Create's andesite casing, and which tile of it a face draws is decided in
+	 * <em>world</em> directions: {@code ConnectedTextureBehaviour.buildContext} asks what is north,
+	 * south, east and west of the block and hands back the tile whose trim is on the edges with no
+	 * neighbour. A blockstate {@code y} rotation turns the model's UVs along with its geometry, so
+	 * on the two faces the axis runs through — the top and the bottom — that tile arrives a quarter
+	 * turn out: the trim lands on the edges that <em>are</em> connected, and the boards run across
+	 * the grain of any casing beside it.
+	 *
+	 * <p>It shipped that way. A Station facing east between two Andesite Casings kept its trim on
+	 * the north and the south, which is precisely where its neighbours were, while both of them
+	 * correctly dropped theirs — a seam with a border down one side of it, which
+	 * {@code CWConnectedTextures} exists to avoid and which reads as a texture fault rather than as
+	 * a boundary. {@code uvlock} is what Create does with every rotated variant of its own
+	 * {@code andesite_encased_shaft}.
+	 *
+	 * <p>Nothing else here can see it: a model is baked on a client, and the seam is a picture.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void aTurnedBlockKeepsItsCasingSquareToTheWorld(GameTestHelper helper) {
+		for (String name : new String[] { "worker_station", "canteen" }) {
+			JsonObject variants = readJson(helper, "/assets/createworkers/blockstates/" + name + ".json")
+				.getAsJsonObject("variants");
+
+			for (java.util.Map.Entry<String, JsonElement> variant : variants.entrySet())
+				for (JsonObject model : modelsOf(variant.getValue())) {
+					boolean turned = model.has("x") || model.has("y");
+					boolean locked = model.has("uvlock") && model.get("uvlock")
+						.getAsBoolean();
+					helper.assertTrue(!turned || locked, name + " turns \"" + variant.getKey()
+						+ "\" without uvlock, so its casing draws the connected tile a quarter turn "
+						+ "out on the top and the bottom");
+				}
+		}
+
+		helper.succeed();
+	}
+
+	/** The one or more models a blockstate variant names, since a variant may be a weighted list. */
+	private static java.util.List<JsonObject> modelsOf(JsonElement variant) {
+		if (!variant.isJsonArray())
+			return java.util.List.of(variant.getAsJsonObject());
+
+		java.util.List<JsonObject> models = new java.util.ArrayList<>();
+		variant.getAsJsonArray()
+			.forEach(entry -> models.add(entry.getAsJsonObject()));
+		return models;
+	}
+
 	private static void checkStates(GameTestHelper helper, Block block, String name) {
 		JsonObject variants = readJson(helper, "/assets/createworkers/blockstates/" + name + ".json")
 			.getAsJsonObject("variants");
