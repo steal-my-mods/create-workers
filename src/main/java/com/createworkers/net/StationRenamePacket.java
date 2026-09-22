@@ -8,6 +8,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.util.StringUtil;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
@@ -30,9 +31,31 @@ public record StationRenamePacket(int slot, String name) implements CustomPacket
 	 */
 	public static final int MAX_LENGTH = 32;
 
+	/**
+	 * A name with everything a chat line would refuse taken out of it.
+	 *
+	 * <p>Vanilla runs {@code StringUtil.filterText} over an anvil's field and so must this: the
+	 * length was checked here and the content was not, so a modified client could send section signs
+	 * and put an obfuscated or recoloured label over a villager — one that outlives the rack, because
+	 * the name travels on the hat's {@code CUSTOM_NAME}.
+	 *
+	 * <p>Applied by the stream codec, so the record never holds an unfiltered name and no caller has
+	 * to remember. Static and public so a test can decode a packet and read the result — the handler
+	 * itself needs a player, an open menu and a live block entity behind it, and a rule that can only
+	 * be exercised through all three is a rule nothing checks.
+	 */
+	public static String filter(String name) {
+		return StringUtil.filterText(name)
+			.trim();
+	}
+
 	public static final StreamCodec<ByteBuf, StationRenamePacket> STREAM_CODEC = StreamCodec.composite(
 		ByteBufCodecs.VAR_INT, StationRenamePacket::slot,
-		ByteBufCodecs.stringUtf8(MAX_LENGTH), StationRenamePacket::name,
+		// **Filtered as it is read, not where it is used.** A rule applied in the handler is a rule
+		// the next caller can forget; applied here there is no unfiltered name anywhere downstream,
+		// and a test can exercise the whole of it by decoding a packet.
+		ByteBufCodecs.stringUtf8(MAX_LENGTH)
+			.map(StationRenamePacket::filter, name -> name), StationRenamePacket::name,
 		StationRenamePacket::new);
 
 	@Override

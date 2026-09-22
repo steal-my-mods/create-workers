@@ -187,7 +187,7 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 			if (serving.isEmpty())
 				continue;
 
-			int pieces = Math.max(1, Math.min(CAVITY_SPOTS, (int) Math.ceil(serving.fraction() * CAVITY_SPOTS)));
+			int pieces = serving.cells(CAVITY_SPOTS);
 			for (int piece = 0; piece < pieces; piece++) {
 				int nudge = hash(slot * 31 + piece);
 				int x = CAVITY_X1 + CELLS[slot][0] * CAVITY_PITCH + SPOTS[piece][0] + (nudge & 1);
@@ -225,8 +225,12 @@ public class CanteenRenderer implements BlockEntityRenderer<CanteenBlockEntity> 
 				: CanteenBlockEntity.Serving.NOTHING;
 			if (serving.isEmpty())
 				continue;
-			// Slot zero is the floor of the gauge, so filling the rack fills the bar upwards.
-			upright(consumer, poseStack, facing, GAUGE_X1, GAUGE_Y2 - slot, GAUGE_WIDTH, 1, 1,
+			// Slot zero is the floor of the gauge, so filling the rack fills the bar upwards. The row
+			// is as wide as the slot is full, by the same count the heap draws its pieces with: a rack
+			// of part-stacks is a ragged thin bar rather than a solid one, which is what the top and
+			// the comparator are both already saying about it.
+			upright(consumer, poseStack, facing, GAUGE_X1, GAUGE_Y2 - slot,
+				serving.cells(GAUGE_WIDTH), 1, 1,
 				texel(serving.food() * CAVITY_PIECE + 1), texel(CAVITY_PIECE + 1), light, overlay);
 		}
 	}

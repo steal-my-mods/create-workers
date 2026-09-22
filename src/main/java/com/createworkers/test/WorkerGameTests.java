@@ -9,6 +9,10 @@ import java.util.List;
 import java.util.Map;
 
 import com.createworkers.CWConfig;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import com.createworkers.net.WorkerStatePacket;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.DecoderException;
 import com.createworkers.CreateWorkers;
 import com.createworkers.block.CanteenBlockEntity;
 import com.createworkers.item.HardHatItem;
@@ -1228,6 +1232,83 @@ public class WorkerGameTests {
 	}
 
 	/**
+	 * A crew that is not a crew is refused, rather than thrown out of the middle of the decode.
+	 *
+	 * <p>{@code ByteBufCodecs.idMapper} hands its mapper whatever VarInt it read and checks nothing,
+	 * so indexing {@code Shift.VALUES} straight turned a damaged or mismatched stream into an
+	 * {@code ArrayIndexOutOfBoundsException} raised inside netty's pipeline — where the right answer
+	 * is a {@code DecoderException} and a clean disconnect. This is clientbound, so reaching it needs
+	 * a bad server rather than a bad player; the failure mode is still the wrong one.
+	 *
+	 * <p>Encoded and then corrupted rather than hand-written: the shift is the last field and
+	 * {@code Shift.DAY} is a single zero byte, so overwriting it is the whole of the mutation and the
+	 * rest of the packet stays exactly as the codec would have produced it.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aWorkerStatePacketRefusesAShiftThatIsNotOne(GameTestHelper helper) {
+		RegistryFriendlyByteBuf buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), helper.getLevel()
+			.registryAccess());
+		WorkerStatePacket.STREAM_CODEC.encode(buffer,
+			new WorkerStatePacket(1, ItemStack.EMPTY, ItemStack.EMPTY, Shift.DAY));
+
+		int end = buffer.writerIndex() - 1;
+		helper.assertTrue(buffer.getByte(end) == 0, "precondition: the day shift is one zero byte");
+		buffer.setByte(end, 99);
+
+		try {
+			WorkerStatePacket.STREAM_CODEC.decode(buffer);
+			throw new GameTestAssertException("a shift ordinal of 99 should not decode");
+		} catch (DecoderException expected) {
+			helper.succeed();
+		} catch (IndexOutOfBoundsException raw) {
+			throw new GameTestAssertException(
+				"a bad ordinal should be a DecoderException, and was " + raw);
+		}
+	}
+
+	/**
+	 * The welcome ration is a gift, once per villager — not an income from the rack.
+	 *
+	 * <p><b>This shipped as an exploit.</b> The guard was {@code !isEmployed()}, and every path that
+	 * ends a job runs {@code dismiss()}, which clears the hat — so a villager was "not employed" again
+	 * the instant it was let go, and taking a hat out of a Station and putting it straight back
+	 * <em>reassigned</em> a full tank. Two shifts of food for about twenty-five ticks of clicking,
+	 * which is cheaper than any wheat farm and makes {@code requireFood} a formality.
+	 *
+	 * <p>The rule that replaced it: {@code fuel} survives a dismissal and the ration is spent on the
+	 * first hire only. A worker that was fed yesterday is not hungrier for having been un-hatted, and
+	 * one that starved on the job still has an empty tank when it is taken back on — which is the
+	 * answer a player can act on, because the fix for it is food.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 200)
+	public static void theWelcomeRationIsSpentOnce(GameTestHelper helper) {
+		layFloor(helper);
+		Villager villager = helper.spawn(EntityType.VILLAGER, SPAWN);
+		WorkerData data = Workers.getOrCreate(villager);
+
+		data.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.EMPTY);
+		int rations = data.fuel();
+		helper.assertTrue(rations > 0, "a first hire should turn up having eaten");
+
+		// Run it dry with nothing in its pockets, the way a worker with no Canteen does.
+		for (int tick = 0; tick < rations + 4; tick++)
+			data.chargeForWork(villager);
+		helper.assertTrue(data.isHungry(villager), "a worker out of food and out of fuel is hungry");
+
+		// The exploit, exactly: let it go and take it straight back on.
+		data.dismiss();
+		helper.assertTrue(data.fuel() <= 0,
+			"a dismissal should leave the tank where it was and left " + data.fuel());
+
+		data.employ(new ItemStack(CWItems.HARD_HAT.get()), WorkerProgram.EMPTY);
+		helper.assertTrue(data.fuel() <= 0,
+			"re-hiring a starving villager must not refill it, and left " + data.fuel());
+		helper.assertTrue(data.isHungry(villager),
+			"so it is still hungry, and still wants feeding rather than re-racking");
+		helper.succeed();
+	}
+
+	/**
 	 * A worker eats what it hauls for, out of its own pocket.
 	 *
 	 * <p>Food has to be <b>items</b>, and that is not a preference. {@code Villager.foodLevel} is
@@ -1900,6 +1981,30 @@ public class WorkerGameTests {
 		}
 		helper.assertTrue(previous == 15,
 			"a physically full canteen reads full whatever is in it, and read " + previous);
+
+		// A rack of dribbles against the same rack full. Every slot is occupied either way, so
+		// anything asking only "is this slot empty" cannot tell them apart -- which is exactly how
+		// the gauge came to draw a brim-full bar over a block the comparator was calling 1 of 15,
+		// and why the assertion above could not see it: it only ever inserted whole stacks.
+		int full = 0;
+		for (CanteenBlockEntity.Serving serving : canteen.servings())
+			full += serving.cells(2);
+		int solid = canteen.comparatorOutput();
+
+		for (int slot = 0; slot < CanteenBlockEntity.SLOTS; slot++)
+			canteen.stock()
+				.setStackInSlot(slot, new ItemStack(Items.BEETROOT, 1));
+
+		int dribbles = 0;
+		for (CanteenBlockEntity.Serving serving : canteen.servings())
+			dribbles += serving.cells(2);
+
+		helper.assertTrue(dribbles < full,
+			"a slot holding one beetroot must draw less than a slot holding sixty-four; both drew "
+				+ dribbles + " against " + full);
+		helper.assertTrue(canteen.comparatorOutput() < solid,
+			"and the comparator has to agree with the face: a rack of single beetroots read "
+				+ canteen.comparatorOutput() + " against " + solid + " for a full one");
 		helper.succeed();
 	}
 

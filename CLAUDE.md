@@ -789,6 +789,15 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   (`aCanteensComparatorAgreesWithWhatItDraws` pins the *agreement* rather than the formula — testing
   the formula alone would pass just as happily with the face and the redstone back out of step.
   Mutation-checked by restoring the points scale.)
+  **"How full is this slot" is one formula, `Serving.cells(int)`, and it has to be.** The heap asks
+  it for the pieces in a cell and the gauge for the width of a row; the comparator sums the same
+  fractions. The gauge asked only whether the slot was *empty*, so a rack holding one carrot per slot
+  drew a brim-full bar on all four flanks while the comparator said 1 of 15 and the top showed nine
+  thin pieces — one block answering one question three ways, which is precisely what the readout
+  exists to prevent. It lives on the record rather than in either renderer because nothing
+  client-side loads on a dedicated server, and that is the half of the agreement a test can read. The
+  original test could not see it: it only ever inserted whole stacks, where "is the slot occupied"
+  and "how full is it" give the same answer.
 
 - **Trading locks a villager to its profession, which breaks retirement — and the fix is to lean on
   that rather than fight it.** `ResetProfession` wants `getVillagerXp() == 0` **and**
@@ -1055,6 +1064,44 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   **A lamp plate leans on an explicit `uv`** — 2.6 units across sampling one third of a sheet three
   cells wide, which no rectangle derived from an element's own coordinates could be — so
   `render_block_model.py` honours `uv` now, as the game always has.
+
+- **The welcome ration is once per villager, and `isEmployed()` cannot say so.** A new hire turns
+  up with `STARTING_RATIONS` already eaten, because starting empty makes a villager hungry within a
+  tick of being hired — food as a punishment for hiring rather than a supply line to build. The guard
+  was `!isEmployed()`, and **every path that ends a job runs `dismiss()`, which clears the hat** — so
+  a villager reads as unemployed again the moment it is let go, and taking a hat out of a rack and
+  putting it straight back *reassigned a full tank*. About twenty-five ticks of clicking for two
+  shifts of food, which is cheaper than any farm and makes `requireFood` a formality; it guarded only
+  the in-place promotion, the one path that never dismisses. `everEmployed` is persisted and never
+  cleared, and neither is `fuel` — so a worker let go carries on from where it was, and one that
+  starved on the job is still starving when it is taken back on.
+  (`theWelcomeRationIsSpentOnce`, mutation-checked by restoring the old guard, which refills 7200.)
+
+- **A click that commits a rename must be measured against the row that *was* being renamed.**
+  `commitName()` clears `editing`, and `WorkerStationMenu.hitRow` is handed that field to enforce "a
+  row being renamed answers to none of its controls" — so committing first passed it -1 and the rule
+  could never fire outside the name box itself. It did not need to be far outside: the box covers the
+  row from +5 to +15 and the shift toggles are hit-tested from +2 to +16 across the same columns, so
+  three pixels above the box and one below committed the name *and* toggled a shift, hiring or
+  serving notice on a real villager through a control the screen had stopped drawing. The screen
+  captures `editing` before committing now. **No test can reach this** — the rule is testable in the
+  menu and the call site is a client class — so the ordering is the thing to look at when touching
+  either.
+
+- **A rule about what a packet may contain belongs in its codec, not in its handler.** The rename
+  packet capped a name's length and checked nothing about its content, so a modified client could
+  send section signs and put an obfuscated or recoloured label over a villager — one that outlives
+  the rack, since the name rides on the hat's `CUSTOM_NAME`. Vanilla runs `StringUtil.filterText`
+  over an anvil's field and so does this now, **on decode**: applied in the handler it is a rule the
+  next caller can forget, and the handler is only reachable with a player, an open menu and a live
+  block entity behind it, which is a rule nothing can test. Applied in the codec there is no
+  unfiltered name anywhere downstream and a test decodes a packet to prove it
+  (`aJobNameCannotCarryFormattingCodes`, mutation-checked both by neutering the filter and by
+  unwiring it).
+  The same shape on the way out: `ByteBufCodecs.idMapper` hands its mapper whatever VarInt it read
+  and checks nothing, so indexing `Shift.VALUES` straight made a damaged stream an
+  `ArrayIndexOutOfBoundsException` inside netty rather than a `DecoderException` and a clean
+  disconnect (`aWorkerStatePacketRefusesAShiftThatIsNotOne`).
 
 - **A goggle overlay is the readout for a block with no screen, and `forGoggles` cannot run on a
   server.** `IHaveGoggleInformation` is a plain `instanceof` check in Create's overlay renderer, so
@@ -1385,8 +1432,14 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   server, so nothing can render `WorkerStationScreen` — but a menu's slot positions are ordinary
   arithmetic in a common class, and a window that does not fit shows up there first.
   `theStationScreenLaysOutInsideItsPanel` asserts every slot is inside the panel, that no two share a
-  position, that the second column starts level with the first, and that the panel is short enough to
-  fit a screen. Mutation-checked by putting the rack back in one column, which it catches as a slot
+  position, that the second column starts level with the first, and that the panel fits **320x240** —
+  which is not a taste but the floor `Window.calculateScale` guarantees, it being the largest scale
+  whose logical area is still at least that. The bound was 256 tall, 16 looser than the real answer,
+  and there was **no bound on width at all** — which is the worse of the two, because the scale is
+  limited by whichever axis is tighter: a 1280x1024 display lands on exactly 320 logical pixels
+  across, and a 346-wide panel put the second column's reorder arrows off the edge of every 4:3 and
+  5:4 monitor. `ROW_HEIGHT` is vanilla's slot pitch of 18 now, and the row's own geometry was
+  compressed to a 148-wide column. Mutation-checked by putting the rack back in one column, which it catches as a slot
   hanging out of the bottom. Write geometry into the *menu*, never into the screen, so it stays
   reachable.
   **That rule covers text, not only slots, and the exception is what shipped.** The staffing readout
@@ -1534,6 +1587,16 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   fills the *last* place in the order either way: promoting first and hiring into the hole behind
   reaches the same roster, and the state in between is the one that works.
   (`losingADayWorkerPromotesSomebodyUpToIt`, mutation-checked by dropping the call.)
+  **And it moves the last worker it can actually see, not simply the last one.** `getEntity` finds
+  loaded entities only, so a villager in a chunk nobody is standing in reads as missing — and
+  `rebalance` takes a refusal from `promoteOne` as "nothing left to promote", so one unloaded worker
+  at the bottom of the fill order froze every promotion above it until the roster audit struck it
+  off, with a broken line producing nothing throughout. Moving *any* worker later than the hole moves
+  the hole later, which is progress towards the prefix the order wants, so the second-to-last is a
+  perfectly good mover. A worker that is present but still carrying is a different case and is left
+  alone: it has been given notice, and that wait is bounded by `NOTICE_TICKS` by design.
+  (`aPromotionLooksPastAWorkerItCannotSee` — `discard()` is how a test gets an unloaded worker, since
+  it removes the entity without killing it, so no death handler runs and the roster still lists it.)
 - **A villager killed with `die()` rather than with damage may not actually die.** Both are used in
   these tests and only one is reliable: `die()` leaves the health where it was, so `isAlive()` stays
   true for the whole death animation, and a villager held still with `setNoAi` never got removed at

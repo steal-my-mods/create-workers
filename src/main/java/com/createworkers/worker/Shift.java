@@ -15,12 +15,13 @@ import net.minecraft.util.StringRepresentable;
  * shortens it for everybody, and one that moves dawn moves every crew with it, rather than three
  * sets of settings that could be made to contradict each other.
  *
- * <p>The offset is a third of a day rather than the length of a shift, which is what leaves the span
- * to the player: a span of exactly {@link #OFFSET} tiles the clock with no overlap and no gap, a
- * longer one has two crews on at the changeover — the default does, deliberately, because an
- * overlapping hand-over is what stops a chain of workers stalling at dusk — and a shorter one leaves
- * the factory unstaffed between crews, which is a legitimate thing to want and shows in the station's
- * readout rather than being silently corrected.
+ * <p><b>The span is exactly {@link #OFFSET} and is not adjustable.</b> That is the one length at
+ * which the three crews tile the clock with no overlap and no gap: longer and two crews are on at the
+ * changeover, shorter and the factory stands unstaffed between them. It used to be a setting, and
+ * every value but the default was one of those two faults — so {@link #clockOff()} is
+ * {@code clockOn + OFFSET} and {@code theShippedCrewsDoNotOverlap} pins it. What stops a chain of
+ * workers stalling at the hand-over is muster, which wakes the next crew early enough to be at its
+ * post, rather than an overlap that would put two crews on the clock at once.
  */
 public enum Shift implements StringRepresentable {
 

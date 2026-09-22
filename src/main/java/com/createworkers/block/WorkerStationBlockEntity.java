@@ -795,11 +795,21 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	/** The last place on the roster that has somebody in it, reading the fill order backwards. */
 	@Nullable
 	private Position lastStaffed() {
+		return lastStaffedBelow(Integer.MAX_VALUE);
+	}
+
+	/** The staffed position latest in the fill order, of those earlier than {@code limit}. */
+	@Nullable
+	private Position lastStaffedBelow(int limit) {
 		for (int s = Shift.VALUES.length - 1; s >= 0; s--) {
 			Shift shift = Shift.VALUES[s];
-			for (int i = MAX_SLOTS - 1; i >= 0; i--)
-				if (slots[i] != null && slots[i].runs(shift) && slots[i].workers[shift.ordinal()] != null)
-					return new Position(i, shift);
+			for (int i = MAX_SLOTS - 1; i >= 0; i--) {
+				if (slots[i] == null || !slots[i].runs(shift) || slots[i].workers[shift.ordinal()] == null)
+					continue;
+				Position at = new Position(i, shift);
+				if (order(at) < limit)
+					return at;
+			}
 		}
 		return null;
 	}
@@ -825,8 +835,9 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 	 * nowhere that should take it, so carrying it across would put items where they do not belong.
 	 */
 	private void rebalance(ServerLevel server) {
-		// lastStaffed strictly decreases on every successful move, so this cannot run away -- but a
-		// roster is at most thirty-six places and a loop over a mutating list deserves the belt.
+		// nextVacancy strictly increases on every successful move -- each one fills the earliest hole
+		// and opens a later one -- so this cannot run away, but a roster is at most thirty-six places
+		// and a loop over a mutating list deserves the belt.
 		for (int guard = MAX_SLOTS * Shift.VALUES.length; guard > 0 && promoteOne(server); guard--)
 			;
 	}
@@ -856,13 +867,35 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 			return false;
 		}
 
-		Slot from = slots[last.slot()];
-		UUID id = from.workers[last.shift()
-			.ordinal()];
-		// An unloaded worker cannot be promoted, and guessing at one is what the roster audit already
-		// refuses to do. Left where it is; the next look will find it.
-		if (!(server.getEntity(id) instanceof Villager worker))
+		// **The last worker in the fill order moves, and if it cannot be found, the one before it
+		// does.** An unloaded worker cannot be promoted and guessing at one is what the roster audit
+		// already refuses to do — but *refusing to look past it* stopped the whole rack: rebalance
+		// reads a false from promoteOne as "nothing left to promote", so one villager in a chunk
+		// nobody is standing in froze every other promotion until the absentee timeout struck it off,
+		// with a broken line producing nothing the entire time.
+		//
+		// Moving any worker later than the hole moves the hole later, which is progress towards the
+		// prefix the fill order wants — so the second-to-last is a perfectly good mover when the last
+		// is not there. The rule a player can predict degrades to "the last one that can move", which
+		// is the same rule whenever anything is actually visible.
+		Position from = null;
+		Villager worker = null;
+		for (Position candidate = last; candidate != null && order(candidate) > order(vacancy);
+			candidate = lastStaffedBelow(order(candidate))) {
+			Slot at = slots[candidate.slot()];
+			UUID held = at.workers[candidate.shift()
+				.ordinal()];
+			if (server.getEntity(held) instanceof Villager found) {
+				from = candidate;
+				worker = found;
+				break;
+			}
+		}
+		if (from == null)
 			return false;
+
+		UUID id = slots[from.slot()].workers[from.shift()
+			.ordinal()];
 
 		// Programmed and within range, both vouched for by nextVacancy -- see staffable, which covers
 		// this door into a job as well as the one recruit comes through.
@@ -881,7 +914,7 @@ public class WorkerStationBlockEntity extends BlockEntity implements IInteractio
 			drop(worker);
 		}
 
-		from.workers[last.shift()
+		slots[from.slot()].workers[from.shift()
 			.ordinal()] = null;
 		Workers.employ(worker, to.hat, programme, GlobalPos.of(server.dimension(), worldPosition),
 			vacancy.shift());

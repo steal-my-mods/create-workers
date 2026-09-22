@@ -151,6 +151,26 @@ public class CanteenBlockEntity extends BlockEntity implements IHaveGoggleInform
 		public boolean isEmpty() {
 			return food < 0 || fraction <= 0.0F;
 		}
+
+		/**
+		 * How many of {@code of} cells this slot fills, always at least one while it holds anything.
+		 *
+		 * <p><b>One formula, because the block has to answer "how full" the same way everywhere.</b>
+		 * The heap asks it for the pieces in a cell and the gauge for the width of a row, and the
+		 * comparator is summing the same fractions — so a slot holding one carrot draws thin on the
+		 * top, thin on the flank, and reads near zero on the redstone. The gauge used to ask only
+		 * whether the slot was empty, which drew a brim-full bar over a nearly empty block while the
+		 * comparator said 1 of 15: the block answering one question three ways, which is the whole
+		 * thing the readout exists to avoid.
+		 *
+		 * <p>It lives here rather than in either renderer because nothing client-side loads on a
+		 * dedicated server, and this is the half of the agreement a test can actually read.
+		 */
+		public int cells(int of) {
+			if (isEmpty())
+				return 0;
+			return Math.max(1, Math.min(of, (int) Math.ceil(fraction * of)));
+		}
 	}
 
 	/** What each slot is holding, in slot order. Always {@link #SLOTS} long. */

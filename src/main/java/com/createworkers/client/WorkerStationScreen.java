@@ -358,14 +358,23 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 	 */
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
+		// **Which row was being renamed has to be read before the name is committed.** commitName()
+		// clears `editing`, and the menu's "a row being renamed answers to none of its controls" rule
+		// is passed that field -- so committing first handed it -1 and the rule could never fire for
+		// a click outside the name box itself. It does not have to be far outside: the box covers the
+		// row from +5 to +15 and the shift toggles are hit-tested from +2 to +16 across the same
+		// columns, so the three pixels above the box and the one below committed the name *and*
+		// toggled a shift, hiring or serving notice on a real villager from a control that is not
+		// being drawn.
+		int renaming = editing;
 		if (editing >= 0 && !nameBox.isMouseOver(mouseX, mouseY))
 			commitName();
-		if (button == 0 && clickedRoster(mouseX, mouseY))
+		if (button == 0 && clickedRoster(mouseX, mouseY, renaming))
 			return true;
 		return super.mouseClicked(mouseX, mouseY, button);
 	}
 
-	private boolean clickedRoster(double mouseX, double mouseY) {
+	private boolean clickedRoster(double mouseX, double mouseY, int renaming) {
 		for (int index = 0; index < WorkerStationBlockEntity.MAX_SLOTS; index++) {
 			WorkerStationBlockEntity.Slot job = jobAt(index);
 			if (job == null)
@@ -373,7 +382,7 @@ public class WorkerStationScreen extends AbstractSimiContainerScreen<WorkerStati
 
 			// The hit test itself is in the menu, so that "a row being renamed answers to nothing"
 			// is a rule something can check rather than one this file has to remember.
-			WorkerStationMenu.RowHit hit = WorkerStationMenu.hitRow(index, editing, mouseX - leftPos,
+			WorkerStationMenu.RowHit hit = WorkerStationMenu.hitRow(index, renaming, mouseX - leftPos,
 				mouseY - topPos);
 			switch (hit.control()) {
 				case SHIFT -> {

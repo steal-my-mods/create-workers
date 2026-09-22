@@ -141,6 +141,14 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 	 * thing out of its own inventory and adds what vanilla says that thing is worth.
 	 */
 	private int fuel;
+	/**
+	 * Whether this villager has ever been on the books, which is what makes the welcome ration
+	 * a gift and not an income.
+	 *
+	 * <p>Persisted, and deliberately <b>not</b> cleared by {@link #dismiss()} — nor is {@code fuel},
+	 * so a worker let go keeps whatever it had left and a worker taken back on carries on from there.
+	 */
+	private boolean everEmployed;
 	@Nullable
 	private ArmBlockEntity host;
 
@@ -341,10 +349,21 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		// as a supply line to build. A loaf's worth of work is enough to get the first shift done and
 		// to make running out a thing that happens *later*, which is where the mechanic is interesting.
 		//
-		// Only on a fresh hire. employ() is also how a station promotes a worker into the job above,
-		// and a rations top-up there would make toggling a shift a way to feed a crew for nothing.
-		if (!isEmployed())
+		// **Once per villager, ever.** The obvious guard is `!isEmployed()`, and it is worth writing
+		// down why that is wrong: every path that ends a job goes through dismiss(), which clears the
+		// hat, so isEmployed() is false again by the next hire. Pulling a hat out of a rack and
+		// putting it straight back therefore *reassigned* a full tank -- about twenty-five ticks of
+		// work to feed a starving crew for two shifts, which is cheaper than any farm and makes
+		// requireFood a formality. It guarded only the in-place promotion, the one path that never
+		// dismisses.
+		//
+		// A villager that worked yesterday is not hungrier for having been un-hatted, and one that
+		// starved on the job still has an empty tank when it is taken back on. Both fall out of
+		// leaving fuel alone across a dismissal and spending the ration on the first hire only.
+		if (!everEmployed) {
 			fuel = STARTING_RATIONS * CWConfig.TICKS_PER_FOOD_POINT.get();
+			everEmployed = true;
+		}
 		this.hat = hatStack.copyWithCount(1);
 		this.program = program.copy();
 		this.jobSite = this.program.centre();
@@ -864,6 +883,8 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		tag.putInt("LastOutput", lastOutputIndex);
 		tag.putInt("Cooldown", cooldown);
 		tag.putInt("Fuel", fuel);
+		if (everEmployed)
+			tag.putBoolean("EverEmployed", true);
 		tag.putString("Shift", shift.getSerializedName());
 		if (namedByStation)
 			tag.putBoolean("NamedByStation", true);
@@ -886,6 +907,7 @@ public class WorkerData implements INBTSerializable<CompoundTag> {
 		lastOutputIndex = tag.getInt("LastOutput");
 		cooldown = tag.getInt("Cooldown");
 		fuel = tag.getInt("Fuel");
+		everEmployed = tag.getBoolean("EverEmployed");
 		shift = Shift.byName(tag.getString("Shift"), Shift.DAY);
 		namedByStation = tag.getBoolean("NamedByStation");
 		station = null;

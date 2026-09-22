@@ -3,7 +3,6 @@ package com.createworkers.registry;
 import com.createworkers.CreateWorkers;
 import com.google.common.collect.ImmutableSet;
 
-import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.entity.npc.VillagerProfession;
@@ -17,16 +16,13 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  * profession it arrived with comes off and this one goes on — which is also what hands the
  * workstation it was sitting on back to the village.
  *
- * <p>Both job-site predicates match the {@link CWPoiTypes#WORKER_STATION worker station} and nothing
- * else. The property that matters has not changed: a worker never claims a <em>village</em>
- * workstation. That is the whole reason this profession exists rather than simply clearing the
+ * <p><b>Both job-site predicates are {@code PoiType.NONE}, so they match nothing at all</b> — see
+ * the field below. That is the whole reason this profession exists rather than simply clearing the
  * villager's profession to {@code NONE} — an unemployed villager's <em>acquirable</em> predicate is
  * {@code ALL_ACQUIRABLE_JOBS}, and {@code AcquirePoi} takes a workstation's ticket the moment a path
  * to it merely exists, never having to arrive. A worker's walk target is pinned every tick by its job
  * goal, so arriving is exactly what it would never do, and the ticket would sit taken for the rest of
- * the villager's life. Pointing the predicates at one block of our own keeps that guarantee and buys
- * the thing it used to cost: a worker with a real job site, which vanilla will let it walk to, hold,
- * and release on death.
+ * the villager's life. Matching nothing is what makes that impossible.
  *
  * <p>Vanilla's own never-works profession, {@code NITWIT}, is registered exactly like this and
  * would have done the mechanical job. A profession of our own was chosen because it reads as

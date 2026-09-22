@@ -24,6 +24,7 @@ import com.createworkers.block.WorkerStationBlockEntity;
 import com.createworkers.block.WorkerStationMenu;
 import com.createworkers.item.HardHatItem;
 import com.createworkers.program.WorkerProgram;
+import com.createworkers.net.StationRenamePacket;
 import com.createworkers.registry.CWBlocks;
 import com.createworkers.registry.CWItems;
 import com.createworkers.registry.CWPoiTypes;
@@ -715,6 +716,104 @@ public class WorkerStationGameTests {
 
 
 	/**
+	 * A worker nobody can see does not stop the rest of the rack being sorted out.
+	 *
+	 * <p><b>The promotion always moved the last worker in the fill order, and gave up if it could not
+	 * find it.</b> {@code getEntity} finds loaded entities only, so a villager in a chunk nobody is
+	 * standing in reads as missing — and {@code rebalance} takes a refusal from {@code promoteOne} as
+	 * "nothing left to promote". One unloaded worker at the bottom of the order therefore froze every
+	 * promotion above it until the roster audit eventually struck it off, with a broken line producing
+	 * nothing the whole time. Moving any worker later than the hole moves the hole later, so the
+	 * second-to-last is a perfectly good mover.
+	 *
+	 * <p>{@code discard()} is how a test gets an unloaded worker: it takes the entity out of the level
+	 * without killing it, so no death handler runs, the roster still lists it, and
+	 * {@code getEntity} returns null — which is exactly what an absent chunk looks like from here.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 400)
+	public static void aPromotionLooksPastAWorkerItCannotSee(GameTestHelper helper) {
+		prepareWorkSite(helper);
+		helper.setBlock(STATION, CWBlocks.WORKER_STATION.get());
+		putHatIn(helper, STATION);
+		putHatIn(helper, STATION);
+		putHatIn(helper, STATION);
+
+		UUID[] middle = new UUID[1];
+
+		helper.startSequence()
+			.thenExecute(() -> claimant(helper))
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 1, "one hired"))
+			.thenExecute(() -> claimant(helper))
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 2, "two hired"))
+			.thenExecute(() -> claimant(helper))
+			.thenWaitUntil(() -> helper.assertTrue(station(helper).staffed(Shift.DAY) == 3, "three hired"))
+			.thenExecute(() -> {
+				middle[0] = station(helper).slots()
+					.get(1)
+					.worker(Shift.DAY);
+
+				// The bottom of the fill order walks out of the loaded world.
+				UUID bottom = station(helper).slots()
+					.get(2)
+					.worker(Shift.DAY);
+				helper.getLevel()
+					.getEntity(bottom)
+					.discard();
+
+				// And the top of it dies, which is the hole the rack has to close.
+				UUID top = station(helper).slots()
+					.get(0)
+					.worker(Shift.DAY);
+				Villager victim = (Villager) helper.getLevel()
+					.getEntity(top);
+				victim.setNoAi(false);
+				victim.hurt(helper.getLevel()
+					.damageSources()
+					.genericKill(), Float.MAX_VALUE);
+			})
+			.thenIdle(60)
+			.thenExecute(() -> helper.assertTrue(middle[0].equals(station(helper).slots()
+				.get(0)
+				.worker(Shift.DAY)),
+				"the second worker should have moved up into the hole, and the top job is held by "
+					+ station(helper).slots()
+						.get(0)
+						.worker(Shift.DAY)))
+			.thenSucceed();
+	}
+
+	/**
+	 * A job's name is filtered the way an anvil filters one.
+	 *
+	 * <p>The length was checked on the way in and the content was not, so a modified client could send
+	 * section signs and put an obfuscated or recoloured label over a villager — and it outlives the
+	 * rack, because the name rides on the hat's {@code CUSTOM_NAME}. Vanilla runs the same filter over
+	 * an anvil's field.
+	 *
+	 * <p>Asserted against {@code StationRenamePacket.filter} rather than through the packet, which is
+	 * only reachable with a player, an open menu and a live block entity behind it. A rule that can
+	 * only be exercised through all three is a rule nothing checks.
+	 */
+	@GameTest(template = "work_site", timeoutTicks = 100)
+	public static void aJobNameCannotCarryFormattingCodes(GameTestHelper helper) {
+		// Through the codec, which is where the filtering lives -- so this covers the wiring and not
+		// only the rule. A name written by a modified client arrives exactly this way.
+		net.minecraft.network.FriendlyByteBuf buffer =
+			new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+		buffer.writeVarInt(0);
+		buffer.writeUtf("\u00a7kSorter\u00a7r", StationRenamePacket.MAX_LENGTH);
+		String filtered = StationRenamePacket.STREAM_CODEC.decode(buffer)
+			.name();
+		helper.assertTrue(filtered.indexOf('\u00a7') < 0,
+			"a name should come out with no section signs in it, and came out as " + filtered);
+		helper.assertTrue(filtered.equals("kSorterr"),
+			"and the rest of it should survive; got " + filtered);
+		helper.assertTrue(StationRenamePacket.filter("  Sorter  ")
+			.equals("Sorter"), "and it is trimmed, so a name of spaces is not a name");
+		helper.succeed();
+	}
+
+	/**
 	 * Losing a day-shift worker promotes somebody up from a later crew rather than leaving a hole.
 	 *
 	 * <p>Filling whole shifts before deep ones only holds while a roster is <em>growing</em>. Without
@@ -948,8 +1047,20 @@ public class WorkerStationGameTests {
 		WorkerStationMenu menu = WorkerStationMenu.create(1, player.getInventory(), station(helper));
 
 		// A window taller than this does not fit a 1080p screen at the GUI scale most players use.
-		helper.assertTrue(WorkerStationMenu.PANEL_HEIGHT <= 256,
-			"the panel should fit a screen, and it is " + WorkerStationMenu.PANEL_HEIGHT + " tall");
+		// 320x240 is not a taste, it is the floor Window.calculateScale guarantees: it picks the
+		// largest GUI scale whose logical area is still at least that, so a panel inside it fits at
+		// every scale the game will choose and one outside it does not. The old bound was 256 tall,
+		// which is 16 looser than the real answer and let a 250-tall panel through -- and nothing
+		// looked at the width at all, which is the worse of the two. The scale is limited by
+		// whichever axis is tighter, so a 1280x1024 display lands on exactly 320 logical pixels
+		// across; a 346-wide panel had the second column's arrows off the edge of every 4:3 and 5:4
+		// monitor, with no way to reorder half the rack.
+		helper.assertTrue(WorkerStationMenu.PANEL_HEIGHT <= 240,
+			"the panel must fit the 240-pixel logical floor, and it is "
+				+ WorkerStationMenu.PANEL_HEIGHT + " tall");
+		helper.assertTrue(WorkerStationMenu.PANEL_WIDTH <= 320,
+			"the panel must fit the 320-pixel logical floor, and it is "
+				+ WorkerStationMenu.PANEL_WIDTH + " wide");
 
 		// The two lines under the rack are the only things on this panel that are neither a slot nor a
 		// well, so they are the only things a slot-by-slot check cannot see -- and the warning line

@@ -36,11 +36,21 @@ public class WorkerStationMenu extends MenuBase<WorkerStationBlockEntity> {
 	 * two columns is still a rack: the order runs down the first and then down the second.
 	 */
 	public static final int ROWS_PER_COLUMN = 6;
-	public static final int COLUMN_WIDTH = 160;
+	public static final int COLUMN_WIDTH = 148;
 	public static final int FIRST_COLUMN_X = 8;
-	public static final int SECOND_COLUMN_X = 178;
+	public static final int SECOND_COLUMN_X = 164;
 	public static final int FIRST_ROW_Y = 22;
-	public static final int ROW_HEIGHT = 20;
+	/**
+	 * Vanilla's slot pitch, and the panel has to fit inside 320x240 whatever the window is.
+	 *
+	 * <p>{@code Window.calculateScale} picks the largest scale whose logical area is still at least
+	 * 320x240, so a panel inside that fits at every scale the game will choose and one outside it does
+	 * not. This was 20, which made the panel 250 tall against a logical floor of 240 — and the width
+	 * was 346, which is worse than it sounds: the scale is limited by whichever axis is tighter, so a
+	 * 1280x1024 display lands on exactly 320 logical pixels across and clipped the second column's
+	 * arrows off the edge. Not an exotic size; every 4:3 and 5:4 monitor does it.
+	 */
+	public static final int ROW_HEIGHT = 18;
 
 	/**
 	 * The two lines under the rack: what every shift is carrying, and — only when there is one — a
@@ -58,9 +68,10 @@ public class WorkerStationMenu extends MenuBase<WorkerStationBlockEntity> {
 	public static final int READOUT_Y = FIRST_ROW_Y + ROWS_PER_COLUMN * ROW_HEIGHT + 4;
 	public static final int WARNING_Y = READOUT_Y + LINE_HEIGHT;
 
-	public static final int INVENTORY_X = 92;
 	public static final int INVENTORY_Y = WARNING_Y + LINE_HEIGHT + 2;
 	public static final int PANEL_WIDTH = SECOND_COLUMN_X + COLUMN_WIDTH + FIRST_COLUMN_X;
+	/** Vanilla's inventory is 162 wide; centring it is arithmetic, not a number to keep in step. */
+	public static final int INVENTORY_X = (PANEL_WIDTH - 162) / 2;
 	/** The inventory, its three rows, the gap vanilla leaves before the hotbar, and a margin. */
 	public static final int PANEL_HEIGHT = INVENTORY_Y + 58 + 18 + 6;
 
@@ -81,11 +92,11 @@ public class WorkerStationMenu extends MenuBase<WorkerStationBlockEntity> {
 	// inventory. What it cost this time was worse -- see hitRow.
 
 	public static final int NAME_X = 22;
-	public static final int NAME_WIDTH = 62;
-	public static final int FIRST_TOGGLE_X = 88;
+	public static final int NAME_WIDTH = 50;
+	public static final int FIRST_TOGGLE_X = 76;
 	public static final int TOGGLE_WIDTH = 20;
 	public static final int TOGGLE_HEIGHT = 14;
-	public static final int ARROW_X = 150;
+	public static final int ARROW_X = 138;
 	public static final int ARROW_WIDTH = 9;
 	public static final int ARROW_HEIGHT = 8;
 	/** As long a name as an anvil allows. */

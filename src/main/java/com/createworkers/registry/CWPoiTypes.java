@@ -23,10 +23,11 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  * applicant after the first give up its claim to the worker already standing there, which is right for
  * a lectern and fatal for a block that wants a crew. The station recruits for itself now.
  *
- * <p>What the point of interest is still for is everything that kept working. A worker's
- * {@code JOB_SITE} has to point at a POI whose type its profession claims, or {@code ValidateNearbyPoi}
- * erases the memory and {@code ResetProfession} clears the profession behind it — and the tickets are
- * how a station tells a worker that died from one that is merely in an unloaded chunk.
+ * <p>What the point of interest is still for is the tickets: they are how a station tells a worker
+ * that died from one that is merely in an unloaded chunk, because {@code Villager} releases them on
+ * death and on conversion and never on unloading. Nothing <em>takes</em> one any more — a worker
+ * holds no job site at all, and what keeps {@code ResetProfession} off its back is a point of trading
+ * experience instead. See {@code Workers.protectFromReset}.
  */
 public class CWPoiTypes {
 
@@ -41,10 +42,13 @@ public class CWPoiTypes {
 	 *
 	 * <p>{@code maxTickets} belongs to the point-of-interest <b>type</b> and is fixed when the type is
 	 * registered, so it cannot follow the number of hats in any particular block — which is why
-	 * {@code WorkerStationBlockEntity.MAX_SLOTS} is a constant rather than a config value, and why a
-	 * station holds back the tickets it has no opening for. Free tickets then mean openings, and
-	 * vanilla's own {@code AcquirePoi} enforces the count for us exactly as it enforces one librarian
-	 * per lectern.
+	 * {@code WorkerStationBlockEntity.MAX_SLOTS} is a constant rather than a config value.
+	 *
+	 * <p>It has to be no <em>smaller</em> than the roster a station could hold, and that is all it has
+	 * to be. A station once held back the tickets it had no opening for, so that free tickets meant
+	 * openings and {@code AcquirePoi} enforced the count the way it enforces one librarian per
+	 * lectern; that route died with {@code YieldJobSite}, the station recruits for itself, and nothing
+	 * claims a ticket any more. Don't go looking for {@code reconcileTickets} — it is deleted.
 	 */
 	public static final int MAX_TICKETS = WorkerStationBlockEntity.MAX_SLOTS * Shift.VALUES.length;
 

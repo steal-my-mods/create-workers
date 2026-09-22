@@ -820,6 +820,27 @@ def check_against_model():
     for first, second in zip(xs, xs[1:]):
         assert second - first >= LAMP_VISIBLE, 'the lamps overlap each other'
 
+    # Which food owns which cell of the sheet, read back out of the block. The two lists are the
+    # same fact in two languages and nothing tied them together: reorder either and every Canteen
+    # draws the wrong food for every slot, silently. No game test can load a renderer to notice, and
+    # the generator's own diff gate stays green because each file is self-consistent.
+    canteen = os.path.join('src', 'main', 'java', 'com', 'createworkers', 'block',
+                           'CanteenBlockEntity.java')
+    with open(canteen) as handle:
+        drawn = re.search(r'DRAWN_FOODS\s*=\s*List\.of\(([^;]*)\);', handle.read(), re.S)
+    assert drawn, 'DRAWN_FOODS is not declared in CanteenBlockEntity'
+    theirs = tuple(name.lower() for name in re.findall(r'Items\.(\w+)', drawn.group(1)))
+    ours = tuple(name for name, _ in FOOD_SHAPES)
+    assert theirs == ours, \
+        ('the block draws %s and this file draws %s; a food is a cell of the sheet, so the two '
+         'orders are one fact' % (theirs, ours))
+
+    # And the sheet has room for them. A fifth food runs the last cell off the right-hand edge, and
+    # the renderer's u2 goes past 1.0 rather than failing.
+    assert len(FOOD_SHAPES) * CAVITY_PIECE <= SIZE, \
+        ('%d foods at %d texels apiece do not fit across a %d-texel sheet'
+         % (len(FOOD_SHAPES), CAVITY_PIECE, SIZE))
+
     # And the item model carries the readout, because an inventory has no renderer to draw it.
     # Without this the Station's item is a plain andesite casing cube -- which is a block players
     # already have stacks of, under a different name.

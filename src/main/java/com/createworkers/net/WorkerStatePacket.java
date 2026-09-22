@@ -6,6 +6,7 @@ import com.createworkers.worker.Shift;
 import com.createworkers.worker.WorkerData;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -32,8 +33,22 @@ public record WorkerStatePacket(int entityId, ItemStack hat, ItemStack held, Shi
 			// One byte for the crew, which is what the vest's colour is read off. It rides along here
 			// rather than on the hat because a worker's crew is the worker's, not the job's -- one hat
 			// can have three villagers on it.
-			ByteBufCodecs.idMapper(ordinal -> Shift.VALUES[ordinal], Shift::ordinal), WorkerStatePacket::shift,
+			ByteBufCodecs.idMapper(WorkerStatePacket::shiftById, Shift::ordinal), WorkerStatePacket::shift,
 			WorkerStatePacket::new);
+
+	/**
+	 * A crew by its ordinal, refusing anything that is not one.
+	 *
+	 * <p>{@code idMapper} hands its mapper the VarInt it read and nothing else, so indexing
+	 * {@code Shift.VALUES} straight turned a damaged or mismatched stream into an
+	 * {@code ArrayIndexOutOfBoundsException} raised inside netty's decode — an unhandled pipeline
+	 * exception where the right answer is a {@code DecoderException} and a clean disconnect.
+	 */
+	private static Shift shiftById(int ordinal) {
+		if (ordinal < 0 || ordinal >= Shift.VALUES.length)
+			throw new DecoderException("not a shift: " + ordinal);
+		return Shift.VALUES[ordinal];
+	}
 
 	@Override
 	public Type<? extends CustomPacketPayload> type() {
