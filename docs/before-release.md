@@ -9,15 +9,6 @@ explicitly accepted before a `v*` tag is pushed.
 
 ## Blocking
 
-- **The changelog has no section for anything since 0.4.0, and `mod_version` still says `0.4.0`.**
-  `## [Unreleased]` now covers the trade rework, the Canteen's breeding cap, the bed anchor and the
-  hiring preference, and nothing else: Stations and their screen, the lamp readout, shifts, muster,
-  leisure, the Canteen itself and food all have no player-facing entry at all.
-  `publishMods` reads the section whose heading names the current `mod_version` and fails when there
-  isn't one — so as things stand it would find the **0.4.0** heading and ship the previous release's
-  notes under a new tag, which is worse than failing. Bump the version and write the section, for a
-  player reading a download page rather than for somebody reading the diff.
-
 - **The project page needs its screenshots, and nothing else.** `docs/curseforge-page.md` and the
   images `tools/generate_page_art.py` draws are the only part of this mod most people will ever see.
   The prose has been brought up to date — trading has a section of its own, the bed is described as

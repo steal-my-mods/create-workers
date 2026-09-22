@@ -8,82 +8,87 @@ Notable changes to Create: Workers, newest first. The format follows
 CurseForge and GitHub — so write entries for a player reading a download page, not for someone
 reading the diff.
 
-## [Unreleased]
+## [0.5.0] — 2026-09-22
+
+A factory can hire and keep its own workforce. The **Worker Station** holds a rack of programmed
+hats and takes villagers on to wear them, refilling a job when its worker is lost. Crews work in
+three shifts around the clock, eat, sleep, and trade with you off duty.
 
 ### Added
 
-- **A Ponder page for the Canteen.** Hold W over a Canteen, or page past the hat's other three, and it
-  explains what a Worker eats, why one that has run out slows to a crawl, that a Canteen feeds anyone
-  near it without their walking to it, and that an off-duty Worker will trade with you. Food and
-  trades both shipped with no in-game explanation at all.
-
-### Removed
-
-- **Three shift settings are gone: `clockOff`, `leisureLength` and `musterLength`.** A crew's working
-  day has to be exactly a third of a day or the three crews overlap or leave gaps, so `clockOff` had
-  one correct value and every other one broke coverage. The other two could, between them, leave a
-  crew no night at all — which silently put it back on the village's hours. `clockOn` still moves the
-  whole working day, and `workingHours` still turns the feature off.
-
-### Changed
-
-- **A Canteen's comparator now measures how full it is**, like every other container in the game,
-  instead of how much feeding it holds. It used to weigh bread as four times a carrot, which was
-  defensible until the block started showing its stock on its own face — a full trough of beetroot
-  looked full and read a quarter full, and no block should answer the same question two ways. Which
-  food it is holding is now something you can see from across the room.
-
-- **Workers trade like a supplier now.** A Worker buys what your factory actually makes — andesite
-  alloy, shafts, cogwheels, casings, pressed sheets, and at the top the components that are a real
-  chore to automate — and sells you assembled machines for them. Buying your output is where the
-  emeralds come from; a Worker that only bought wheat and andesite gave a factory no income worth
-  having.
-- **What a Worker offers follows what you are building.** Andesite kinetics and your first water
-  wheel early, then logistics, then processing machines, then contraptions and fluids, and the
-  package network last — rather than cheap things first and dear things later. A Redstone Contact now
-  sits beside the Rope Pulley you need to make any use of it.
-- **Prices are dearer, because emeralds are easier.** Still the cheapest of any Create trading mod or
-  pack measured, but no longer several times under all of them.
-- **The Worker's trade list is no longer a config file.** Packs retune villager trades with KubeJS,
-  which can already add to, replace or clear this list — a second, bespoke format only got in the way.
-
-### Changed
-
-- **A Canteen shows you what is in it.** The top is its nine slots laid out one to one, so a stocked
+- **The Worker Station hires villagers for you.** Put programmed hard hats in its rack — up to
+  twelve jobs — and it takes on unemployed villagers from nearby to wear them. Lose a worker and it
+  hires a replacement onto the same job, so a line that was running keeps running. The rack is a
+  priority order: the job at the top is staffed first, which is how you say what matters when the
+  village is short of people.
+- **A lamp per job on the front of the Station**, so "is this line short-handed?" is answerable
+  without opening anything. Lit means every shift that job runs has somebody on it, dim means the
+  job is programmed and short, dark means the place is empty. Lit lamps draw full-bright, so a
+  working Station reads across a dark factory.
+- **Three shifts.** Each job can run a day, an evening and a night crew — three villagers keeping
+  the same hours at different times, which is a job staffed around the clock. Crews are told apart
+  by the colour of their hi-vis. A Station short of people fills whole shifts before starting the
+  next, because a line missing one worker usually produces nothing rather than less.
+- **Workers keep hours: they muster, work, have time to themselves, and go to bed.** They walk to
+  their post shortly before the shift starts, so the next crew is in place before the last one
+  stops, and off the clock they behave like any other villager until it is time to sleep. A night
+  crew really does sleep, in daylight.
+- **Sneak and right-click a bed to say where a job sleeps.** It names a dormitory rather than a
+  mattress: a job's workers share one hat, so whoever gets there first takes that bed and the rest
+  find a free one beside it instead of wandering off to whatever is nearest their work.
+- **Name a job from the Station's screen**, with no anvil and no experience. The name goes on the
+  hat and onto whoever is wearing it, which is the short answer to "which villager is that?".
+- **The Canteen feeds your workers.** Workers eat while they are on the clock and slow to a crawl
+  when they run out — they never stop, but a starving line is a slow one, and it says so with the
+  same unhappy particles a lost worker throws. A Canteen feeds every villager in range, through
+  walls, out of its own stock, and nobody walks to it: put one where the people are. It takes
+  bread, carrots, potatoes and beetroot through a funnel, a chute, a belt or a hopper, like any
+  other container. It deliberately stops a little short of the point at which villagers will breed.
+- **The Canteen shows what is in it.** Its top is its nine slots laid out one to one, so a stocked
   trough is a heap of food and an empty one is an empty trough — and bread, carrots, potatoes and
-  beetroot each look like themselves rather than like four colours of the same lump. A slot part-full
-  draws less than a slot brimming, so a nearly-empty Canteen reads as nearly empty. There is a level
-  on each of the four sides too, one row per slot, for when the block is built into a wall.
+  beetroot each look like themselves rather than four colours of the same lump. A part-full slot
+  draws less than a brimming one. There is a level on each of the four sides for when the block is
+  built into a wall, a comparator reads how full it is, and goggles say what is in it.
+- **Workers trade.** Off the clock a Worker will trade: 86 offers across five levels that **buy
+  what your factory makes** — andesite alloy, shafts, cogwheels, casings, pressed sheets, and
+  higher up the components that are a real chore to automate — and **sell you assembled machines**
+  in return. What it offers follows what you are building rather than what you can afford: andesite
+  kinetics and your first water wheel early, then logistics, then processing, then contraptions and
+  fluids, and the package network last. Hauling counts towards its trading level. It will never
+  sell you a Hard Hat.
+- **Three more Ponder pages.** Hold W over a Hard Hat and Ponder now walks through a Station taking
+  a villager on, then shifts and sleep, then feeding a crew and trading with it. The last one is on
+  the Canteen as well.
+- **New settings** for the above: `stationRange`, `workingHours`, `clockOn`, `requireFood`,
+  `ticksPerFoodPoint`, `hungryPace`, `canteenRange`, `bedSearchRadius`, `absenteeTimeout` and
+  `recallStuckWorkers`.
 
-### Fixed
+### Changed
 
-- **A Station no longer churns through villagers when a job's blocks are gone.** If you rebuilt a line
-  and left a hat naming depots that no longer exist — or a job's beat simply sat outside the loaded
-  area — the worker had nothing to do, was let go for not turning up, and the Station immediately hired
-  somebody else onto the same broken job and let them go too, around the clock. Workers with nothing
-  left to haul now keep their jobs and wait.
-- **Stations hire back villagers who have worked before, in preference to fresh ones.** Trading with a
-  Worker locks it to the job for good, the same way buying from a librarian does — so an out-of-work
-  Worker standing about is a villager that can never do anything else. A station now takes one of those
-  on ahead of an unemployed villager standing closer, which leaves your blank villagers free to become
-  farmers and librarians.
-- **A job's night shift no longer fights the day shift for one bed.** Every worker on a job wears a
-  copy of the same hat, so they all shared the one bed you assigned it — and because a crew sleeps for
-  longer than the gap between crews, two of them wanted it at once for better than a third of every
-  day. The bed you assign now names the **dormitory**: whoever gets there first has it, and the others
-  look for a free bed beside it rather than wandering off to whatever is nearest their work.
-- **Canteens no longer breed your whole village by accident.** A Canteen filled villagers to the exact
-  point at which vanilla lets them breed, so any factory with a trough in it bred non-stop — and most
-  of that food bought nothing at all, because a pair spends its food *before* checking whether there is
-  a spare bed, and goes straight round again when there isn't. A breeding pair was burning food around
-  a hundred and fifty times faster than a Worker doing its job. Canteens now stop a little short, and
-  feeding villagers the rest of the way is yours to do, as it is everywhere else in the game.
+- **Villagers are hired by a Station now, rather than by hand.** Right-clicking a villager with a
+  hat no longer employs it — put the hat in a Station and it finds somebody. Firing one is taking
+  the hat out of the rack, or breaking the block. **Endermen are unchanged**: they have no
+  profession and no job site, so no Station could ever employ one, and they are still hired and
+  retired by hand. A villager that already has a job still cannot be hired; break its workstation
+  first, exactly as the game makes you.
+- **A job's hat stays in the Station and its worker wears a copy.** Nothing is handed back when a
+  worker dies, because the job never left the block — which is what lets the Station refill it.
+- **The Worker Station and the Canteen wear Create's own andesite casing**, and connect to it. Set
+  either beside an Andesite Casing block, or beside each other, and the seam between them
+  disappears the way it does between Create's own blocks.
 
 ### Removed
 
-- **Zinc Ingots are no longer sold.** One zinc ingot becomes nine andesite alloy, and a saw cuts each
-  of those into six shafts: selling zinc and buying kinetics returned about four emeralds for every
-  one spent, indefinitely. Brass Ingots are still sold at the top level.
+- **`hireChildren` is gone.** With villagers hired by a Station, the game's own rule decides it — a
+  child never takes a job site and so never arrives at one — and the setting had nothing left to
+  decide.
+
+### Note
+
+A villager you hired by hand before this update keeps its hat and carries on working. Retiring it
+now leaves an ordinary unemployed villager for the village to give a job to, rather than putting
+back the profession it had when you hired it: a Station only ever employs villagers with no job to
+give back, so that record is no longer kept.
 
 ## [0.4.0] — 2026-09-07
 
