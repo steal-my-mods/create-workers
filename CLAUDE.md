@@ -1064,6 +1064,21 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   **A lamp plate leans on an explicit `uv`** — 2.6 units across sampling one third of a sheet three
   cells wide, which no rectangle derived from an element's own coordinates could be — so
   `render_block_model.py` honours `uv` now, as the game always has.
+  **Drawing a readout is half of it; the icon has to point it at the light.** An item in a GUI gets
+  no per-face shade — `Lighting.setupFor3DItems` is two directional lights and nothing else — and
+  through the GUI's own pose those land on the flank vanilla's `[30, 225, 0]` puts on the **left**
+  at 0.651 and on the **right** at 0.400, which is the floor the formula can reach and exactly what
+  the *underside* of a block gets. A Station's readout is on its front, which that angle puts on the
+  right: every lamp was drawn into the dark on a casing cube, so the item read as andesite casing
+  anyway and the whole exercise bought nothing. Its item model turns the icon a quarter the other
+  way (`display.gui`, `gui` alone — in the hand and in a frame the block is shown as authored, and a
+  display entry *replaces* the parent's for its context rather than merging, so the translation and
+  scale are restated or an omitted scale is 1.0 rather than 0.625). The Canteen needs no turn, its
+  gauges being on all four flanks. `check_icon_lighting()` reproduces vanilla's two lights — checked
+  against the one thing everybody has seen, a top face at 1.0 and an underside at 0.4 — and asserts
+  the readout lands on the lit flank. Mutation-checked four ways, the shipped angle among them.
+  Nothing else could catch it: the grid checks put every lamp exactly where the renderer would draw
+  it, and go on passing with the lot of them in shadow.
 
 - **The welcome ration is once per villager, and `isEmployed()` cannot say so.** A new hire turns
   up with `STARTING_RATIONS` already eaten, because starting empty makes a villager hungry within a

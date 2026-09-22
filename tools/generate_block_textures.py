@@ -33,6 +33,7 @@ over to ask.
     python3 tools/generate_block_textures.py [output-directory]
 """
 
+import math
 import os
 import struct
 import sys
@@ -338,6 +339,27 @@ PLATE_UNITS = 0.016
 # The lamps sheet is the three states side by side, so the dark one is the first third.
 LAMP_STATES = 3
 
+# The angle an inventory icon is drawn at, in the item model's own `display.gui` block.
+#
+# Vanilla shows a block item at block/block's [30, 225, 0], which puts the model's north face on
+# the right of the icon and its east face on the left -- and the two sides are not lit alike. An
+# item in a GUI gets no per-face shade at all; what lights it is Lighting.setupFor3DItems, two
+# directional lights, and through the GUI's own pose they land on the left flank at 0.651 and on
+# the right at 0.400. That is the floor the formula can produce, and the same value the *bottom*
+# of a block gets. A Station draws its readout on its front, so at vanilla's angle every lamp sat
+# on the darkest face in the picture: the item read as a stack of andesite casing, which is the
+# one thing baking the readout into the model was meant to stop. A quarter turn the other way
+# brings the front to the lit side. check_icon_lighting() is what holds that.
+#
+# Only `gui` is overridden -- in the hand, on the ground and in an item frame the block is shown
+# the way it is authored. A display entry *replaces* the parent's for its context rather than
+# merging with it, so the translation and scale are restated from block/block here: an omitted
+# scale is 1.0 rather than 0.625, which draws the icon half again its size.
+VANILLA_TURN = [30, 225, 0]
+GUI_TURN = [30, 135, 0]
+GUI_TRANSLATION = [0, 0, 0]
+GUI_SCALE = [0.625, 0.625, 0.625]
+
 
 def rounded(value):
     """Model coordinates at a fixed precision, so a re-run is byte-identical."""
@@ -396,7 +418,7 @@ def gauge_plates():
     return plates
 
 
-def item_model(block, textures, plates):
+def item_model(block, textures, plates, turn=None):
     """A block's item model: its own geometry, plus the readout a renderer would have drawn.
 
     **A block entity renderer does not exist in an inventory**, nor in JEI, nor on a dropped
@@ -408,6 +430,8 @@ def item_model(block, textures, plates):
     nothing here for the renderer to fight with, and no risk of the two drawing the same lamp a
     fraction of a block apart. The geometry is read out of the block model rather than restated,
     so the item is the block plus a readout and cannot become some other shape.
+
+    A `turn` overrides the angle the icon is drawn at, for a block whose readout is on one face.
     """
     import json
 
@@ -422,6 +446,10 @@ def item_model(block, textures, plates):
         'textures': dict(model.get('textures', {}), **textures),
         'elements': model['elements'] + plates,
     }
+    if turn is not None:
+        model['display'] = {'gui': {'rotation': turn,
+                                    'translation': GUI_TRANSLATION,
+                                    'scale': GUI_SCALE}}
     return rounded(model)
 
 
@@ -429,7 +457,7 @@ def item_models():
     return {
         'worker_station': item_model(
             'worker_station', {'lamps': 'createworkers:block/worker_station_lamps'},
-            lamp_plates()),
+            lamp_plates(), turn=GUI_TURN),
         'canteen': item_model(
             'canteen', {'food': 'createworkers:block/canteen_food'}, gauge_plates()),
     }
@@ -857,6 +885,121 @@ def check_against_model():
         % len(gauges)
 
 
+# --- what the inventory makes of a readout ---------------------------------------
+
+# Lighting.DIFFUSE_LIGHT_0/1, and the frame GlStateManager.setupGui3DDiffuseLighting puts them
+# in before the shader ever sees them. Restated from vanilla rather than approximated, because
+# "which side of an icon is the lit one" is exactly the sort of thing that gets settled by eye
+# and settled wrongly: the two flanks differ by more than the top of a block differs from its
+# side, and the dark one is the floor.
+GUI_LIGHTS = ((0.2, 1.0, -0.7), (-0.2, 1.0, 0.7))
+GUI_LIGHT_TURNS = ((-math.pi / 8, math.pi * 3 / 4), (1.0821041, 3.2375858))
+
+# Which readout belongs to which block: the texture its plates are drawn with.
+READOUTS = {'worker_station': '#lamps', 'canteen': '#food'}
+
+
+def spun(vector, axis, radians):
+    """One basis rotation of a vector, right-handed, the way a display block means it."""
+    x, y, z = vector
+    cos, sin = math.cos(radians), math.sin(radians)
+    if axis == 'x':
+        return (x, y * cos - z * sin, y * sin + z * cos)
+    if axis == 'y':
+        return (x * cos + z * sin, y, z * cos - x * sin)
+    return (x * cos - y * sin, x * sin + y * cos, z)
+
+
+def unit(vector):
+    length = math.sqrt(sum(component * component for component in vector))
+    return tuple(component / length for component in vector)
+
+
+def gui_lights():
+    """The two lights an icon is lit by, in the frame the shader compares its normals in."""
+    lights = []
+    for light in GUI_LIGHTS:
+        for yaw, pitch in GUI_LIGHT_TURNS:
+            light = spun(spun(light, 'x', pitch), 'y', yaw)
+        lights.append(unit((light[0], -light[1], light[2])))
+    return lights
+
+
+def icon_face(name, rotation):
+    """A face of a block item as its icon shows it: which way it points, and how brightly lit.
+
+    The model is turned by its display transform and then mirrored in y, which is what
+    GuiGraphics' scale(16, -16, 16) does to the item and to its normals alike. After that the
+    camera looks along -z and x runs to the right, so a face is on screen when its z is positive
+    and on the left of the icon when its x is negative. The brightness is minecraft_mix_light:
+    the two lights and nothing else, since no per-face shade reaches an item.
+    """
+    axis, sign = FACES[name]
+    normal = tuple(float(sign) if index == axis else 0.0 for index in (0, 1, 2))
+    pitch, yaw, roll = rotation
+    normal = spun(normal, 'z', math.radians(roll))
+    normal = spun(normal, 'y', math.radians(yaw))
+    normal = spun(normal, 'x', math.radians(pitch))
+    normal = (normal[0], -normal[1], normal[2])
+    lit = sum(max(0.0, sum(a * b for a, b in zip(light, normal))) for light in gui_lights())
+    return normal, min(1.0, lit * 0.6 + 0.4)
+
+
+def check_icon_lighting():
+    """A block's readout has to land on the lit side of its own inventory icon.
+
+    Both blocks wear Create's andesite casing, so what is left of either in an inventory without
+    its readout is a cube the player already has stacks of under another name -- which is the
+    whole reason the lamps and the gauges are baked into the item models. Drawing them is only
+    half of it. The icon shows a block's north face on the right and its east face on the left,
+    and the light is on the left: 0.651 against 0.400, which is the floor the formula can reach
+    and what the underside of a block gets. The Station's lamps are on its front, and the front
+    was the dark one, so the readout was drawn into shadow on a casing cube and the item read as
+    plain casing anyway.
+
+    Nothing else here could say so. The grid checks put every lamp where the renderer would draw
+    it, and they would go on passing with the whole readout in the dark.
+    """
+    # The reproduction is worth something only if it agrees with what anybody has seen a thousand
+    # times: the top of a block icon is its brightest face and the underside its darkest.
+    assert abs(icon_face('up', VANILLA_TURN)[1] - 1.0) < 1e-9, \
+        'the top of a block icon is fully lit; this reproduction of the GUI lights disagrees'
+    assert abs(icon_face('down', VANILLA_TURN)[1] - 0.4) < 1e-9, \
+        'the underside of a block icon is at the floor; this reproduction of it disagrees'
+
+    models = item_models()
+    for block, texture in sorted(READOUTS.items()):
+        model = models[block]
+        gui = model.get('display', {}).get('gui')
+        assert gui is None or sorted(gui) == ['rotation', 'scale', 'translation'], \
+            ('%s turns its icon without restating all of rotation, translation and scale. A '
+             'display entry replaces the parent\'s for that context rather than merging with '
+             'it, so an omitted scale is 1.0 where block/block has 0.625.' % block)
+        rotation = gui['rotation'] if gui else VANILLA_TURN
+
+        drawn = {face for box in model['elements'] for face, spec in box['faces'].items()
+                 if spec.get('texture') == texture}
+        flanks = {}
+        for name in FACES:
+            if name in ('up', 'down'):
+                continue
+            normal, lit = icon_face(name, rotation)
+            if normal[2] > 0:
+                flanks[name] = lit
+
+        shown = sorted(drawn & set(flanks))
+        assert shown, \
+            ('%s draws its readout on %s and its icon shows none of them, so the item is a bare '
+             'casing cube' % (block, ', '.join(sorted(drawn)) or 'nothing'))
+        brightest = max(flanks.values())
+        assert max(flanks[face] for face in shown) >= brightest, \
+            ('%s draws its readout on the shaded flank of its icon -- %s, against %.3f for the '
+             'side the light is on. An unlit lamp on a shaded casing face is exactly the andesite '
+             'casing cube this readout exists to stop the item looking like.'
+             % (block, ', '.join('%s at %.3f' % (face, flanks[face]) for face in shown),
+                brightest))
+
+
 def luma(pixel):
     return 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]
 
@@ -907,6 +1050,7 @@ def main():
         check_faces()
         check_against_model()
         check_canteen_grid()
+        check_icon_lighting()
     os.makedirs(directory, exist_ok=True)
 
     for name in RETIRED:

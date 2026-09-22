@@ -75,7 +75,10 @@ three shifts around the clock, eat, sleep, and trade with you off duty.
   worker dies, because the job never left the block — which is what lets the Station refill it.
 - **The Worker Station and the Canteen wear Create's own andesite casing**, and connect to it. Set
   either beside an Andesite Casing block, or beside each other, and the seam between them
-  disappears the way it does between Create's own blocks.
+  disappears the way it does between Create's own blocks. Both keep a face of their own in an
+  inventory: the Station's lamps and the Canteen's gauges are drawn on the item as well, and the
+  Station's icon is turned so its lamps are on the lit side of the picture rather than the shaded
+  one — neither is a plain casing cube in a chest or in JEI.
 
 ### Removed
 
