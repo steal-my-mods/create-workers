@@ -65,13 +65,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pixel_font  # noqa: E402
 import render_block_model  # noqa: E402
-from generate_block_textures import LAMP_SIZE, lamp_spots, stock  # noqa: E402
+from generate_block_textures import (LAMP_SIZE, VANILLA_TURN, lamp_spots,  # noqa: E402
+                                     spun, stock)
 from generate_logo import (FIELD, FIELD_DEEP, FIELD_LIGHT, GRID, GRID_ALPHA,  # noqa: E402
                            SHADOW, WHITE, decode_png, lerp, read_png, write_png)
 
 ASSETS = 'src/main/resources/assets/createworkers'
 LANG = ASSETS + '/lang/en_us.json'
 MODELS = ASSETS + '/models/block'
+ITEM_MODELS = ASSETS + '/models/item'
 TEXTURES = ASSETS + '/textures'
 
 # The lamps are drawn on the Station's front face by WorkerStationRenderer, not by the
@@ -160,16 +162,6 @@ RECIPES = 'src/main/resources/data/createworkers/recipe'
 # these", and naming them here keeps the choice in one place rather than in a layout.
 TAG_STAND_INS = {
     'minecraft:planks': 'minecraft:oak_planks',
-}
-
-# Blocks of ours whose face is drawn by a renderer rather than by the model, and so
-# need their indicators supplied before they look like the block a player sees.
-#
-# The Canteen is deliberately not here, although its faces are drawn the same way: the only
-# place a block icon appears is as a crafting recipe's result, and a Canteen that has just
-# been crafted really is empty. Its card gets a stocked one because a card is a portrait.
-LOCAL_MARKS = {
-    'worker_station': STATION_MARKS,
 }
 
 # The tagline lives in docs/curseforge-page.md, not here. It was on the banner and made
@@ -282,6 +274,45 @@ def model_extent(path, camera):
     return max(xs) - min(xs), max(ys) - min(ys)
 
 
+# The house angle. All three sheets are drawn at it, because they are a set and a block
+# photographed from somewhere else would read as a different drawing.
+ISO = render_block_model.ANGLES['iso']
+
+# The turn below is a yaw read off vanilla's convention and applied to this page's camera,
+# which is sound only while the two agree about which way round a block is. They do:
+# vanilla's default turn puts a block's north face on the right of its icon -- which is what
+# check_icon_lighting() reasons about -- and so does the house isometric. Out of step, every
+# block here would be turned a quarter the wrong way, which is the very fault icon_camera is
+# there to fix and indistinguishable from it in the picture.
+assert render_block_model.dot((0.0, 0.0, -1.0), render_block_model.View(1.0, ISO).right) > 0, \
+    'the house angle no longer puts a north face on the right; an icon yaw cannot be reused'
+
+
+def icon_camera(name):
+    """The house isometric, turned to show the face the game's own icon shows.
+
+    A block whose front is a readout turns its inventory icon so that face lands on the lit
+    side -- `display.gui` in its item model, which generate_block_textures writes. The page
+    has to make the same turn or it draws the block from behind: every picture here had the
+    Station's lamps on the right while every player's inventory had them on the left, which
+    is not so much a wrong block as a block nobody recognises. A card is a portrait and may
+    stock a Canteen the game would not, but it may not photograph a block back to front.
+
+    What is taken is the **yaw** alone, read rather than restated, so a block turned in the
+    game is turned on the page by re-running this. The pitch stays the house one -- a true
+    isometric against the icon's thirty degrees -- because that is the angle the sheets
+    share, and which way round a block is, is the half a player would notice.
+    """
+    turn = VANILLA_TURN[1]
+    path = os.path.join(ITEM_MODELS, name + '.json')
+    if os.path.exists(path):
+        with open(path) as handle:
+            gui = json.load(handle).get('display', {}).get('gui')
+        if gui:
+            turn = gui['rotation'][1]
+    return spun(ISO, 'y', math.radians(VANILLA_TURN[1] - turn))
+
+
 def subject_art(subject, mass, box):
     """One entry's picture, as RGBA rows, drawn at `mass` and clamped to `box`.
 
@@ -304,7 +335,7 @@ def subject_art(subject, mass, box):
         # square, which is the one thing generate_logo.py exists to avoid as well.
         return sprite(subject['sprite'], max(1, int(scale)))
 
-    camera = render_block_model.ANGLES['iso']
+    camera = icon_camera(os.path.splitext(os.path.basename(subject['model']))[0])
     span_width, span_height = model_extent(subject['model'], camera)
     size = min(mass / math.sqrt(span_width * span_height),
                limit_width / span_width, limit_height / span_height)
@@ -615,15 +646,21 @@ class Sprites:
 
         # One of this mod's own blocks is drawn from its model, the way the inventory
         # draws it -- there is no flat sprite to find, because the block wears four
-        # different textures. An unprogrammed Station is what comes out of a crafting
-        # table, so its lamps are all off, which is what `lit`/`dim` left at zero says.
-        local_model = os.path.join(MODELS, name + '.json')
-        if namespace == 'createworkers' and os.path.exists(local_model):
-            camera = render_block_model.ANGLES['iso']
+        # different textures. It is the *item* model, which is the file the game itself
+        # puts in a result slot: a block entity renderer does not exist in an inventory,
+        # so the unlit lamps and the empty gauges a player sees on a freshly crafted
+        # block are baked into that model and are in no other. The block model was drawn
+        # here instead and shipped a Canteen with no gauges at all -- a block nobody has,
+        # which is quieter than a wrong one because nothing in the picture looks broken.
+        # An item model with no geometry (the hat) is an ordinary flat sprite and falls
+        # through to the sheet below.
+        local_model = os.path.join(ITEM_MODELS, name + '.json')
+        if namespace == 'createworkers' and has_geometry(local_model):
+            camera = icon_camera(name)
             span_width, span_height = model_extent(local_model, camera)
             art = render_block_model.render(
                 local_model, int(round(min(size / span_width, size / span_height))),
-                None, camera, marks=LOCAL_MARKS.get(name))
+                None, camera)
             self.cache[identifier] = (size, art)
             return art
 
@@ -648,6 +685,14 @@ class Sprites:
 
         self.cache[identifier] = (size, art)
         return art
+
+
+def has_geometry(path):
+    """Whether an item model draws boxes of its own rather than a flat sprite."""
+    if not os.path.exists(path):
+        return False
+    with open(path) as handle:
+        return bool(json.load(handle).get('elements'))
 
 
 def cube_model(reference):

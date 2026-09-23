@@ -715,6 +715,12 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   **A `sheets` key may name a face**, `(reference, 'north')`, and the gauge is why: both blocks wear one
   casing sheet on all six faces, so a gauge painted into it bare would appear on the top and the bottom
   too. Mutation-checked nine ways, including a heap shifted onto the frame and a bezel a row out.
+  **A recipe's result is the one picture that must not be handed anything**, and it was: a result
+  slot holds an item, and the item model is already the baked readout — unlit lamps, empty gauges —
+  so `Sprites.icon` reads `models/item/<name>.json` and draws that. It drew the *block* model, which
+  put a Canteen with no gauges at all on its recipe card, a block nobody has. The marks route is for
+  the cards alone now, where a portrait wants a working Station and a stocked Canteen rather than a
+  freshly crafted one. An item model with no `elements` (the hat) falls through to its flat sprite.
 
 - **The bezel belongs to the lamp sprite, never to the block's sheet.** A socket painted on a texture
   has to sit on a whole texel, so four of them across a fourteen-pixel panel cannot be evenly spaced —
@@ -1094,6 +1100,18 @@ Releases go out through `publishMods` (`me.modmuss50.mod-publish-plugin`), drive
   the readout lands on the lit flank. Mutation-checked four ways, the shipped angle among them.
   Nothing else could catch it: the grid checks put every lamp exactly where the renderer would draw
   it, and go on passing with the lot of them in shadow.
+  **And a turn belongs to the block, so the project page has to make it too.** `generate_page_art`
+  drew every sheet at its own house isometric, which agrees with vanilla's default — so the banner,
+  the card and the recipe all had the Station's lamps on the **right** while every player's inventory
+  had them on the left. Not a wrong block so much as a block nobody recognises, and a card is allowed
+  to stock a Canteen the game would not but is not allowed to photograph a block back to front.
+  `icon_camera` reads `display.gui`'s **yaw** out of the item model and turns the house camera by it,
+  keeping the house *pitch* — a true isometric against the icon's thirty degrees — because the angle
+  is what the three sheets share and which way round a block is, is the half a player would notice.
+  Read rather than restated, so a block turned in the game is turned on the page by re-running it;
+  what the page does restate is that its angle and vanilla's agree about which way round a block is,
+  which is asserted at import because out of step every block would turn a quarter the wrong way and
+  look exactly like the fault being fixed.
 
 - **The welcome ration is once per villager, and `isEmployed()` cannot say so.** A new hire turns
   up with `STARTING_RATIONS` already eaten, because starting empty makes a villager hungry within a
